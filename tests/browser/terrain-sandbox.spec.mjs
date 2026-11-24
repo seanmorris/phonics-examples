@@ -3006,6 +3006,34 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 	expect(errors).toEqual([]);
 });
 
+test('survey a draft and reopen the same landform and camera from its link', async({page}) => {
+	await page.setViewportSize({width:640,height:400});
+	await page.goto('/games/terrain-sandbox/?preset=painted-badlands&seed=survey-test&camera=64,-32,80,40,-9');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:90000});
+	await expect.poll(async()=>(await status(page)).recipe.seed,{timeout:90000}).toBe('survey-test');
+	const initial = await status(page);
+	expect(initial.camera.position[0]).toBe(64);
+	expect(initial.camera.pitch).toBeCloseTo(-9*Math.PI/180);
+	// The draft works while simulation is paused and never regenerates the live world.
+	await canvas(page).evaluate(el=>el.terrainSandboxDebug.action('pause'));
+	await page.locator('[name="ridgeStretch"]').evaluate(el=>{ el.value='3'; el.dispatchEvent(new Event('input',{bubbles:true})); });
+	await page.locator('.terrain-panel').evaluate(el=>el.open=true);
+	await page.locator('[data-survey]').evaluate(el=>el.open=true);
+	await page.locator('[data-analyze]').evaluate(el=>el.click());
+	await expect(page.locator('[data-survey-note]')).toContainText('steeper than 30°',{timeout:90000});
+	expect((await status(page)).generation).toBe(initial.generation);
+	const url = new URL(await page.locator('[data-view-link]').getAttribute('href'));
+	expect(JSON.parse(url.searchParams.get('landform')).ridgeStretch).toBe(3);
+	await page.locator('[data-fit-water]').evaluate(el=>el.click());
+	await expect(page.locator('[data-survey-note]')).toContainText('water level updated');
+	await page.goto(url.href);
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:90000});
+	await expect.poll(async()=>(await status(page)).recipe.ridgeStretch,{timeout:90000}).toBe(3);
+	const [x,z] = url.searchParams.get('camera').split(',').map(Number);
+	const pose = (await status(page)).camera.position;
+	expect([pose[0],pose[2]]).toEqual([x,z]);
+});
+
 test('Limestone Plain generates its skyline and round-trips as a named preset', async({page}) => {
 	await page.setViewportSize({width: 720, height: 460});
 	await page.goto('/games/terrain-sandbox/');

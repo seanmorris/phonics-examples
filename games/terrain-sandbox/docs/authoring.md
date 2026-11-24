@@ -30,6 +30,12 @@ In **Wooded Foothills**, toggle **Woodland canopy** to isolate its color and rel
 
 In **Alaska Range**, change the minimum elevation of **Firn snowfields** to bring the snow farther down the mountains. Its upper slope limit controls which rock faces show through. In **Chalk Headlands**, **Flint nodules** inherits the coverage of **Chalk faces**. Raising the water level moves **Wet chalk** and **Shingle beach** up the coast.
 
+Under **Landscape → Landform survey**, choose **Analyze landform** to see a hillshade and elevation histogram for the current draft. The 64 × 64 survey estimates exposed land, ground steeper than 30°, elevation percentiles and crest spacing across the selected square. Narrow features may fall between samples. **Set starting water level** uses the sampled heights to fit a target land percentage. **Generate** applies the result. **Open suggested view** carries the draft, seed and suggested camera into a new tab.
+
+Under **Direction and erosion**, use **Ridge stretch** and **Ridge bearing** for parallel ranges. Use **Coast bearing** and **Coast transition** to orient the shoreline independently. **Domain rotation** turns both together. On Painted Badlands, try a **Gully depth** of 10 ft and a **Gully spacing** of 300 ft to cut channels into sloping ground. **Detail shape** rounds the fine hills at −1 and pinches them into ridges at +1.
+
+Under **Surface**, choose the **Fall line** pattern to run colored streaks downhill. Choose **Rib tilt** for normal relief measured in degrees as you vary the gully spacing.
+
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
 

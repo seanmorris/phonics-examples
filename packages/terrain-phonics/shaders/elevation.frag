@@ -42,6 +42,25 @@ uniform vec4 uDetail; // amplitude, persistence, lacunarity, damping
 uniform float uSlopeScale;
 uniform int uOctaves;
 #endif
+#ifdef JOINED_TERRAIN
+#define FORM_UNIFORM(T,N) uniform T N[3]
+#define FORM_VALUE(N) N[formIndex]
+#else
+#define FORM_UNIFORM(T,N) uniform T N
+#define FORM_VALUE(N) N
+#endif
+#ifdef FORM_AXES
+FORM_UNIFORM(vec4,uMacroAxesSet);
+#endif
+#if defined(FORM_AXES) || defined(COAST_PROFILE)
+FORM_UNIFORM(vec4,uDetailCoastSet);
+#endif
+#ifdef DETAIL_SHAPE
+FORM_UNIFORM(float,uDetailShapeSet);
+#endif
+#ifdef GULLY_CUT
+FORM_UNIFORM(vec2,uGullySet);
+#endif
 uniform ivec2 uOriginCell, uPixelOrigin;
 uniform float uStep;
 uniform vec2 uWorldOffset;
@@ -132,11 +151,52 @@ float preciseContour(vec2 world,vec2 warp)
 	return preciseMix(low,high,v).x;
 }
 
+#ifdef FORM_AXES
+// Preserve the sub-meter remainder when rotating a far-away steep cliff.
+vec2 axisPosition(vec2 axis,vec2 world,vec2 subcell)
+{
+	vec2 q=addPair(multiplyPair(vec2(world.x,0.),vec2(axis.x,0.)),
+		multiplyPair(vec2(world.y,0.),vec2(axis.y,0.)));
+	return addPair(q,vec2(dot(axis,subcell),0.));
+}
+#endif
+#ifdef GULLY_CUT
+float gullyCut(vec2 p,vec2 slope,vec2 settings)
+{
+	float grade=length(slope);
+	if(grade<=.05 || settings.x==0.) return 0.;
+	p/=3.*settings.y;
+	ivec2 cell=ivec2(floor(p));
+	vec2 local=fract(p), blend=vec2(fade(local.x),fade(local.y));
+	vec2 across=3.*vec2(-slope.y,slope.x)/grade;
+	float cut=0.;
+	for(int j=0;j<2;j++) for(int i=0;i<2;i++) {
+		float phase=float(perm(perm(cell.x+i)+cell.y+j))/256.;
+		float t=dot(local-vec2(i,j),across)+phase;
+		float q=max(0.,1.-4.*abs(fract(t+.5)-.5));
+		cut+=(i==1?blend.x:1.-blend.x)*(j==1?blend.y:1.-blend.y)*q*q*(3.-2.*q);
+	}
+	return settings.x*cut*fade(clamp((grade-.05)/.45,0.,1.));
+}
+#endif
+
 float terrainHeight(vec2 world,vec4 profile,vec2 subcell)
 {
 	if(uField.x==0. && (uDetail.x==0. || uOctaves==0)) return 0.;
 	world+=uNoiseOffset.xy;
 	subcell+=uNoiseOffset.zw;
+	#ifdef FORM_AXES
+	vec4 axes=FORM_VALUE(uMacroAxesSet), dc=FORM_VALUE(uDetailCoastSet);
+	vec2 detailWorld=world, detailSubcell=subcell;
+	if(any(notEqual(dc.xy,vec2(1,0)))) {
+		vec2 fx=axisPosition(dc.xy,world,subcell), fz=axisPosition(vec2(-dc.y,dc.x),world,subcell);
+		detailWorld=floor(vec2(fx.x,fz.x)); detailSubcell=fract(vec2(fx.x,fz.x))+vec2(fx.y,fz.y);
+	}
+	if(any(notEqual(axes,vec4(1,0,0,1)))) {
+		vec2 xx=axisPosition(axes.xy,world,subcell), zz=axisPosition(axes.zw,world,subcell);
+		world=floor(vec2(xx.x,zz.x)); subcell=fract(vec2(xx.x,zz.x))+vec2(xx.y,zz.y);
+	}
+	#endif
 	vec2 displacement=subcell, p=world+subcell;
 	vec2 wx=vec2(0), wz=vec2(0);
 	float f=uField.y;
@@ -156,8 +216,14 @@ float terrainHeight(vec2 world,vec4 profile,vec2 subcell)
 		a.x=preciseContour(world,displacement);
 	vec3 h=vec3(uShape.x,0,0)+uShape.y*a*vec3(1.,f,f)+uRock.x*b*vec3(1.,2.*f,2.*f);
 	if(uShape.z!=0.) {
+		#ifdef COAST_PROFILE
+		vec2 coastAxis=FORM_VALUE(uDetailCoastSet).zw;
+		float coast=tanh(dot(p,coastAxis));
+		h+=uShape.z*vec3(coast,(1.-coast*coast)*coastAxis);
+		#else
 		float coast=tanh(p.x/4500.);
 		h+=uShape.z*vec3(coast,(1.-coast*coast)/4500.,0.);
+		#endif
 	}
 	if(uShape.w!=0.) {
 		float rounded=length(vec2(a.x,profile.x));
@@ -203,13 +269,26 @@ float terrainHeight(vec2 world,vec4 profile,vec2 subcell)
 		h.x+=strength*delta;
 		h.yz=k*h.yz+(1.-k)*dip+delta*ds;
 	}
+	#ifdef FORM_AXES
+	vec2 worldSlope=h.y*axes.xy+h.z*axes.zw;
+	h.yz=vec2(dot(dc.xy,worldSlope),dot(vec2(-dc.y,dc.x),worldSlope));
+	world=detailWorld; subcell=detailSubcell;
+	#endif
+	#ifdef GULLY_CUT
+	h.x-=gullyCut(world+subcell,h.yz,FORM_VALUE(uGullySet));
+	#endif
 	float slope=dot(h.yz,h.yz)/(uSlopeScale*uSlopeScale), amp=uDetail.x;
 	f*=8.;
 	for(int i=0;i<12;i++) {
 		if(i>=uOctaves || amp==0.) break;
 		vec2 offset=vec2(91.73,-23.49)+float(i)*vec2(19.17,-31.29);
 		float k=float(i+1);
-		h.x+=amp/(1.+uDetail.w*k*k*slope)*sampleNoise(world,subcell,f,0.,ivec2(floor(offset)),fract(offset)).x;
+		float v=sampleNoise(world,subcell,f,0.,ivec2(floor(offset)),fract(offset)).x;
+		#ifdef DETAIL_SHAPE
+		float shape=FORM_VALUE(uDetailShapeSet);
+		v=(1.-abs(shape))*v+shape*(.185-sqrt(v*v+.0025));
+		#endif
+		h.x+=amp/(1.+uDetail.w*k*k*slope)*v;
 		f*=uDetail.z; amp*=uDetail.y;
 	}
 	return h.x;

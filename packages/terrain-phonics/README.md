@@ -459,3 +459,11 @@ colors show nowhere at an amount of 0.
 The performance target is hardware-accelerated desktop WebGL2 at 1080p/60 FPS. Record the browser and GPU
 alongside measured frame distributions; software WebGL results are correctness evidence, not proof of that
 target. A paused and unchanged sandbox should stop issuing draws after outstanding preparation settles.
+
+## Surveying a landform
+
+Run `phonics terrain preview --preset painted-badlands --size 128 --out badlands` to write a north-up hillshade and an oblique view. The command prints JSON with the seed, camera, water level, grid interval, elevation histogram and percentiles, land fraction, fraction steeper than 30 degrees at a subsample of sites using short local probes, and average distance between crests along east–west and north–south transects. Results describe the unedited playable square at the stated sampling interval. A finer survey can resolve narrower landforms. With `--file world.json` the command reads a saved recipe or sandbox file and uses its camera if present. Supply `--camera x,z,clearance,heading,pitch` to compare views. Coordinates and clearance are in meters. Heading and pitch are in degrees, with zero heading facing north and positive pitch looking up.
+
+`domainRotation` rotates the seeded landform about its translated origin. `ridgeStretch` elongates the coarse field along `ridgeBearing`. `coastBearing` and `coastWidth` independently orient and scale directional rise. Both bearings run clockwise from east before domain rotation. `detailShape` blends from billowed detail at −1 through fractal noise at zero to ridged detail at +1. Positive `gullyDepth` cuts bounded channels into slopes at one scale, `gullySpacing`. Lengths in recipes use meters.
+
+Surface layers can select `fall-line` for downhill pigment or `rib-tilt` for a lighting tilt in degrees using the strength field. Existing `ribs` layers use their original strength scale.

@@ -10,9 +10,9 @@ final class SurfaceLayers
 	public const LIMIT = 16;
 	public const MASKS = ['all','shrubs','tundra','lowland','trees','scree','blocks','slabs','stains','lichen','joints','gullies','crowns','facet-cover','block-cover','crown-cover','shore','snow'];
 	public const FIELDS = ['plain','meadow','shrubs','tundra','lowland','crowns','talus','blocks','joints','slab-tone','lichen','sand','snow'];
-	public const RELIEF = ['none','pattern','ribs','facets','crowns','blocks'];
+	public const RELIEF = ['none','pattern','ribs','facets','crowns','blocks','rib-tilt'];
 	public const CHANNELS = ['color','relief','both'];
-	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins', 'ripples', 'jointed', 'contacts', 'fractures'];
+	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins', 'ripples', 'jointed', 'contacts', 'fractures', 'fall-line'];
 	public const DEFAULTS = [
 		'id' => '', 'name' => '', 'mask' => 'all', 'field' => 'plain',
 		'channel' => 'color', 'relief' => 'none', 'strength' => 1., 'flatten' => 0., 'opacity' => 1.,
@@ -155,7 +155,8 @@ final class SurfaceLayers
 			$reflective = $reflective || ($row['channel'] !== 'relief' && $row['reflectivity'] > 0.);
 			// Premultiply the roughness by coating coverage so opaque snow can cleanly cover reflective ice.
 			array_push($this->finishes, $row['reflectivity'], $row['reflectivity']*$row['roughness']**2);
-			array_push($this->effects,$row['strength'],$row['flatten'],$row['opacity'], 1.);
+			$strength = $row['relief'] === 'rib-tilt' ? tan(deg2rad($row['strength'])) : $row['strength'];
+			array_push($this->effects,$strength,$row['flatten'],$row['opacity'], 1.);
 			array_push($this->colors, ...TerrainAppearance::linear($row['color']));
 			array_push($this->ranges, $row['low'], $row['high'], $row['slopeLow'], $row['slopeHigh']);
 			array_push($this->blends, $row['fade'], $row['slopeFade'], $row['noise'], $row['scale']);

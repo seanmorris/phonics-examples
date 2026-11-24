@@ -28,6 +28,10 @@ final class Recipe
 	private float $wallStart = .055;
 	private float $wallWidth = .006;
 	private bool $layered = false;
+	private ?array $axes = null;
+	private ?array $coast = null;
+	private float $detailShape = 0., $detailLinear = 1., $gullyDepth = 0.;
+	private array $octaveSteps = [];
 	/** Lattice hash of the noise source. coarse() and height() read these tables directly to avoid Noise calls. */
 	private array $permutation;
 	private array $gradientX;
@@ -39,6 +43,16 @@ final class Recipe
 	 * non-finite ones they reject.
 	 */
 	private const REACH = 288230376151711744.0;
+
+	/** Initial parameters used by the Landscape Lab and command-line preview. */
+	public static function showcase(string $preset): array
+	{
+		return ['preset'=>$preset]+match($preset) {
+			'mountain' => ['heightScale'=>1400.,'baseFrequency'=>1/2200],
+			'canyon' => ['heightScale'=>650.,'baseFrequency'=>1/4000,'terraceSpacing'=>80.,'waterLevel'=>-450.],
+			default => [],
+		};
+	}
 
 	/** Shape coefficients copied by preset selection and by the legacy recipe loader. */
 	public static function shapeDefaults(string $preset, int $version = 2): array
@@ -364,6 +378,9 @@ final class Recipe
 			, 'baseFrequency' => 1 / 6000
 			, 'noiseOffsetX' => 0.0
 			, 'noiseOffsetZ' => 0.0
+			, 'domainRotation' => 0., 'ridgeStretch' => 1., 'ridgeBearing' => 0.
+			, 'coastBearing' => 0., 'coastWidth' => 4500.
+			, 'detailShape' => 0., 'gullyDepth' => 0., 'gullySpacing' => 80.
 
 			, 'detailOctaves' => 8
 			, 'detailAmplitude' => 28.0
@@ -407,6 +424,9 @@ final class Recipe
 			, 'baseFrequency' => [1 / 1000000,1]
 			, 'noiseOffsetX' => [-64373.76,64373.76]
 			, 'noiseOffsetZ' => [-64373.76,64373.76]
+			, 'domainRotation' => [-360,360], 'ridgeStretch' => [1,12], 'ridgeBearing' => [-360,360]
+			, 'coastBearing' => [-360,360], 'coastWidth' => [10,65536]
+			, 'detailShape' => [-1,1], 'gullyDepth' => [0,64], 'gullySpacing' => [8,1024]
 
 			, 'detailAmplitude' => [0,1000]
 			, 'lacunarity' => [1.1,4]
@@ -448,6 +468,18 @@ final class Recipe
 			$this->wallWidth += .105 * $values['terraceStrength'] * $values['bedding'];
 		}
 		$this->values = $values;
+		if($values['domainRotation'] != 0 || $values['ridgeStretch'] != 1) $this->axes = self::axes($values);
+		if($values['coastBearing'] != 0 || $values['coastWidth'] != 4500 || $values['ridgeStretch'] != 1)
+			$this->coast = ($this->axes ?? self::axes($values))['coast'];
+		$this->detailShape = $values['detailShape'];
+		$this->detailLinear = 1-abs($this->detailShape);
+		$this->gullyDepth = $values['gullyDepth'];
+		$frequency = $values['baseFrequency']*8;
+		$amplitude = $values['detailAmplitude'];
+		for($i=0;$i<$values['detailOctaves'] && $amplitude>0.;$i++) {
+			$this->octaveSteps[] = [$frequency,$amplitude,$values['damping']*($i+1)*($i+1),$i*19.17,$i*31.29];
+			$frequency *= $values['lacunarity']; $amplitude *= $values['persistence'];
+		}
 		$this->noise = new Noise($values['seed']);
 		[$this->permutation, $this->gradientX, $this->gradientZ] = $this->noise->lattice();
 	}
@@ -471,7 +503,28 @@ final class Recipe
 	 */
 	public function coarse(float $x, float $z, ?array $profile = null): array
 	{
-		return $this->coarseAt($x + $this->values['noiseOffsetX'], $z + $this->values['noiseOffsetZ'], $profile);
+		$x += $this->values['noiseOffsetX'];
+		$z += $this->values['noiseOffsetZ'];
+		if(!$this->axes) return $this->coarseAt($x,$z,$profile);
+		[$a,$b,$c,$d] = $this->axes['macro'];
+		[$h,$dx,$dz] = $this->coarseAt($a*$x+$b*$z,$c*$x+$d*$z,$profile);
+		return [$h,$a*$dx+$c*$dz,$b*$dx+$d*$dz];
+	}
+
+	/** Pull world coordinates into the rotated seed and stretch the macro field along its bearing. */
+	public static function axes(array $r): array
+	{
+		$t = deg2rad($r['domainRotation']); $u = cos($t); $v = sin($t);
+		$t = deg2rad($r['ridgeBearing']); $x = cos($t); $z = sin($t);
+		$k = 1/$r['ridgeStretch']-1;
+		$a = 1+$k*$x*$x; $b = $k*$x*$z; $d = 1+$k*$z*$z;
+		// Undo the stretch for the coast term so its bearing and width remain independent.
+		$t = deg2rad($r['coastBearing']); $cx = cos($t); $cz = sin($t);
+		$p = ($r['ridgeStretch']-1)*($cx*$x+$cz*$z);
+		// Store identical coefficients in the PHP evaluator and the binary32 shader uniforms.
+		$float = static fn(float $n): float => unpack('g',pack('g',$n))[1];
+		return ['macro'=>array_map($float,[$a*$u-$b*$v,$a*$v+$b*$u,$b*$u-$d*$v,$b*$v+$d*$u]),
+			'rotation'=>array_map($float,[$u,$v]), 'coast'=>[($cx+$p*$x)/$r['coastWidth'],($cz+$p*$z)/$r['coastWidth']]];
 	}
 
 	/** Evaluate at coordinates already translated into the seeded field. */
@@ -750,9 +803,16 @@ final class Recipe
 		}
 		if($r['directionalRise'] != 0)
 		{
-			$coast = tanh($x / 4500);
+			if($this->coast) {
+				[$cx,$cz] = $this->coast;
+				$coast = tanh($cx*$x+$cz*$z);
+				$factor = $r['directionalRise']*(1-$coast*$coast);
+				$dx += $cx*$factor; $dz += $cz*$factor;
+			} else {
+				$coast = tanh($x / 4500);
+				$dx += $r['directionalRise']*(1-$coast*$coast)/4500;
+			}
 			$value += $r['directionalRise']*$coast;
-			$dx += $r['directionalRise']*(1-$coast*$coast)/4500;
 		}
 
 		$value += $r['secondary']*$b0;
@@ -791,7 +851,7 @@ final class Recipe
 	/**
 	 * Sample finite smooth detail, gating every octave from the independent coarse guide.
 	 *
-	 * The octave loop reads each recipe field once and writes Noise::value() out in place, for the reason
+	 * The octave loop uses precomputed coefficients and writes Noise::value() out in place, for the reason
 	 * given on coarse(). The operations keep their order, so every height keeps its bits.
 	 * @param float $x World X coordinate in meters.
 	 * @param float $z World Z coordinate in meters.
@@ -802,26 +862,28 @@ final class Recipe
 		$r = $this->values;
 		$x += $r['noiseOffsetX'];
 		$z += $r['noiseOffsetZ'];
-		[$height,$dx,$dz] = $this->coarseAt($x, $z, $profile);
+		if($this->axes) {
+			[$a,$b,$c,$d] = $this->axes['macro'];
+			[$height,$gx,$gz] = $this->coarseAt($a*$x+$b*$z,$c*$x+$d*$z,$profile);
+			$dx = $a*$gx+$c*$gz; $dz = $b*$gx+$d*$gz;
+			[$u,$v] = $this->axes['rotation'];
+			[$x,$z] = [$u*$x+$v*$z,$u*$z-$v*$x];
+			[$dx,$dz] = [$u*$dx+$v*$dz,$u*$dz-$v*$dx];
+		} else [$height,$dx,$dz] = $this->coarseAt($x, $z, $profile);
+		if($this->gullyDepth > 0.) $height -= $this->gullyCut($x,$z,$dx,$dz);
 		$slope = ($dx * $dx + $dz * $dz) / ($r['slopeScale'] * $r['slopeScale']);
-		$frequency = $r['baseFrequency'] * 8;
-		$amplitude = $r['detailAmplitude'];
-
-		if($amplitude === 0.0) return $height;
-
-		$octaves = $r['detailOctaves'];
-		$damping = $r['damping'];
-		$lacunarity = $r['lacunarity'];
-		$persistence = $r['persistence'];
+		if(!$this->octaveSteps) return $height;
+		$shape = $this->detailShape;
+		$linear = $this->detailLinear;
 		$p = $this->permutation;
 		$gx = $this->gradientX;
 		$gz = $this->gradientZ;
 
-		for($i = 0; $i < $octaves; $i++)
+		foreach($this->octaveSteps as [$frequency,$amplitude,$damping,$offsetX,$offsetZ])
 		{
-			$weight = 1 / (1 + $damping * ($i + 1) * ($i + 1) * $slope);
-			$sx = $x * $frequency + 91.73 + $i * 19.17;
-			$sz = $z * $frequency - 23.49 - $i * 31.29;
+			$weight = 1 / (1 + $damping * $slope);
+			$sx = $x * $frequency + 91.73 + $offsetX;
+			$sz = $z * $frequency - 23.49 - $offsetZ;
 
 			// Detail octave: Noise::value($sx, $sz) written out.
 			if($sx * $sx + $sz * $sz < self::REACH)
@@ -846,12 +908,32 @@ final class Recipe
 			}
 			else $value = $this->noise->value($sx, $sz);
 
+			if($shape != 0.) $value = $linear*$value+$shape*(.185-sqrt($value*$value+.0025));
 			$height += $amplitude * $weight * $value;
-			$frequency *= $lacunarity;
-			$amplitude *= $persistence;
 		}
 
 		return $height;
+	}
+
+	/** Four overlapping cell-local groove trains follow the coarse fall line without seams at cell edges. */
+	private function gullyCut(float $x,float $z,float $dx,float $dz): float
+	{
+		$grade = sqrt($dx*$dx+$dz*$dz);
+		if($grade <= .05) return 0.;
+		$spacing = $this->values['gullySpacing'];
+		$x /= 3*$spacing; $z /= 3*$spacing;
+		$ix = (int)floor($x); $iz = (int)floor($z);
+		$x -= floor($x); $z -= floor($z);
+		$u = Noise::fade($x); $v = Noise::fade($z);
+		$acrossX = -3*$dz/$grade; $acrossZ = 3*$dx/$grade;
+		$cut = 0.;
+		for($j=0;$j<2;$j++) for($i=0;$i<2;$i++) {
+			$phase = $this->permutation[($this->permutation[($ix+$i)&255]+$iz+$j)&255]/256;
+			$t = ($x-$i)*$acrossX+($z-$j)*$acrossZ+$phase;
+			$q = max(0.,1.-4.*abs($t-floor($t+.5)));
+			$cut += ($i ? $u : 1-$u)*($j ? $v : 1-$v)*$q*$q*(3-2*$q);
+		}
+		return $this->gullyDepth*$cut*Noise::fade(min(1.,($grade-.05)/.45));
 	}
 
 	/**
@@ -866,6 +948,12 @@ final class Recipe
 		$z = ($box[1] + $box[3]) / 2 + $r['noiseOffsetZ'];
 		$rx = ($box[2] - $box[0]) / 2 + 1e-9;
 		$rz = ($box[3] - $box[1]) / 2 + 1e-9;
+		if($this->axes) {
+			[$a,$b,$c,$d] = $this->axes['macro'];
+			[$u,$v] = $this->axes['rotation'];
+			$detailBox = [$u*$x+$v*$z,$u*$z-$v*$x,abs($u)*$rx+abs($v)*$rz,abs($v)*$rx+abs($u)*$rz];
+			[$x,$z,$rx,$rz] = [$a*$x+$b*$z,$c*$x+$d*$z,abs($a)*$rx+abs($b)*$rz,abs($c)*$rx+abs($d)*$rz];
+		}
 		$wx = $x; $wz = $z; $hx = $rx; $hz = $rz;
 		$jac = 1.0;
 		$w = $r['warpAmplitude'];
@@ -896,11 +984,13 @@ final class Recipe
 		}
 		if($r['directionalRise'] != 0)
 		{
-			$left = $r['directionalRise']*tanh(($wx-$hx)/4500);
-			$right = $r['directionalRise']*tanh(($wx+$hx)/4500);
+			[$cx,$cz] = $this->coast ?? [1/4500,0.];
+			$center = $cx*$wx+$cz*$wz; $radius = abs($cx)*$hx+abs($cz)*$hz;
+			$left = $r['directionalRise']*tanh($center-$radius);
+			$right = $r['directionalRise']*tanh($center+$radius);
 			$lo += min($left,$right);
 			$hi += max($left,$right);
-			$gradient += abs($r['directionalRise'])/4500;
+			$gradient += abs($r['directionalRise'])*max(abs($cx),abs($cz));
 		}
 		if($r['wallHeight'] > 0 || $this->layered)
 		{
@@ -958,12 +1048,23 @@ final class Recipe
 			$hi += $spacing*$r['terraceStrength'];
 			$gradient *= 1.875;
 		}
+		// The rotation and non-expanding stretch have unit spectral norm up to binary32 rounding.
+		if($this->axes) $gradient *= 1.000001;
 		$slope = 2 * (($gradient+1e-8) / $r['slopeScale'])**2;
+		if($this->axes) [$x,$z,$rx,$rz] = $detailBox;
+		$lo -= $this->gullyDepth;
 		$f *= 8;
 		$amp = $r['detailAmplitude'];
 		for($i=0; $i<$r['detailOctaves'] && $amp>0; $i++)
 		{
 			[$n,$m] = $this->noise->envelope($x*$f+91.73+$i*19.17, $z*$f-23.49-$i*31.29, $rx*$f, $rz*$f);
+			if($this->detailShape != 0.) {
+				// Bound the linear and rounded terms independently, including a zero crossing.
+				$k = $this->detailShape; $a = 1-abs($k);
+				$near = max(0.,$n,-$m); $far = max(abs($n),abs($m));
+				$p = $k*(.185-sqrt($near*$near+.0025)); $q = $k*(.185-sqrt($far*$far+.0025));
+				[$n,$m] = [$a*$n+min($p,$q),$a*$m+max($p,$q)];
+			}
 			$minWeight = 1 / (1+$r['damping']*($i+1)**2*$slope);
 			$lo += $amp * min($n,$n*$minWeight);
 			$hi += $amp * max($m,$m*$minWeight);
@@ -993,6 +1094,6 @@ final class Recipe
 			+ $r['ridgeHeight']*sqrt(4+($ridgeRoundness ?? $r['ridgeRoundness'])**2) + $r['wallHeight'];
 		$range = max(3.0,$macro) * $r['heightScale'] + $detail + ($this->layered ? 3 : 1) * $r['terraceSpacing'];
 
-		return [-$range, $range];
+		return [-$range-$this->gullyDepth, $range];
 	}
 }

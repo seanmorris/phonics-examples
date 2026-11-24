@@ -9,6 +9,8 @@ final class Clipmap
 {
 	private Program $generator;
 	private bool $joined = false;
+	private const AXES = 1, DETAIL_SHAPE = 2, GULLY_CUT = 4, COAST_PROFILE = 8;
+	private int $formFeatures = 0;
 	private ?TerrainAppearance $chartAppearance = null;
 	private ?TriangleShadows $shadows = null;
 	private ?SurfaceLayers $chartLayers = null;
@@ -62,11 +64,14 @@ final class Clipmap
 		glGenTextures(1, $this->permutation);
 	}
 
-	private static function elevationProgram(bool $joined): Program
+	private static function elevationProgram(bool $joined,int $features = 0): Program
 	{
 		$root = dirname(__DIR__).'/shaders/';
 		$fragment = file_get_contents($root.'elevation.frag');
-		if($joined) $fragment = str_replace('#version 300 es', "#version 300 es\n#define JOINED_TERRAIN", $fragment);
+		$defines = $joined ? "\n#define JOINED_TERRAIN" : '';
+		foreach([self::AXES=>'FORM_AXES',self::DETAIL_SHAPE=>'DETAIL_SHAPE',self::GULLY_CUT=>'GULLY_CUT',self::COAST_PROFILE=>'COAST_PROFILE'] as $bit=>$flag)
+			if($features & $bit) $defines .= "\n#define ".$flag;
+		$fragment = str_replace('#version 300 es', '#version 300 es'.$defines, $fragment);
 		return new Program(file_get_contents($root.'shadows.vert'), $fragment);
 	}
 
@@ -114,9 +119,21 @@ final class Clipmap
 		$overviewStride = $r['worldSize'] / (256 * $r['spacing']);
 		$this->overviewEdits = $roads && $overviewStride !== floor($overviewStride) ? $land->editIndex() : null;
 		$joined = isset($r['join']);
-		$switched = $joined !== $this->joined;
+		$features = $this->formFeatures;
+		if($newRecipe) {
+			$features = 0;
+			foreach([$r,...($r['join']['destinations'] ?? [])] as $form) {
+				if($form['ridgeStretch'] != 1 || $form['domainRotation'] != 0) $features |= self::AXES;
+				if($form['directionalRise'] != 0 && ($form['ridgeStretch'] != 1
+					|| $form['coastBearing'] != 0 || $form['coastWidth'] != 4500)) $features |= self::COAST_PROFILE;
+				if($form['detailShape'] != 0) $features |= self::DETAIL_SHAPE;
+				if($form['gullyDepth'] > 0) $features |= self::GULLY_CUT;
+			}
+		}
+		$switched = $joined !== $this->joined || $features !== $this->formFeatures;
 		if($switched) {
-			$program = self::elevationProgram($joined);
+			$program = self::elevationProgram($joined,$features);
+			$this->formFeatures = $features;
 			$this->generator->close();
 			$this->generator = $program;
 			$this->generator->use();
@@ -170,6 +187,15 @@ final class Clipmap
 			, 'uDetail' => ['detailAmplitude','persistence','lacunarity','damping']
 		] as $uniform => $fields) glUniform4f($p->location($uniform.$suffix), ...array_map(static fn($key) => $r[$key], $fields));
 
+		// Optional uniforms use the same name in both variants, with an array index only on a join.
+		$slot = $suffix ?: 'Set';
+		if($this->formFeatures & (self::AXES|self::COAST_PROFILE)) {
+			$axes = Recipe::axes($r);
+			if($this->formFeatures & self::AXES) glUniform4f($p->location('uMacroAxes'.$slot),...$axes['macro']);
+			glUniform4f($p->location('uDetailCoast'.$slot),...array_merge($axes['rotation'],$axes['coast']));
+		}
+		if($this->formFeatures & self::DETAIL_SHAPE) glUniform1f($p->location('uDetailShape'.$slot),$r['detailShape']);
+		if($this->formFeatures & self::GULLY_CUT) glUniform2f($p->location('uGully'.$slot),$r['gullyDepth'],$r['gullySpacing']);
 		$residual = static fn(float $f): float => $f - unpack('g', pack('g', $f))[1];
 		$x = $r['noiseOffsetX']; $z = $r['noiseOffsetZ'];
 		glUniform4f($p->location('uNoiseOffset'.$suffix), floor($x), floor($z), $x-floor($x), $z-floor($z));
@@ -196,7 +222,7 @@ final class Clipmap
 		if(!$roads)
 		{
 			glUniform4i($p->location('uRoadGrid'), 0, 0, 0, 0);
-			glDeleteTextures(1, $this->roadTexture);
+			if($this->roadTexture) glDeleteTextures(1,$this->roadTexture);
 			foreach($this->roadsideTextures as $texture) glDeleteTextures(1,$texture);
 			$this->roadsideTextures = $this->roadsideSizes = $this->roadTexture = $this->lastAtlas = $this->roadOverlays = [];
 			$this->roadBytes = 0;

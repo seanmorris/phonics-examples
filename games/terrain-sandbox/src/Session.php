@@ -1443,12 +1443,7 @@ final class Session
 	/** Values the Landscape tab fills when a preset is selected. */
 	public static function preset(string $name): array
 	{
-		$options = match($name) {
-			'mountain' => ['heightScale' => 1400., 'baseFrequency' => 1 / 2200],
-			'canyon' => ['heightScale' => 650., 'baseFrequency' => 1 / 4000, 'terraceSpacing' => 80., 'waterLevel' => -450.],
-			default => [],
-		};
-		$fields = (new \TerrainPhonics\Recipe(['preset' => $name] + $options))->values();
+		$fields = (new \TerrainPhonics\Recipe(\TerrainPhonics\Recipe::showcase($name)))->values();
 		foreach(['preset', 'version', 'maxTiles', 'tileSize', 'worldSize', 'spacing'] as $key) unset($fields[$key]);
 		return $fields;
 	}
@@ -1531,6 +1526,19 @@ final class Session
 				$this->launches = 0;
 				$this->menuRequested = !$this->menu;
 				$this->chase->resetInterpolation();
+				break;
+			case 'survey-view':
+				$view = $action['camera'] ?? [];
+				if(!is_array($view) || count($view)!==5 || count(array_filter($view,'is_numeric'))!==5)
+					throw new \InvalidArgumentException('Expected camera X, Z, clearance, heading and pitch.');
+				[$x,$z,$clearance,$heading,$pitch] = array_map('floatval',array_values($view));
+				$half = $this->landscape->recipe()['worldSize']/2;
+				if(max(abs($x),abs($z))>$half || $clearance<0 || $clearance>90000 || abs($pitch)>89)
+					throw new \InvalidArgumentException('Camera view outside the landscape.');
+				$this->resetCamera();
+				$this->camera->position = [$x,max($this->water->level(),$this->landscape->height($x,$z))+$clearance,$z];
+				$this->camera->yaw = deg2rad(fmod($heading,360.)); $this->camera->pitch = deg2rad($pitch);
+				$this->dirty=true;
 				break;
 			case 'reset-camera': $this->mode = 'fly'; $this->resetCamera(); break;
 			case 'undo': case 'redo':

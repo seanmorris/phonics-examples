@@ -467,6 +467,78 @@ export function activate({module, canvas, session, services})
 		/* An unreadable preference leaves the first tab open. */
 	}
 
+	const surveyBox = frame.querySelector('[data-survey]');
+	const analyze = surveyBox.querySelector('[data-analyze]');
+	const surveyNote = surveyBox.querySelector('[data-survey-note]');
+	const surveyResult = surveyBox.querySelector('[data-survey-result]');
+	const viewLink = surveyBox.querySelector('[data-view-link]');
+	let surveyRequest = null, surveyId = 0, surveyDraft = null, quantiles = null;
+	const invalidateSurvey = () => {
+		if(analyze.disabled) surveyRequest = {id: ++surveyId};
+		analyze.disabled = false;
+		surveyNote.textContent = '';
+		surveyResult.hidden = viewLink.hidden = true;
+		quantiles = null;
+	};
+	frame.addEventListener('input', event => {
+		if(event.target.matches('[name]') && surveyBox.closest('[role="tabpanel"]').contains(event.target)) invalidateSurvey();
+	}, {signal});
+	const stopHiddenSurvey = () => {
+		if(analyze.disabled && (!surveyBox.open || !frame.querySelector('.terrain-panel').open
+			|| surveyBox.closest('[role="tabpanel"]').hidden)) invalidateSurvey();
+	};
+	frame.addEventListener('toggle', stopHiddenSurvey, {capture:true,signal});
+	for(const event of ['click','keydown'])
+		frame.querySelector('[role="tablist"]').addEventListener(event, stopHiddenSurvey, {signal});
+	analyze.addEventListener('click', () => {
+		const draft = generationValues(frame);
+		if(quantiles && JSON.stringify(draft) === JSON.stringify(surveyDraft)) return;
+		surveyDraft = draft;
+		const {preset, ...options} = surveyDraft;
+		surveyRequest = {id: ++surveyId, recipe: {...surface.presets[preset], ...options, preset}};
+		analyze.disabled = true;
+		surveyNote.textContent = 'Sampling the landform…';
+	}, {signal});
+	shell.bridge('terrainSurveyResult', json => {
+		const result = JSON.parse(json);
+		if(result.id !== surveyId) return;
+		analyze.disabled = false;
+		if(result.error) { surveyNote.textContent = result.error; return; }
+		quantiles = result.percentiles;
+		const percent = x => (100*x).toFixed(1)+'%';
+		surveyNote.textContent = percent(result.land)+' land · '+percent(result.steep)+' steeper than 30°'
+			+' · middle 90% of heights '+distanceLabel(quantiles[5])+' to '+distanceLabel(quantiles[95])
+			+(result.crestSpacing ? ' · average crest spacing '+distanceLabel(result.crestSpacing) : '')
+			+' · '+result.size+' × '+result.size+' samples across '+distanceLabel(result.span);
+		const img = surveyBox.querySelector('[data-shade]').getContext('2d');
+		const bitmap = img.createImageData(result.size,result.size), rgb = atob(result.rgb);
+		for(let i=0;i<result.size*result.size;i++) {
+			for(let c=0;c<3;c++) bitmap.data[4*i+c] = rgb.charCodeAt(3*i+c);
+			bitmap.data[4*i+3] = 255;
+		}
+		img.putImageData(bitmap,0,0);
+		const histogram = surveyBox.querySelector('[data-histogram]').getContext('2d');
+		histogram.clearRect(0,0,192,64);
+		histogram.fillStyle = '#adc8ac';
+		const peak = Math.max(...result.bins);
+		result.bins.forEach((v,i) => histogram.fillRect(i*8,64-64*v/peak,7,64*v/peak));
+		const url = new URL(location.href);
+		url.searchParams.set('preset',surveyDraft.preset);
+		url.searchParams.set('seed',surveyDraft.seed);
+		const overrides = Object.fromEntries(Object.entries(surveyDraft).filter(([k,v]) =>
+			k !== 'preset' && k !== 'seed' && v !== surface.presets[surveyDraft.preset][k]));
+		url.searchParams.set('landform',JSON.stringify(overrides));
+		url.searchParams.set('camera',result.view.join(','));
+		viewLink.href = url.href;
+		viewLink.hidden = surveyResult.hidden = false;
+	});
+	surveyBox.querySelector('[data-fit-water]').addEventListener('click', () => {
+		const field = surveyBox.querySelector('[data-coverage]');
+		if(!field.reportValidity() || !quantiles) return;
+		setFieldValue(frame.querySelector('[name="waterLevel"]'),quantiles[100-Number(field.value)],false);
+		invalidateSurvey();
+		surveyNote.textContent = 'Starting water level updated. Generate to apply.';
+	}, {signal});
 	let surface = null;
 	const materials = materialEditor(frame, push, status);
 	const air = atmosphereEditor(frame, push);
@@ -475,6 +547,20 @@ export function activate({module, canvas, session, services})
 		surface = JSON.parse(json);
 		materials.configure(surface);
 		air.configure(surface.air);
+		const query = new URL(location.href).searchParams;
+		if(Object.hasOwn(surface.presets,query.get('preset'))) {
+			const preset = query.get('preset');
+			try {
+				const overrides = JSON.parse(query.get('landform') || '{}');
+				const fields = Object.fromEntries(Object.entries(overrides).filter(([key]) =>
+					(key !== 'seed' && Object.hasOwn(surface.presets[preset],key)) || key === 'worldSize'));
+				push({type:'generate',preset, ...fields, seed:query.get('seed') ?? surface.presets[preset].seed});
+			} catch { status.textContent = 'Invalid landform in view link.'; }
+		}
+		if(query.has('camera')) {
+			const camera = query.get('camera').split(',').map(Number);
+			if(camera.length === 5 && camera.every(Number.isFinite)) push({type:'survey-view',camera});
+		}
 	});
 
 	for(const field of frame.querySelectorAll('[data-action]'))
@@ -920,10 +1006,11 @@ export function activate({module, canvas, session, services})
 		const padsSame = padKey === previousPad && menuPadKey === previousMenuPad;
 
 		if(viewport === previousViewport && held === previousKeys && padsSame && !actions.length
-			&& pendingDraft === null && !clicks.length && !look[0] && !look[1] && !Object.keys(values).length
+			&& pendingDraft === null && surveyRequest === null && !clicks.length && !look[0] && !look[1] && !Object.keys(values).length
 		) return '';
 
 		const packet = {keys,values,actions,clicks,look};
+		if(surveyRequest) { packet.landformSurvey = surveyRequest; surveyRequest = null; }
 		if(pendingDraft !== null) {
 			packet.journeyDraft = pendingDraft;
 			pendingDraft = null;
@@ -1260,6 +1347,7 @@ export function activate({module, canvas, session, services})
 
 			if(state.generation !== lastGeneration)
 			{
+				invalidateSurvey();
 				if(state.recipe.join)
 				{
 					const {span, destinations} = state.recipe.join;
@@ -1798,6 +1886,7 @@ const RELIEF_HELP = {
 	none: 'Keeps the lighting from earlier layers, subject to Flatten underlying relief.'
 	, pattern: 'Uses the selected texture for bumps. Pattern scale sets their size and Relief strength their intensity.'
 	, ribs: 'Lights the shoulders of winding gullies. Set their width with Gully spacing under Shared field settings.'
+	, 'rib-tilt': 'Relief strength is the maximum tilt in degrees (−32 to 32). Gully spacing changes the size of the grooves.'
 	, facets: 'Lights rock slabs and cracks. Set Slab width and Slab height under Shared field settings.'
 	, crowns: 'Gives tree crowns rounded highlights. Block and crown spacing in Shared field settings sets their size.'
 	, blocks: 'Lights loose stones and boulders. Block and crown spacing in Shared field settings sets their size.'
@@ -2057,6 +2146,10 @@ function materialEditor(frame, push, status)
 
 		show(['field','color','reflectivity','roughness'], color);
 		show(['relief','strength'], relief);
+		group('strength').querySelector('small').textContent = source==='rib-tilt'
+			? 'Maximum tilt in degrees. Negative angles invert the lighting.' : LAYER_FIELDS.strength[1];
+		group('patternStretch').querySelector('small').textContent = field('pattern').value==='fall-line'
+			? 'Length of downhill streaks relative to their spacing.' : LAYER_FIELDS.patternStretch[1];
 		show(['patternColor'], color && (pattern || field('field').value==='shrubs'));
 		show(['patternAmount','patternScale','patternStretch'], pattern);
 
@@ -2691,6 +2784,24 @@ function markup()
 	<div class="landform-field"><label class="terrain-field">Steep-face detail damping<input aria-describedby="${hintPrefix}-damping" name="damping" data-increment="0.01" type="number" min="0" max="100" step="0.1" value="2"></label>
 		<small id="${hintPrefix}-damping">Smooths small bumps on steep ground. Higher values suppress the finest layers most.</small></div>
 	</div></fieldset>
+	<fieldset class="terrain-landform-group"><legend>Direction and erosion</legend><div class="terrain-grid">
+	<div class="landform-field"><label class="terrain-field">Ridge stretch<input aria-describedby="${hintPrefix}-ridgeStretch" name="ridgeStretch" type="number" min="1" max="12" step="any" data-increment=".1"></label>
+		<small id="${hintPrefix}-ridgeStretch">Lengthens broad features along the ridge bearing. A ratio of 1 has equal scales in both directions.</small></div>
+	<div class="landform-field"><label class="terrain-field">Ridge bearing · °<input aria-describedby="${hintPrefix}-ridgeBearing" name="ridgeBearing" type="number" min="-360" max="360" step="any" data-increment="1"></label>
+		<small id="${hintPrefix}-ridgeBearing">Axis of the stretch, clockwise from east before domain rotation.</small></div>
+	<div class="landform-field"><label class="terrain-field">Domain rotation · °<input aria-describedby="${hintPrefix}-domainRotation" name="domainRotation" type="number" min="-360" max="360" step="any" data-increment="1"></label>
+		<small id="${hintPrefix}-domainRotation">Rotates the whole seeded landscape about the noise origin.</small></div>
+	<div class="landform-field"><label class="terrain-field">Coast bearing · °<input aria-describedby="${hintPrefix}-coastBearing" name="coastBearing" type="number" min="-360" max="360" step="any" data-increment="1"></label>
+		<small id="${hintPrefix}-coastBearing">Direction of increasing coastal elevation, clockwise from east before domain rotation. Requires directional rise.</small></div>
+	<div class="landform-field"><label class="terrain-field">Coast transition · ft<input data-unit="ft" aria-describedby="${hintPrefix}-coastWidth" name="coastWidth" type="number" min="10" max="65536" step="any" data-increment="1"></label>
+		<small id="${hintPrefix}-coastWidth">Distance along the coast bearing at which directional rise reaches 76% of its maximum.</small></div>
+	<div class="landform-field"><label class="terrain-field">Detail shape<input aria-describedby="${hintPrefix}-detailShape" name="detailShape" type="number" min="-1" max="1" step="any" data-increment=".01"></label>
+		<small id="${hintPrefix}-detailShape">Negative values round fine hills. Zero retains fractal noise. Positive values sharpen ridges.</small></div>
+	<div class="landform-field"><label class="terrain-field">Gully depth · ft<input data-unit="ft" aria-describedby="${hintPrefix}-gullyDepth" name="gullyDepth" type="number" min="0" max="64" step="any" data-increment=".1"></label>
+		<small id="${hintPrefix}-gullyDepth">Cuts channels down slopes. Zero disables geometric erosion.</small></div>
+	<div class="landform-field"><label class="terrain-field">Gully spacing · ft<input data-unit="ft" aria-describedby="${hintPrefix}-gullySpacing" name="gullySpacing" type="number" min="8" max="1024" step="any" data-increment="1"></label>
+		<small id="${hintPrefix}-gullySpacing">Typical distance between neighboring channels.</small></div>
+	</div></fieldset>
 	<fieldset class="terrain-landform-group"><legend>Noise position and bends</legend><div class="terrain-grid">
 	<div class="landform-field"><label class="terrain-field">X noise offset · mi<input data-unit="mi" aria-describedby="${hintPrefix}-noiseOffsetX" name="noiseOffsetX" data-increment="0.01" type="number" min="-64373.76" max="64373.76" value="0"></label>
 		<small id="${hintPrefix}-noiseOffsetX">Choose which part of the seed falls inside the map. Positive values bring terrain from the east toward home.</small></div>
@@ -2710,6 +2821,14 @@ function markup()
 		<small id="${hintPrefix}-transitionWidth">Sets how far beyond the boundary the terrain takes to blend into the surrounding scenery.</small></div>
 	</div></fieldset>
 	</details>
+	<details data-survey><summary>Landform survey</summary>
+	<p class="terrain-note">Sample the current landform settings before generating. Coverage and grades are estimates for the unedited square.</p>
+	<div class="terrain-row"><button type="button" data-analyze>Analyze landform</button><a data-view-link target="_blank" rel="noopener" hidden>Open suggested view</a></div>
+	<output data-survey-note aria-live="polite"></output>
+	<div data-survey-result hidden><canvas data-shade width="64" height="64" aria-label="Hillshade with water in blue"></canvas>
+	<canvas data-histogram width="192" height="64" aria-label="Elevation histogram from low to high"></canvas>
+	<label class="terrain-field">Target exposed land · %<input type="number" value="50" required step="1" min="1" max="99" data-coverage></label>
+	<button type="button" data-fit-water>Set starting water level</button></div></details>
 	<div class="terrain-row terrain-file-actions"><button data-action="generate">Generate</button><button data-action="reset-camera">Home view</button><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-shape" aria-labelledby="terrain-tab-shape" data-tab-panel="shape" hidden>

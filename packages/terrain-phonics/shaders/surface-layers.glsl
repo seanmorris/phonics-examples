@@ -252,6 +252,25 @@ float layerPatternWeight(int layer,vec3 pos,vec3 normal,float footprint,float be
 	vec4 pattern=uLayerPattern[layer]; // kind, amount, horizontal scale, vertical stretch
 	int kind=int(pattern.x);
 	if(kind==0 || pattern.y<=0.) return 0.;
+	#if !defined(MATERIAL_STACK) || defined(PATTERN_FALL_LINE)
+	if(kind==12) {
+		float grade=length(normal.xz);
+		float visible=smoothstep(.06,.28,grade)*(1.-smoothstep(.08,.45,footprint/pattern.z));
+		if(visible==0.) return 0.;
+		// Anchor the phase in neighboring cells. Rotating the normal then only turns a local stroke.
+		float reach=max(1.,pattern.w);
+		vec2 p=(pos.xz+uPaletteOffset)/(reach*pattern.z), q=fract(p), w=smoothstep(0.,1.,q);
+		vec2 across=reach*vec2(-normal.z,normal.x)/grade;
+		ivec2 cell=ivec2(floor(p));
+		float pigment=0.;
+		for(int j=0;j<2;j++) for(int i=0;i<2;i++) {
+			float phase=dot(q-vec2(i,j),across)+layerCorner(cell+ivec2(i,j));
+			float mark=1.-smoothstep(.02,.28,abs(fract(phase+.5)-.5));
+			pigment+=mark*(i==0?1.-w.x:w.x)*(j==0?1.-w.y:w.y);
+		}
+		return pattern.y*visible*pigment;
+	}
+	#endif
 	#if !defined(MATERIAL_STACK) || defined(PATTERN_FRACTURES)
 	if(kind==FRACTURE_PATTERN) return fracturePigment(pos,footprint,pattern);
 	#endif

@@ -144,15 +144,43 @@ $engine->systems->add('terrain-sandbox.delivery-search', static function() use (
 	if($session->delivery?->searchPending()) $startSearchTimer();
 }, ['terrain-sandbox.simulate']);
 
+$survey = null;
+$surveyId = 0;
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds, &$displayTerrain, &$pendingEdit, &$hiddenGates,
 	&$heldKeys, &$heldPad, &$menuPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastAuthoringFrame,
-	$pauseMenu
+	$pauseMenu, &$survey, &$surveyId
 ): bool {
 	$frameSeconds = max(0.0, $elapsed);
 	$started = hrtime(true);
 	$packet = (string)$readInput();
 	$input = $packet === '' ? [] : json_decode($packet, true, flags: JSON_THROW_ON_ERROR);
+	if(isset($input['landformSurvey'])) {
+		$survey = null;
+		$request = $input['landformSurvey'];
+		$surveyId = $request['id'];
+		if(isset($request['recipe'])) {
+			try {
+				$r = $request['recipe'];
+				$grid = new TerrainPhonics\LandformPreview($r,(float)$r['waterLevel']);
+				$survey = (static function() use ($grid): \Generator {
+					$result = yield from $grid->survey();
+					$result['view'] = yield from $grid->findView();
+					return $result;
+				})();
+			} catch(\InvalidArgumentException $error) {
+				(vrzno_env('terrainSurveyResult'))(json_encode(['id'=>$surveyId,'error'=>$error->getMessage()],JSON_THROW_ON_ERROR));
+			}
+		}
+	}
+	if($survey !== null) {
+		$deadline = hrtime(true)+600000;
+		do { $survey->next(); } while($survey->valid() && hrtime(true)<$deadline);
+		if(!$survey->valid()) {
+			(vrzno_env('terrainSurveyResult'))(json_encode(['id'=>$surveyId]+$survey->getReturn(),JSON_THROW_ON_ERROR));
+			$survey=null;
+		}
+	}
 	if(isset($input['journeyDraft'])) {
 		$plan = $input['journeyDraft'];
 		try { $preview = ['nodes' => (new TerrainSandbox\JourneyNetwork($plan))->nodes]; }

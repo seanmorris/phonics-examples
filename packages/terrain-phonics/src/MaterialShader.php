@@ -99,7 +99,7 @@ final class MaterialShader
 	{
 		$flags = [];
 		foreach(array_unique(array_column($surface->layers,'pattern')) as $pattern) {
-			$flag = 'PATTERN_'.strtoupper($pattern);
+			$flag = 'PATTERN_'.strtoupper(str_replace('-','_',$pattern));
 			$flags[$flag] = "#define $flag";
 		}
 		return $flags;
@@ -176,6 +176,10 @@ final class MaterialShader
 					if($kind === 'pattern') $glsl[] = 'delta+=amount*effect.x*patternGradient(pos,normal,pattern);';
 					elseif($kind === 'ribs') $glsl[] = 'if(visible>0.) { vec3 n=normalize(normal+delta); vec3 tangent=lift-n*dot(n,lift);
 						delta=normalize(n-amount*effect.x*relief*tangent/(1.+length(tangent)))-normal; }';
+					elseif($kind === 'rib-tilt') $glsl[] = 'if(visible>0.) { vec3 n=normalize(normal+delta);
+						vec3 t=sizes.x*gullySlope; t-=n*dot(n,t);
+						float flankWeight=4.*flank*(1.-flank)*sign(gullyNoise);
+						delta=normalize(n-amount*effect.x*relief*upright*ribRelief*flankWeight*t/max(1.,length(t)))-normal; }';
 					elseif(isset(self::RELIEF[$kind])) $glsl[] = 'delta+=('.self::RELIEF[$kind].')*relief*amount*effect.x;';
 				}
 			}
