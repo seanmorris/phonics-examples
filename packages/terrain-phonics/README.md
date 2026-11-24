@@ -133,6 +133,10 @@ areas when its pixels fall between terrain lattice nodes. `Scene::drawChart()` d
 a heading-up chart at two zoom levels from the same elevation and surface layers. It keeps the vehicle centered
 and limits the wider view near the map boundary. Pass `circular: true` to draw a disc within the chart viewport.
 
+Applications that reserve uniform-buffer binding zero for terrain scenes can pass
+`retainJourneyBinding: true` to `Scene`. The ground and chart then share the bound journey palette across
+frames. Drawing a different terrain scene switches to its palette.
+
 Recipe presets fill in a common set of shape coefficients. These coefficients can combine broad directional
 rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone` preset uses a 3,050 m
 base wavelength and a wide wall transition to give isolated peaks broad foothills. Partial terraces at

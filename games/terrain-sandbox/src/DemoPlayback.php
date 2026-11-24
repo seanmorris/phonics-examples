@@ -22,7 +22,7 @@ final class DemoPlayback
 	{
 		$this->world = new Session;
 		$this->loadWorld($tape->world(0));
-		$this->scene = new Scene($this->terrain,$this->world->water,$this->world->atmosphere,useClipmap:true);
+		$this->scene = new Scene($this->terrain,$this->world->water,$this->world->atmosphere,useClipmap:true,retainJourneyBinding:true);
 		$this->chapter = 0;
 		$this->appearance();
 	}

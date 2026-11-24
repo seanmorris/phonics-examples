@@ -21,6 +21,12 @@ vec3 journeySurface(vec3 world, vec3 normal, vec3 relative, float footprint, boo
 	#if JOURNEY_REGIONS == 3
 	weights.yz = fade.x * vec2(1.-fade.y, fade.y);
 	#endif
+	// At the edge of a seam, even a trace of pigment would run a whole landscape's shader.
+	// Ease its share back in above 0.1%, keeping the other materials in proportion.
+	if(blended) {
+		weights *= smoothstep(vec3(.001),vec3(.002),weights);
+		weights /= dot(weights,vec3(1.));
+	}
 	vec3 albedo = vec3(0.);
 	litNormal = vec3(0.);
 	finish = vec2(0.);

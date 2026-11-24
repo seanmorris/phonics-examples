@@ -43,6 +43,7 @@ final class Scene
 	private array $layerBinding=[];
 	private array $materialPrograms = [];
 	private array $destinations = [], $paletteBuffer = [], $uploadedMaterials = [], $selectedMaterials = [];
+	private static ?int $journeyBindingOwner = null;
 	private string $materialKey = '', $groundVertexSource, $groundFragmentSource;
 	private ?Program $chartProgram = null;
 	private ?Landscape $preparing = null;
@@ -169,13 +170,15 @@ final class Scene
 	 * @param Water $water Shared analytic water model.
 	 * @param Atmosphere $atmosphere Shared atmosphere parameters and numerical lookup data.
 	 * @param bool $useClipmap Use GPU elevation textures. Pass false for the PHP patch renderer.
+	 * @param bool $retainJourneyBinding The caller reserves uniform-buffer binding zero for terrain scenes between draws.
 	 * @return void Initializes bounded preparation and graphics resources.
 	 */
 	public function __construct(
 		private Landscape $landscape,
 		private Water $water,
 		private Atmosphere $atmosphere,
-		private bool $useClipmap = true
+		private bool $useClipmap = true,
+		private readonly bool $retainJourneyBinding = false
 	){
 		if($useClipmap) $this->clipmap = new Clipmap;
 		$this->indices = $useClipmap ? '' : GpuPatch::indices(Lod::CELLS);
@@ -2850,13 +2853,21 @@ final class Scene
 		if($materials !== $this->uploadedMaterials) {
 			$bytes = '';
 			foreach($materials as [$palette,$form,$origin]) $bytes .= $palette->journeyBlock($form,$origin);
-			if(!$this->paletteBuffer) glGenBuffers(1,$this->paletteBuffer);
+			if(!$this->paletteBuffer) {
+				glGenBuffers(1,$this->paletteBuffer);
+				self::$journeyBindingOwner = null;
+			}
 			glBindBuffer(GL_UNIFORM_BUFFER,$this->paletteBuffer[0]);
 			glBufferData(GL_UNIFORM_BUFFER,strlen($bytes),$bytes,GL_DYNAMIC_DRAW);
 			$this->uploadedMaterials = $materials;
 		}
-		// JourneyPalettes is the only uniform block. GL initializes its binding to zero on each link.
-		glBindBufferBase(GL_UNIFORM_BUFFER,0,$this->paletteBuffer[0]);
+		// All journey programs use binding zero. The WASM binding checks isBuffer() synchronously,
+		// so reuse it for the ground and chart while this scene owns the reserved binding.
+		$owner = spl_object_id($this);
+		if(!$this->retainJourneyBinding || self::$journeyBindingOwner !== $owner) {
+			glBindBufferBase(GL_UNIFORM_BUFFER,0,$this->paletteBuffer[0]);
+			self::$journeyBindingOwner = $this->retainJourneyBinding ? $owner : null;
+		}
 		glUniform1f($program->location('uJoinWidth'),JoinedTerrain::GAP);
 		glUniform1i($program->location('uBlendProfile'),(int)(($materials[0][1]['join']['version'] ?? 1)>=2));
 	}

@@ -52,7 +52,7 @@ $engine->clock = new FixedStep(1 / 60, 4);
 // The page reads gamepads itself and sends Start as the sandbox's own pause action.
 $engine->input->bindButton(9, []);
 $engine->input->bindGamepad(9, []);
-$scene = new Scene($session->landscape, $session->water, $session->atmosphere, useClipmap: true);
+$scene = new Scene($session->landscape, $session->water, $session->atmosphere, useClipmap: true, retainJourneyBinding: true);
 $session->prepareMaterial = $scene->prepareMaterial(...);
 $models = [];
 $tracers = null;
