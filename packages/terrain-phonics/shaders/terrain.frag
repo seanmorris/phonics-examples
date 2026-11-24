@@ -9,6 +9,7 @@ in vec3 vRelative, vWorld, vNormal;
 in vec3 vPaint0, vPaint1;
 in vec4 vRoadMark;
 in float vSplinePaint;
+in vec2 vForkMark;
 // Area of the painted half of every repeating dash-and-gap pair.
 float dashIntegral(float x) { return .5*floor(x)+min(fract(x),.5); }
 float dashCoverage(vec2 phaseVector, float pixelCycles)
@@ -184,7 +185,10 @@ void main()
 	float crossTrack = vRoadMark.x/max(vRoadMark.w,.0001);
 	vec2 dx=worldDx.xz, dy=worldDy.xz;
 	vec2 lateralPixel=vec2(dFdx(crossTrack),dFdy(crossTrack));
-	float roadEdge = splinePavement(crossTrack,max(abs(lateralPixel.x)+abs(lateralPixel.y),.00001));
+	float markWeight=vRoadMark.w+vForkMark.y;
+	float outline=(abs(vRoadMark.x)+vForkMark.x)/max(markWeight,.0001);
+	vec2 outlinePixel=vec2(dFdx(outline),dFdy(outline));
+	float roadEdge = splinePavement(outline,max(abs(outlinePixel.x)+abs(outlinePixel.y),.00001));
 	float road = (vPaint1.y-vSplinePaint*(1.-roadEdge))*slopeMask;
 	// Only uniform pavement can skip the underlying palette. Triangles that blend a
 	// shoulder still evaluate its noise and derivatives all the way to the road edge.
@@ -213,20 +217,21 @@ void main()
 	albedo = albedo*(1.-painted) + uPaintColor[0]*vPaint0.x + uPaintColor[1]*vPaint0.y + uPaintColor[2]*vPaint0.z
 		+ uPaintColor[3]*vPaint1.x + uPaintColor[4]*road + craft*vPaint1.z;
 	vec3 markingGlow=vec3(0.);
-	if(vRoadMark.w > .65 && road > 0.) {
+	if(markWeight > .65 && road > 0.) {
 		float area=dx.x*dy.y-dx.y*dy.x;
 		// This vector follows the line of constant crossTrack through this pixel, even on a bend.
-		vec2 alongRoad=lateralPixel.x*dy-lateralPixel.y*dx;
+		vec2 stripeGradient=vForkMark.y>0. ? outlinePixel : lateralPixel;
+		vec2 alongRoad=stripeGradient.x*dy-stripeGradient.y*dx;
 		float alongLength=length(alongRoad);
 		float unitsPerMeter=alongLength/max(abs(area),1e-10);
-		float pixelAcross=max(.00001,abs(lateralPixel.x)+abs(lateralPixel.y));
-		float line = stripeCoverage(crossTrack,min(.20*unitsPerMeter,.35),pixelAcross);
+		float pixelAcross=max(.00001,abs(stripeGradient.x)+abs(stripeGradient.y));
+		float line = stripeCoverage(outline,min(.20*unitsPerMeter,.35),pixelAcross);
 		float edgeCenter = 1.-min(.35*unitsPerMeter,.30);
-		float edge = stripeCoverage(abs(crossTrack)-edgeCenter,min(.12*unitsPerMeter,.20),pixelAcross);
+		float edge = stripeCoverage(outline-edgeCenter,min(.12*unitsPerMeter,.20),pixelAcross);
 		vec2 tangent=alongRoad/max(alongLength,1e-10);
 		float pixelCycles=(abs(dot(dx,tangent))+abs(dot(dy,tangent)))/6.096;
-		float marked = smoothstep(.65,.98,vRoadMark.w)*smoothstep(.05,.6,vPaint1.y)*roadEdge*slopeMask;
-		float centerPaint=line*dashCoverage(vRoadMark.yz,pixelCycles)*marked;
+		float marked = smoothstep(.65,.98,markWeight)*smoothstep(.05,.6,vPaint1.y)*roadEdge*slopeMask;
+		float centerPaint=line*dashCoverage(vRoadMark.yz,pixelCycles)*marked*smoothstep(.05,.95,vRoadMark.w);
 		float edgePaint=edge*marked*(1.-smoothstep(1.,5.,footprint));
 		vec3 ochre=vec3(.72,.47,.09), white=vec3(.88);
 		albedo=mix(mix(albedo,ochre,centerPaint),white,edgePaint);

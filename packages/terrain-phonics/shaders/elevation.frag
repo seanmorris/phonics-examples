@@ -358,9 +358,11 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 	int leaves = roadPointer(uRoadGrid.x, block.y * uRoadGrid.y + block.x);
 	if(leaves == 0) return;
 	int group = roadPointer(leaves, (tile.y % 8) * 8 + tile.x % 8);
-	bool painted = false;
+	bool painted = false, junction = false;
+	int network=0, arm=0;
+	float bestDistance=0.;
 	while(group != 0) {
-		ivec3 header = ivec3(roadRecord(group).xyz);
+		ivec4 header = ivec4(roadRecord(group));
 		vec4 params = roadRecord(header.x);
 		float sum = 0., target = 0., coverage = 0., outside = 1.;
 		float halfWidth = sqrt(params.x), radius = sqrt(params.x+params.y);
@@ -403,9 +405,12 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 		}
 		float influence = sum > 0. ? (1. - outside)*(coverage/sum) : 0.;
 		if(sum > 0.) height = mix(height,target/sum,influence);
-		if(influence >= .5) {
+		bool covers = influence >= .5;
+		bool joins = covers==painted && network!=0 && network==header.w;
+		bool projected = false;
+		if(covers) {
 			material = params.w;
-			marking = vec3(0.);
+			if(!joins) marking = vec3(0.);
 			painted = true;
 		}
 		if(params.w == 5. && (influence >= .5 || !painted) && closest <= markReach*markReach) {
@@ -415,15 +420,17 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 				((caps&4)!=0 || ((caps&2)!=0 && mark.y==1.) ? 1 : -1);
 			bool pastEnd = (caps&4)!=0 || (end==0 && mark.z<0.) || (end==1 && mark.z>0.);
 			float along = station.x+mark.y*station.y;
+			bool forkCap=end>=0 && (caps&(8<<end))!=0;
+			if(forkCap) pastEnd=false;
+			if((caps&4)!=0 && (forkCap || station.w!=0.)) {
+				vec4 pos=roadRecord(nearest);
+				vec2 v=(world-pos.xy)-roadRecord(nearest+2).xy;
+				if(pos.w*v.y-roadRecord(nearest+1).x*v.x<0.) mark.x=-mark.x;
+			}
 			if(end>=0 && station.w!=0.) {
 				int continuation = int(roadRecord(header.x+int(station.w))[end]);
 				if(continuation!=0) {
 					pastEnd = false;
-					if((caps&4)!=0) {
-						vec4 pos = roadRecord(nearest);
-						vec2 v = (world-pos.xy)-roadRecord(nearest+2).xy;
-						if(pos.w*v.y-roadRecord(nearest+1).x*v.x<0.) mark.x = -mark.x;
-					}
 					int ptr = header.x+continuation;
 					int count = int(roadRecord(ptr++).x);
 					for(int k=0; k<count; k++) {
@@ -444,13 +451,21 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 				}
 			}
 			if(!pastEnd) {
-				int crossCode = int(clamp(floor(mark.x/halfWidth*2048.+.5)+4096.,1.,8191.));
-				int phase = int(floor(mod(along,97.536)*(2048./97.536)+.5))&2047;
-				int code = (crossCode<<11)|phase;
-				marking = vec3(code>>16,(code>>8)&255,code&255)/255.;
+				float lateral=mark.x/halfWidth;
+				junction=joins && (junction || arm!=(header.z>>1));
+				bestDistance=joins ? min(bestDistance,abs(lateral)) : abs(lateral);
+				if(junction || abs(lateral)<=bestDistance) {
+					int crossCode = int(clamp(floor(lateral*2048.+.5)+4096.,1.,8190.));
+					int phase = int(floor(mod(along,97.536)*(2048./97.536)+.5))&2047;
+					int code = junction ? (8191<<11)|int(min(2047.,floor(bestDistance*1024.+.5))) : (crossCode<<11)|phase;
+					marking = vec3(code>>16,(code>>8)&255,code&255)/255.;
+				}
+				network=header.w; arm=header.z>>1;
+				projected=true;
 			}
 		}
-		if(header.z != 0) break;
+		if(covers && !projected) { marking=vec3(0.); network=0; }
+		if((header.z&1)!=0) break;
 	}
 }
 

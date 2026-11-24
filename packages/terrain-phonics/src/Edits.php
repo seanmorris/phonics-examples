@@ -179,7 +179,8 @@ final class Edits
 		$withMark = func_num_args() >= 4;
 		$mark = null;
 		$centerOffset = null;
-		$apron = null;
+		$apron=null; $apronNetwork=$apronArm=0;
+		$network=$arm=0; $junction=false;
 		for($i = count($operations) - 1; $i >= 0; $i--)
 		{
 			$operation = $operations[$i];
@@ -194,15 +195,44 @@ final class Edits
 			}
 
 			if($weight >= .5) {
-				if($withMark && $operation['type'] === 'road' && $operation['material'] === 'road')
-					$centerOffset = self::centerOffset($x,$z,$operation['_road'],$mark);
-				return $operation['material'];
+				if(!$withMark) return $operation['material'];
+				$ink=$operation['_road']['ink']??[];
+				if($network && $network!==($ink['network']??0)) break;
+				if($operation['type']!=='road' || $operation['material']!=='road') return $operation['material'];
+				$offset=self::centerOffset($x,$z,$operation['_road'],$candidate);
+				if(!$network) {
+					$mark=$candidate; $centerOffset=$offset;
+					$network=$ink['network']??0;
+					if(!$network || $mark===null) return 'road';
+					$arm=$ink['arm'];
+				} else {
+					if($candidate===null) break;
+					$junction=$junction || $arm!==$ink['arm'];
+					if(abs($candidate[0])/$candidate[2]<abs($mark[0])/$mark[2]) {
+						$mark=$candidate; $centerOffset=$offset;
+					}
+				}
 			}
 			// Interpolate spline coordinates across edge triangles even when a corner is bare terrain.
-			if($withMark && $apron === null && $operation['type'] === 'road' && $operation['material'] === 'road')
-				self::centerOffset($x,$z,$operation['_road'],$apron);
+			elseif(!$network && $withMark && ($apron===null || $apronNetwork)
+				&& $operation['type']==='road' && $operation['material']==='road') {
+				self::centerOffset($x,$z,$operation['_road'],$candidate);
+				if($candidate===null) continue;
+				$ink=$operation['_road']['ink']??[];
+				if($apron===null) {
+					$apron=$candidate; $apronNetwork=$ink['network']??0; $apronArm=$ink['arm']??0;
+				} elseif($apronNetwork===($ink['network']??0)) {
+					$mixed=($apron[4]??false) || $apronArm!==$ink['arm'];
+					if(abs($candidate[0])/$candidate[2]<abs($apron[0])/$apron[2]) $apron=$candidate;
+					if($mixed) $apron[4]=true;
+				} else $apronNetwork=0;
+			}
 		}
 
+		if($network) {
+			if($junction) $mark[4]=true;
+			return 'road';
+		}
 		$mark = $apron;
 		return null;
 	}
@@ -552,7 +582,8 @@ final class Edits
 		$end = $index === 0 && $fraction === 0. ? 0 :
 			($index === $last || ($index+1 === $last && $fraction === 1.) ? 1 : null);
 		$extension = $road['ink']['ends'][$end] ?? [];
-		if(!$extension && ($index === $last || ($end === 0 && $dot < 0.) || ($end === 1 && $dot > 0.))) return $offset;
+		$forkCap=$end!==null && (($road['ink']['forkCaps']??0) & (1<<$end));
+		if(!$extension && !$forkCap && ($index === $last || ($end === 0 && $dot < 0.) || ($end === 1 && $dot > 0.))) return $offset;
 		$after = min($last,$index+1);
 		$station = $road['stations'][$index];
 		$along = $station+$fraction*($road['stations'][$after]-$station);

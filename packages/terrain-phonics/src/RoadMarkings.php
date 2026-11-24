@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace TerrainPhonics;
 
-/** Paint coordinates shared by unambiguous, end-to-start pavement sections. */
+/** Paint coordinates for continuous road sections and the shared pavement of forks and merges. */
 final class RoadMarkings
 {
 	public const DASH_METERS = 3.048;
@@ -10,22 +10,29 @@ final class RoadMarkings
 	/** Derive the visible paint paths from committed control points, independent of edit order. */
 	public static function connect(array $operations): array
 	{
-		$starts = $ends = $next = $previous = $remaining = [];
+		$starts = $ends = $incident = $next = $previous = $remaining = [];
 		foreach($operations as $i=>$op) {
 			if($op['type'] !== 'road') continue;
 			unset($operations[$i]['_road']['ink']);
 			if($op['material'] !== 'road') continue;
 			$points = $op['points'];
+			foreach([$points[0],$points[array_key_last($points)]] as $end=>$point) $incident[serialize($point)][]=[$i,$end];
 			$starts[serialize([$points[0],$op['width']])][] = $i;
 			$ends[serialize([$points[array_key_last($points)],$op['width']])][] = $i;
 		}
+		$junctions=[];
+		foreach($incident as $point=>$legs) if(count($legs)>=3) foreach($legs as [$i,$end]) {
+			$junctions[$i][$end]=$point;
+			$remaining[$i]=true;
+		}
 		foreach($ends as $key=>$from) {
 			$to = $starts[$key] ?? [];
-			if(count($from) !== 1 || count($to) !== 1) continue;
+			if(count($from) !== 1 || count($to) !== 1 || isset($junctions[$from[0]][1])) continue;
 			$next[$from[0]] = $to[0];
 			$previous[$to[0]] = $from[0];
 			$remaining[$from[0]] = $remaining[$to[0]] = true;
 		}
+		$paths=$atJunction=[];
 		// Visit open chains from their physical start, then any remaining closed loops.
 		foreach([...array_keys(array_diff_key($remaining,$previous)), ...array_keys($remaining)] as $first) {
 			if(!isset($remaining[$first])) continue;
@@ -46,6 +53,13 @@ final class RoadMarkings
 					'rising'=>$pivot > 0. ? $halfPattern/$pivot : 0.,
 					'falling'=>$lap > $pivot ? $halfPattern/($lap-$pivot) : 0.];
 			}
+			// All editable sections of one uninterrupted arm share a paint coordinate.
+			// Track both ends so short sections inside a fork behave like one long spline.
+			$last=array_key_last($offsets);
+			foreach([$junctions[$first][0]??null,$junctions[$last][1]??null] as $point) if($point!==null) {
+				$paths[$first]=$offsets;
+				$atJunction[$point][]=$first;
+			}
 			foreach($offsets as $id=>$_) {
 				foreach([0=>$previous[$id] ?? null,1=>$next[$id] ?? null] as $end=>$neighbor) {
 					if($neighbor === null) continue;
@@ -56,10 +70,30 @@ final class RoadMarkings
 					do {
 						$other = $operations[$j]['_road'];
 						$further = $end ? ($next[$j] ?? null) : ($previous[$j] ?? null);
-						if(!self::continuation($segments,$other,$end,$x,$z,2*$road['gridSize'],$further === null)) break;
+						if(!self::continuation($segments,$other,$end,$x,$z,2*$road['gridSize'],$further === null && !isset($junctions[$j][$end]))) break;
 						$j = $further;
 					} while($j !== null && $j !== $id && $j !== $neighbor);
 					$operations[$id]['_road']['ink']['ends'][$end] = $segments;
+				}
+			}
+		}
+		// Distinct arms of the same junction network can overlap on the ground.
+		// Keep unrelated crossings and later brush paint in ordinary edit order.
+		while($paths) {
+			$root=array_key_first($paths); $stack=[$root];
+			while($stack) {
+				$arm=array_pop($stack);
+				if(!isset($paths[$arm])) continue;
+				$sections=$paths[$arm]; unset($paths[$arm]);
+				foreach($sections as $id=>$_) {
+					$ink=&$operations[$id]['_road']['ink'];
+					$ink['network']=$root+1; $ink['arm']=$arm+1;
+					foreach($junctions[$id]??[] as $end=>$point) {
+						$ink['forkCaps']=($ink['forkCaps']??0)|(1<<$end);
+						foreach($atJunction[$point]??[] as $neighbor) $stack[]=$neighbor;
+						unset($atJunction[$point]);
+					}
+					unset($ink);
 				}
 			}
 		}

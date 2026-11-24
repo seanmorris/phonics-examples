@@ -27,7 +27,7 @@ final class RoadAtlas
 		$maxTile = (int)floor($half / $cell);
 		$blocksAcross = intdiv($maxTile - $minTile, 8) + 1;
 		$data = str_repeat("\0", 16); // Zero is the absent pointer at both levels.
-		$blocks = [];
+		$blocks = []; $paths=[];
 
 		$used = []; $rebuilt = 0;
 		foreach($roads as $op) {
@@ -44,6 +44,7 @@ final class RoadAtlas
 			$used[$key] = $overlay;
 			$base = intdiv(strlen($data),16);
 			$data .= $overlay['bytes'];
+			$paths[$base]=[$op['_road']['ink']['arm']??0,$op['_road']['ink']['network']??0];
 			foreach($overlay['tiles'] as $block=>$tiles)
 				foreach($tiles as $tile=>$addresses) $blocks[$block][$tile][$base] = $addresses;
 		}
@@ -61,7 +62,8 @@ final class RoadAtlas
 				{
 					// Each group starts with its parameters, kernel count and last-group flag.
 					$count = count($addresses);
-					$data .= pack('g4', $params, $count, (int)($params === $lastRoad), 0);
+					[$arm,$network]=$paths[$params];
+					$data .= pack('g4', $params, $count, 2*$arm+(int)($params === $lastRoad), $network);
 					$data .= pack('g*', ...$addresses) . str_repeat("\0", (4 - $count % 4) % 4 * 4);
 				}
 			}
@@ -113,8 +115,10 @@ final class RoadAtlas
 			$length = isset($road['stations'][$i+1]) ? RoadMarkings::station($road,$i+1)-$station : 0.;
 			$last = count($road['samples'])-1;
 			$caps = ($i === 0 ? 1 : 0) | ($i+1 === $last ? 2 : 0) | ($i === $last ? 4 : 0);
+			$continuation=$caps && $pointers ? $ends : 0.;
+			$caps |= (($road['ink']['forkCaps']??0)<<3);
 			$data .= pack('g16', $xHigh, $zHigh, $y, $tx, $tz, $grade, $bank, $opacity,
-				$x - $xHigh, $z - $zHigh, $next[0]-$x, $next[2]-$z, fmod($station,self::MARK_CYCLE), $length, $caps, $caps && $pointers ? $ends : 0.);
+				$x - $xHigh, $z - $zHigh, $next[0]-$x, $next[2]-$z, fmod($station,self::MARK_CYCLE), $length, $caps, $continuation);
 		}
 		return $pointers ? $data.pack('g4',$pointers[0] ?? 0,$pointers[1] ?? 0,0,0).$extra : $data;
 	}
@@ -147,7 +151,9 @@ final class RoadAtlas
 	{
 		[$cross,$station] = $mark;
 		$half = $mark[2] ?? 4.;
-		$lateral = max(1,min(8191,(int)floor(($cross/$half)*2048+.5)+4096));
+		// The reserved outer code stores unsigned distance across overlapping arms.
+		if($mark[4]??false) return (8191<<11)|min(2047,(int)floor(abs($cross)/$half*1024.+.5));
+		$lateral = max(1,min(8190,(int)floor(($cross/$half)*2048+.5)+4096));
 		$phase = (int)floor(fmod($mark[3] ?? $station,self::MARK_CYCLE)*(2048/self::MARK_CYCLE)+.5) & 2047;
 		return ($lateral << 11) | $phase;
 	}
