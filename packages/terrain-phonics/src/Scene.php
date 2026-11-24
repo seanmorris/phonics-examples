@@ -2857,6 +2857,7 @@ final class Scene
 		// JourneyPalettes is the only uniform block. GL initializes its binding to zero on each link.
 		glBindBufferBase(GL_UNIFORM_BUFFER,0,$this->paletteBuffer[0]);
 		glUniform1f($program->location('uJoinWidth'),JoinedTerrain::GAP);
+		glUniform1i($program->location('uBlendProfile'),(int)(($materials[0][1]['join']['version'] ?? 1)>=2));
 	}
 
 	private function palette(): SurfaceLayers

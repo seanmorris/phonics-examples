@@ -129,25 +129,25 @@ float preciseContour(vec2 world,vec2 warp)
 	return preciseMix(low,high,v).x;
 }
 
-float terrainHeight(vec2 world)
+float terrainHeight(vec2 world,vec4 profile,vec2 subcell)
 {
 	if(uField.x==0. && (uDetail.x==0. || uOctaves==0)) return 0.;
-	vec2 p=world, displacement=vec2(0);
+	vec2 displacement=subcell, p=world+subcell;
 	vec2 wx=vec2(0), wz=vec2(0);
 	float f=uField.y;
 	if(uField.z!=0.) {
-		vec3 x=sampleNoise(world,vec2(0),uField.w,uFieldResidual.y,ivec2(271,-198),vec2(.13,.59));
-		vec3 z=sampleNoise(world,vec2(0),uField.w,uFieldResidual.y,ivec2(-420,113),vec2(.73,.71));
-		displacement=uField.z*vec2(x.x,z.x); p+=displacement;
+		vec3 x=sampleNoise(world,subcell,uField.w,uFieldResidual.y,ivec2(271,-198),vec2(.13,.59));
+		vec3 z=sampleNoise(world,subcell,uField.w,uFieldResidual.y,ivec2(-420,113),vec2(.73,.71));
+		displacement+=uField.z*vec2(x.x,z.x); p=world+displacement;
 		wx=x.yz*uField.z*uField.w; wz=z.yz*uField.z*uField.w;
 	}
 	vec3 a=sampleNoise(world,displacement,f,uFieldResidual.x,ivec2(13,-10),vec2(.17,.69));
 	vec3 b=sampleNoise(world,displacement,f*2.,2.*uFieldResidual.x,ivec2(71,53),vec2(.43,.11));
 	bool beds=uRock.w>0. && uRock.y>0. && uRock.z>0.;
-	float contourDistance=abs(a.x)-uProfile.z;
+	float contourDistance=abs(a.x)-profile.z;
 	// The narrow, unbedded wall can magnify an otherwise imperceptible noise error.
 	// Use the compensated contour only where that wall can affect the height.
-	if(uField.x>0. && uProfile.y>0. && !beds && contourDistance>-.00001 && contourDistance<uProfile.w+.00001)
+	if(uField.x>0. && profile.y>0. && !beds && contourDistance>-.00001 && contourDistance<profile.w+.00001)
 		a.x=preciseContour(world,displacement);
 	vec3 h=vec3(uShape.x,0,0)+uShape.y*a*vec3(1.,f,f)+uRock.x*b*vec3(1.,2.*f,2.*f);
 	if(uShape.z!=0.) {
@@ -155,13 +155,13 @@ float terrainHeight(vec2 world)
 		h+=uShape.z*vec3(coast,(1.-coast*coast)/4500.,0.);
 	}
 	if(uShape.w!=0.) {
-		float rounded=length(vec2(a.x,uProfile.x));
+		float rounded=length(vec2(a.x,profile.x));
 		h-=uShape.w*vec3(rounded,a.x/rounded*a.yz*f);
 	}
 	float strength=uRock.z;
 	vec2 ds=vec2(0);
-	if(uProfile.y>0. || beds) {
-		float dist=abs(a.x)-uProfile.z, width=uProfile.w;
+	if(profile.y>0. || beds) {
+		float dist=abs(a.x)-profile.z, width=profile.w;
 		vec2 slope=sign(a.x)*a.yz*f;
 		if(beds) {
 			float amount=strength*uRock.w;
@@ -175,14 +175,14 @@ float terrainHeight(vec2 world)
 			ds+=ds.x*wx+ds.y*wz;
 		}
 		float t=clamp(dist/width,0.,1.);
-		h+=uProfile.y*vec3(fade(t),derivative(t)/width*slope);
+		h+=profile.y*vec3(fade(t),derivative(t)/width*slope);
 	}
 	h.yz+=h.y*wx+h.z*wz;
 	h*=uField.x;
 	if(uRock.y>0. && strength>0.) {
 		float start=0.,end=1.,width=1.;
 		vec2 dip=beds?vec2(.006,-.003):vec2(0);
-		float level=(h.x-dot(dip,world))/uRock.y, frac=fract(level);
+		float level=(h.x-dot(dip,world)-dot(dip,subcell))/uRock.y, frac=fract(level);
 		if(beds) {
 			const float contacts[8]=float[8](-5.,-3.06,-1.85,-1.29,-.05,1.29,2.04,5.);
 			const vec2 ramps[7]=vec2[7](vec2(.03,.98),vec2(.03,.97),vec2(.33,.79),vec2(.14,.84),vec2(.03,.97),vec2(.19,.81),vec2(.26,.76));
@@ -204,7 +204,7 @@ float terrainHeight(vec2 world)
 		if(i>=uOctaves || amp==0.) break;
 		vec2 offset=vec2(91.73,-23.49)+float(i)*vec2(19.17,-31.29);
 		float k=float(i+1);
-		h.x+=amp/(1.+uDetail.w*k*k*slope)*sampleNoise(world,vec2(0),f,0.,ivec2(floor(offset)),fract(offset)).x;
+		h.x+=amp/(1.+uDetail.w*k*k*slope)*sampleNoise(world,subcell,f,0.,ivec2(floor(offset)),fract(offset)).x;
 		f*=uDetail.z; amp*=uDetail.y;
 	}
 	return h.x;
@@ -214,12 +214,46 @@ float regionalHeight(int index,vec2 world)
 {
 	formIndex=index;
 	vec3 origin=uFormOrigin[index];
-	return terrainHeight(world-origin.xy)+origin.z;
+	return terrainHeight(world-origin.xy,uProfile,vec2(0))+origin.z;
+}
+uniform bool uBlendProfile;
+vec3 contourProfile(int i)
+{
+	vec4 p=uProfileSet[i];
+	return vec3(p.x,p.z,p.y>0. ? p.w : .5);
+}
+float extendEdge(float axis,float side)
+{
+	float edge=.5*uJoinWidth, distance=edge-side*axis;
+	return distance<=0. ? axis : side*(edge-256.*distance/(256.+distance));
+}
+float blendedRegion(int i,vec2 world,vec3 shape)
+{
+	formIndex=i;
+	vec3 origin=uFormOrigin[i];
+	world.x=extendEdge(world.x,i==0 ? -1. : 1.);
+	if(i>0 && uFormCount==3) world.y=extendEdge(world.y,i==1 ? -1. : 1.);
+	// Keep the sub-meter edge extension separate when rebasing into a large map.
+	return terrainHeight(floor(world)-origin.xy,vec4(shape.x,uProfile.y,shape.yz),fract(world))+origin.z;
 }
 float joinedHeight(vec2 world)
 {
 	float edge=.5*uJoinWidth;
 	if(world.x<=-edge) return regionalHeight(0,world);
+	if(uBlendProfile) {
+		vec2 t=clamp(world/uJoinWidth+.5,0.,1.);
+		float x=clamp(fade(t.x),0.,1.), z=uFormCount==2 ? 0. : clamp(fade(t.y),0.,1.);
+		if(world.x>=edge && (uFormCount==2 || abs(world.y)>=edge))
+			return regionalHeight(uFormCount==2 || world.y<=-edge ? 1 : 2,world);
+		vec3 weights=vec3(1.-x,x*(1.-z),x*z);
+		vec3 shape=weights.x*contourProfile(0)+weights.y*contourProfile(1);
+		if(uFormCount==3) shape+=weights.z*contourProfile(2);
+		float h=0.;
+		if(weights.x>0.) h+=weights.x*blendedRegion(0,world,shape);
+		if(weights.y>0.) h+=weights.y*blendedRegion(1,world,shape);
+		if(weights.z>0.) h+=weights.z*blendedRegion(2,world,shape);
+		return h;
+	}
 	float east;
 	if(uFormCount==2 || world.y<=-edge) east=regionalHeight(1,world);
 	else if(world.y>=edge) east=regionalHeight(2,world);
@@ -355,7 +389,7 @@ void main()
 	#ifdef JOINED_TERRAIN
 	float h=joinedHeight(world);
 #else
-	float h=terrainHeight(world);
+	float h=terrainHeight(world,uProfile,vec2(0));
 	if(outside>0. && uRegion.y>0. && !(uRegion.y==3. && uNaturalMountains)) {
 		float broad=sampleNoise(world,vec2(0),.0005,0.,ivec2(31,7),vec2(0)).x;
 		float t=smoothstep(0.,uRegion.z*(1.+.35*broad),outside);

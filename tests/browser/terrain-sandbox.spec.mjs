@@ -3830,6 +3830,7 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await expect.poll(async() => (await status(page)).mode, {timeout: 315_000}).toBe('car');
 	const west = await status(page);
 	expect(west.recipe.worldSize).toBe(69_632);
+	expect(west.recipe.join.version).toBe(2);
 	expect(west.car.x).toBeLessThan(-34_700);
 	await control(page, 'journey-fork').click();
 	await expect.poll(async() => (await status(page)).journeyForkAhead).toBe(true);

@@ -15,7 +15,7 @@ final class JourneyRoad
 	{
 		$destinations = [];
 		foreach($east as $name) $destinations[] = ['preset'=>$name] + Session::preset($name);
-		return ['preset'=>$west,'worldSize'=>$span,'join'=>['span'=>$span,'destinations'=>$destinations]] + Session::preset($west);
+		return ['preset'=>$west,'worldSize'=>$span,'join'=>['version'=>2,'span'=>$span,'destinations'=>$destinations]] + Session::preset($west);
 	}
 
 	/** The signed side is negative for the northern fork. Both branches have horizontal tangents at the junctions. */
@@ -54,11 +54,20 @@ final class JourneyRoad
 		$paths=[$approach];
 		$forks=$tails=[];
 		$squares=$entry ? [] : [0=>$origins[0]];
+		// A divided highway needs a shared throat, but no fixed landing at the far edge
+		// of the connector. Survey each branch all the way into its destination.
+		$throatEnd=$split ? self::FORK+672. : -self::FORK;
+		$guides=[];
 		foreach([-1,1] as $side) {
-			$z = $ends[$split && $side>0 ? 1 : 0];
+			$end=$split ? $forkZ+$side*240. : $ends[0];
+			$guides[$side]=self::forkGuide(self::FORK,$throatEnd,$forkZ,$end,$side*($split ? 0. : 485.));
+		}
+		$divider=array_map(static fn($n,$s)=>.5*($n[1]+$s[1]),$guides[-1],$guides[1]);
+		if($report) $report('Following the contours through the fork…');
+		foreach([-1,1] as $side) {
+			$z = $guides[$side][array_key_last($guides[$side])][1];
 			$forks[] = count($paths);
-			$guide = self::forkGuide(self::FORK,-self::FORK,$forkZ,$z,$side*($split ? 160. : 485.));
-			$paths[] = yield from $survey->branch($guide,$side);
+			$paths[] = yield from $survey->branch($guides[$side],$side,$divider);
 			if(!$split && $side<0) continue;
 			[, $center] = $origins[$split && $side>0 ? 2 : 1];
 			// Both parents use the same final approach on a shared destination square.
@@ -66,9 +75,9 @@ final class JourneyRoad
 			$tailZ = yield from $survey->landing($tailX,$center,1280);
 			$edgeZ = yield from $survey->landing($half,$center,1280);
 			if($report) $report('Finding an overlook and a road through '.($split ? ($side<0 ? 'the northern' : 'the southern') : 'the'). ' destination…');
-			$onward = yield from $survey->route([[-self::FORK+192.,$z],[$tailX,$tailZ]],scenic:true);
+			$onward = yield from $survey->route([[$throatEnd+192.,$z],[$tailX,$tailZ]],scenic:true,divider:$split ? $forkZ : null);
 			$squares[count($paths)]=$origins[$split && $side>0 ? 2 : 1];
-			$paths[] = [[-self::FORK,$z],[-self::FORK+96.,$z],...$onward];
+			$paths[] = [[$throatEnd,$z],[$throatEnd+96.,$z],...$onward];
 			$tails[]=count($paths);
 			$paths[] = yield from $survey->route([[$tailX,$tailZ],[$half,$edgeZ]]);
 		}

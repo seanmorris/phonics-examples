@@ -162,11 +162,11 @@ Yellow chevrons mark paved bends that turn at least 30° with a radius of 300 ft
 
 In free flight, open **Roads → Landscape journey**. Choose a departure landscape, the width of each map, and a destination. **Rejoin the highway** gives you two routes around the fork that meet again before the next map. **Separate destinations** sends the northern branch to **Destination** and the southern branch to **South branch destination**.
 
-Choose **Build new journey** to generate a new landscape and start the car at its western edge. Each map contributes its full width of 20.4 or 40.7 miles. Between them, a separate 2.55-mile stretch blends the land and its surface colors around a common sea level. **Drive from fork** places the car just before the split so you can try either route immediately.
+Choose **Build new journey**. The survey reports its current stage beside the button and starts the car at the western edge when the pavement is ready. Each map contributes its full width of 20.4 or 40.7 miles. Between them, a separate 2.55-mile stretch shares a common sea level. Valley floors, cliff widths, and ridge profiles change gradually through the fork. Patches of each landscape’s surface materials mingle across the transition. **Drive from fork** places the car just before the split so you can try either route immediately.
 
-The road survey searches valleys and passes in eight directions, including bends that lead briefly back west. It weighs steep climbs and water crossings against extra mileage. Within each full square it looks for a reachable overlook. The car minimap shows the highway and both fork arms in gold, with a white diamond at the selected overlook. Mountain crossings can still require earthworks.
+The road survey searches valleys and passes in eight directions, including bends that lead briefly back west. At a fork the survey checks the approach and exits, then moves each branch sideways to follow the terrain. It weighs steep climbs, water crossings, and the slope across the pavement against extra mileage. Within each full square it looks for a reachable overlook. The car minimap shows the highway and both fork arms in gold, with a white diamond at the selected overlook. Mountain crossings can still require earthworks.
 
-Choose **Linked landscape network** to author a longer drive. Give each square a name, a preset ID and up to two exits. For example:
+Choose **Linked landscape network** for a longer drive. The route table shows the destination of each fork and marks your current square. Open **Edit route network** to give each square a name, a preset ID and up to two exits. For example:
 
 ```text
 A rolling-prairie -> B,C

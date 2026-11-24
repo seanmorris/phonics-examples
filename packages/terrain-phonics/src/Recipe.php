@@ -348,7 +348,7 @@ final class Recipe
 	 * @param float $z World Z coordinate in meters.
 	 * @return array Coarse height and world-space derivatives [height,dx,dz].
 	 */
-	public function coarse(float $x, float $z): array
+	public function coarse(float $x, float $z, ?array $profile = null): array
 	{
 		$r = $this->values;
 		$f = $r['baseFrequency'];
@@ -529,7 +529,7 @@ final class Recipe
 		$dz = $r['rolling']*$a2*$f;
 		if($r['ridgeHeight'] > 0)
 		{
-			$rounded = sqrt($a0 * $a0 + $r['ridgeRoundness'] * $r['ridgeRoundness']);
+			$rounded = sqrt($a0 * $a0 + ($profile[0] ?? $r['ridgeRoundness']) ** 2);
 			$value -= $r['ridgeHeight'] * $rounded;
 			$factor = -$r['ridgeHeight']*$a0 / $rounded;
 			$dx += $factor*$a1*$f;
@@ -542,7 +542,13 @@ final class Recipe
 			// abs() is harmless at zero because a constant floor surrounds that point.
 			// Comparisons replace its call for every ordinary value. A zero or NaN goes through abs(), which
 			// defines its sign bit.
-			$distance = ($a0 > 0 ? $a0 : ($a0 < 0 ? -$a0 : abs($a0))) - $this->wallStart;
+			$start = $this->wallStart;
+			$width = $this->wallWidth;
+			if($profile !== null) {
+				$start += $profile[1] - $r['floorWidth'];
+				$width += $profile[2] - $r['wallWidth'];
+			}
+			$distance = ($a0 > 0 ? $a0 : ($a0 < 0 ? -$a0 : abs($a0))) - $start;
 			$sign = $a0 < 0 ? -1 : 1;
 			$erosionX = $erosionZ = 0.0;
 
@@ -607,11 +613,11 @@ final class Recipe
 			}
 
 			// The same clamp as the channel above.
-			$wall = $distance / $this->wallWidth;
+			$wall = $distance / $width;
 			$wall = $wall >= 1.0 ? 1.0 : ($wall > 0.0 ? $wall : ($wall < 0.0 ? 0.0 : max(0.0, min(1.0, $wall))));
 
 			$value += $r['wallHeight'] * $wall * $wall * $wall * ($wall * ($wall * 6 - 15) + 10);
-			$factor = $r['wallHeight'] * 30 * $wall * $wall * ($wall - 1) ** 2 / $this->wallWidth;
+			$factor = $r['wallHeight'] * 30 * $wall * $wall * ($wall - 1) ** 2 / $width;
 			$dx += $sign*$factor*$a1*$f - $factor*$erosionX;
 			$dz += $sign*$factor*$a2*$f - $factor*$erosionZ;
 		}
@@ -664,10 +670,10 @@ final class Recipe
 	 * @param float $z World Z coordinate in meters.
 	 * @return float Final procedural lattice height in meters.
 	 */
-	public function height(float $x, float $z): float
+	public function height(float $x, float $z, ?array $profile = null): float
 	{
 		$r = $this->values;
-		[$height,$dx,$dz] = $this->coarse($x, $z);
+		[$height,$dx,$dz] = $this->coarse($x, $z, $profile);
 		$slope = ($dx * $dx + $dz * $dz) / ($r['slopeScale'] * $r['slopeScale']);
 		$frequency = $r['baseFrequency'] * 8;
 		$amplitude = $r['detailAmplitude'];
@@ -724,7 +730,7 @@ final class Recipe
 	 * @param array $box Horizontal bounds [minX,minZ,maxX,maxZ], including any sample halo.
 	 * @return array Conservative node height interval in meters.
 	 */
-	public function regionalBounds(array $box): array
+	public function regionalBounds(array $box, ?array $profileRange = null): array
 	{
 		$r = $this->values;
 		$x = ($box[0] + $box[2]) / 2;
@@ -755,8 +761,8 @@ final class Recipe
 		$gradient = $r['rolling']*$da + 2*$r['secondary']*$db;
 		if($r['ridgeHeight'] > 0)
 		{
-			$lo -= $r['ridgeHeight']*sqrt($absMax**2 + $r['ridgeRoundness']**2);
-			$hi -= $r['ridgeHeight']*sqrt($absMin**2 + $r['ridgeRoundness']**2);
+			$lo -= $r['ridgeHeight']*sqrt($absMax**2 + ($profileRange[1][0] ?? $r['ridgeRoundness'])**2);
+			$hi -= $r['ridgeHeight']*sqrt($absMin**2 + ($profileRange[0][0] ?? $r['ridgeRoundness'])**2);
 			$gradient += $r['ridgeHeight']*$da;
 		}
 		if($r['directionalRise'] != 0)
@@ -780,11 +786,18 @@ final class Recipe
 				$da += $retreat*$dg;
 				$strengthGradient = $r['bedding']*$r['terraceStrength']*.80*1.875/.62*$dg*$jac;
 			}
-			$wallLo = max(0.0,min(1.0,($absMin-$this->wallStart)/$this->wallWidth));
-			$wallHi = max(0.0,min(1.0,($absMax-$this->wallStart)/$this->wallWidth));
+			$startLo=$startHi=$this->wallStart;
+			$widthLo=$widthHi=$this->wallWidth;
+			if($profileRange !== null) {
+				[$min,$max]=$profileRange;
+				$startLo+=$min[1]-$r['floorWidth']; $startHi+=$max[1]-$r['floorWidth'];
+				$widthLo+=$min[2]-$r['wallWidth']; $widthHi+=$max[2]-$r['wallWidth'];
+			}
+			$wallLo = max(0.0,min(1.0,($absMin-$startHi)/$widthHi));
+			$wallHi = max(0.0,min(1.0,($absMax-$startLo)/$widthLo));
 			$lo += $r['wallHeight']*Noise::fade($wallLo);
 			$hi += $r['wallHeight']*Noise::fade($wallHi);
-			$gradient += $r['wallHeight']*($wallHi === 0.0 || $wallLo === 1.0 ? 0 : 1.875/$this->wallWidth)*$da + .15*$db;
+			$gradient += $r['wallHeight']*($wallHi === 0.0 || $wallLo === 1.0 ? 0 : 1.875/$widthLo)*$da + .15*$db;
 		}
 		$lo *= $r['heightScale']; $hi *= $r['heightScale'];
 		$gradient *= $r['heightScale']*$jac;
@@ -835,7 +848,7 @@ final class Recipe
 	 * Conservative node extrema include the maximum possible gradient-noise magnitude.
 	 * @return array Conservative lower and upper node heights.
 	 */
-	public function bounds(): array
+	public function bounds(?float $ridgeRoundness = null): array
 	{
 		$r = $this->values;
 		$detail = 0;
@@ -848,7 +861,7 @@ final class Recipe
 		}
 
 		$macro = abs($r['baseBias']) + 2*($r['rolling']+$r['secondary']) + abs($r['directionalRise'])
-			+ $r['ridgeHeight']*sqrt(4+$r['ridgeRoundness']**2) + $r['wallHeight'];
+			+ $r['ridgeHeight']*sqrt(4+($ridgeRoundness ?? $r['ridgeRoundness'])**2) + $r['wallHeight'];
 		$range = max(3.0,$macro) * $r['heightScale'] + $detail + ($this->layered ? 3 : 1) * $r['terraceSpacing'];
 
 		return [-$range, $range];

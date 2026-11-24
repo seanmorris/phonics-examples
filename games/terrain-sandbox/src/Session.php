@@ -1987,7 +1987,9 @@ final class Session
 				return;
 			}
 			$shift=$this->network->translation($this->square,$child,$r);
-			$next=new Landscape($this->network->recipe($child,$span));
+			$nextRecipe=$this->network->recipe($child,$span);
+			if(!isset($r['join']['version'])) unset($nextRecipe['join']['version']);
+			$next=new Landscape($nextRecipe);
 			$this->onwardWork=(function() use($next,$shift) {
 				try {
 					$arrival=JourneyNetwork::arrival($this->landscape,$shift);

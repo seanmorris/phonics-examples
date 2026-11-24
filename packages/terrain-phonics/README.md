@@ -32,11 +32,14 @@ A journey places a departure map west of one or two destinations. Each map is 32
 $journey = new TerrainPhonics\Landscape([
     'preset' => 'rolling-prairie',
     'join' => [
+        'version' => 2,
         'span' => 32768,
         'destinations' => [['preset' => 'mountain'], ['preset' => 'coast']],
     ],
 ]);
 ```
+
+Version 2 blends ridge roundness, valley floor width, and cliff width before evaluating each region’s contours. The facing edges extend smoothly into the strip, preserving their slopes at the seam. World-space noise breaks up the transition between surface materials. Recipes saved without a junction version keep their original heights and material blend.
 
 With two destinations, the first sits northeast and the second southeast, with a second transition strip between them. The recipe and ordinary road edits travel together in the landscape save. The sandbox road editor can generate a highway across this layout.
 

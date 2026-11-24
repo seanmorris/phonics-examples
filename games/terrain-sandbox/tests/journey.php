@@ -4,7 +4,7 @@ require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
 
 use TerrainPhonics\{JoinedTerrain,Landscape,Recipe};
-use TerrainSandbox\{Car,JourneyRoad,Session};
+use TerrainSandbox\{Car,JourneyNetwork,JourneyRoad,Session};
 
 function expectJourney(bool $ok,string $reason): void {
 	if(!$ok) throw new RuntimeException($reason);
@@ -128,4 +128,23 @@ foreach($land->roads() as $road) {
 sort($errors,SORT_NUMERIC);
 expectJourney(count($errors)>900 && array_sum($errors)/count($errors)<50. && $errors[intdiv(count($errors),2)]<8.,
 	'The Canyon highway must detour around escarpments and stay near natural ground for most of the crossing.');
+checkForkEarthworks($land,10.,45.);
+$land->close();
+
+// Compare the fitted spline to the ungraded land through the entire seam, including
+// the bank on the approach and both destination exits. Stock seeds are reproducible.
+function checkForkEarthworks(Landscape $land,float $meanLimit,float $peakLimit): void {
+	$ground=new JoinedTerrain($land->recipe());
+	$errors=[];
+	foreach($land->roads() as $road) foreach($road['_road']['samples'] as $i=>[$x,$y,$z]) {
+		if($i%8===0 && abs($x)<=JoinedTerrain::GAP/2) $errors[]=abs($ground->height($x,$z)-$y);
+	}
+	expectJourney(count($errors)>100 && array_sum($errors)/count($errors)<$meanLimit && max($errors)<$peakLimit,
+		'The fork and its approaches should follow the natural terrain on both branches.');
+}
+
+$network=new JourneyNetwork("A rolling-prairie -> B,C\nB canyon -> F\nC mountain -> F\nF coast");
+$land=new Landscape($network->recipe('A',32768));
+foreach(JourneyRoad::build($land) as $_) {}
+checkForkEarthworks($land,10.,50.);
 $land->close();

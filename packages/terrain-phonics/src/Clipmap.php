@@ -135,6 +135,7 @@ final class Clipmap
 		if($joined) {
 			$origins = JoinedTerrain::origins($r['join']['span'],count($recipes)-1);
 			glUniform1i($p->location('uFormCount'), count($recipes));
+			glUniform1i($p->location('uBlendProfile'), (int)(($r['join']['version'] ?? 1) >= 2));
 			glUniform1f($p->location('uJoinWidth'), JoinedTerrain::GAP);
 		}
 		foreach($recipes as $i=>$form) {
