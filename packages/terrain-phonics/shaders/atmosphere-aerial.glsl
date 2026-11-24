@@ -7,6 +7,22 @@ uniform float uAerialCacheMaxDistance;
 uniform float uAerialCacheAltitude;
 uniform int uAerialCacheReady;
 
+#define TERRAIN_SOLAR_TABLE
+vec3 terrainCachedSunlight(float altitude)
+{
+	ivec2 size=textureSize(uAerialCacheTransmittance,0);
+	float cell=altitude-floor(uAerialCacheAltitude)+floor(.5*float(size.x));
+	if(uAerialCacheReady!=0 && size.y>int(uAerialCacheGrid.y) && cell>=0. && cell<float(size.x-1)) {
+		vec2 uv=(vec2(cell,uAerialCacheGrid.y)+.5)/vec2(size);
+		vec4 high=textureLod(uAerialCacheTransmittance,uv,0.);
+		if(high.a>=1.) {
+			vec3 low=textureLod(uAerialCacheRadiance,uv,0.).rgb;
+			return uSunIntensity*(256.*high.rgb+low)/257.;
+		}
+	}
+	return terrainSunlight(altitude);
+}
+
 vec3 terrainAerialTexel(sampler2D atlas, ivec2 pixel, int slice, bool radiance)
 {
 	pixel.x = (pixel.x + int(uAerialCacheGrid.x)) % int(uAerialCacheGrid.x);
@@ -18,6 +34,16 @@ vec3 terrainAerialTexel(sampler2D atlas, ivec2 pixel, int slice, bool radiance)
 
 vec3 terrainAerialSlice(sampler2D atlas, vec2 pixel, int slice, bool radiance)
 {
+	// Extinction is linear in this atlas. Filter its angles in hardware and wrap longitude inside
+	// the selected distance slice. Radiance is logarithmic and must be decoded at each corner.
+	if(!radiance) {
+		float width=uAerialCacheGrid.x, x=mod(pixel.x,width);
+		vec2 origin=vec2(float(slice)*width,clamp(pixel.y,0.,uAerialCacheGrid.y-1.))+.5;
+		vec2 extent=vec2(textureSize(atlas,0));
+		vec3 left=textureLod(atlas,(origin+vec2(min(x,width-1.),0.))/extent,0.).rgb;
+		if(x>width-1.) return mix(left,textureLod(atlas,origin/extent,0.).rgb,x-(width-1.));
+		return left;
+	}
 	ivec2 low = ivec2(floor(pixel));
 	vec2 weight = fract(pixel);
 	vec3 a = mix(terrainAerialTexel(atlas, low, slice, radiance),

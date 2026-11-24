@@ -9,6 +9,26 @@ layout(location=0) out vec4 outTransmittance;
 layout(location=1) out vec4 outRadiance;
 void main()
 {
+	if(int(gl_FragCoord.y)==int(uAerialCacheGrid.y)) {
+		// One meter per texel around the eye. Store high and low bytes in the existing pair of atlases.
+		float count=uAerialCacheGrid.x*uAerialCacheGrid.z;
+		float height=floor(uAerialCacheAltitude)+floor(gl_FragCoord.x)-floor(.5*count);
+		vec3 t=terrainTransmittance(height,uSunDirection.y);
+		vec3 next=terrainTransmittance(height+1.,uSunDirection.y);
+		vec3 delta=abs(next-t);
+		// Near the horizon a ray can start or stop intersecting the planet. Steep transfers and
+		// thin custom layers also keep the analytic path, including a band wholly inside one cell.
+		bool safe=uSunDirection.y>.05 && max(delta.x,max(delta.y,delta.z))<1./2048.;
+		for(int i=0;i<TERRAIN_AIR_LAYERS;i++) {
+			if(float(i)>=uAirLayerCount) break;
+			vec2 band=uAirBand[i].xy;
+			if(band.y-band.x<4. && height+1.>=band.x && height<=band.y) safe=false;
+		}
+		vec3 code=floor(clamp(t,0.,1.)*65535.+.5);
+		outTransmittance=vec4(floor(code/256.)/255.,float(safe));
+		outRadiance=vec4(mod(code,256.)/255.,1.);
+		return;
+	}
 	float slice = floor(gl_FragCoord.x / uAerialCacheGrid.x);
 	vec2 uv = vec2(mod(gl_FragCoord.x, uAerialCacheGrid.x), gl_FragCoord.y) / uAerialCacheGrid.xy;
 	float longitude = (uv.x - 0.5) * 2.0 * TERRAIN_PI;

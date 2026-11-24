@@ -142,6 +142,11 @@ texture near the camera. Moving the window fills the newly exposed strips. The s
 fields outside the window. Sculpting, painting and grading roads reuse those noise values and draw from the
 current heights, normals and paint. Ridge relief depends on the camera footprint and is evaluated each frame.
 
+At large viewport sizes, a journey with ridge relief can sample surface color and relief at half the
+width and height. The display pass matches those samples to the current depth and slope. Road markings,
+paint, shadows and terrain edges are drawn at full resolution. Detailed quality, reflective surfaces
+and single landscapes use full-resolution material sampling.
+
 Recipe presets fill in a common set of shape coefficients. These coefficients can combine broad directional
 rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone` preset uses a 3,050 m
 base wavelength and a wide wall transition to give isolated peaks broad foothills. Partial terraces at
@@ -190,6 +195,10 @@ control sets the amount visible.
 Pass a list to `Atmosphere::setLayers()` to add up to six colored aerosol layers. For example, `[['name'=>'Sea mist', 'bottom'=>0, 'top'=>350, 'density'=>0.2, 'color'=>'#b5ccd4']]` adds a low coastal mist. Base and top are signed elevations in meters relative to sea level. Density is mean optical depth per kilometer through the column. It peaks halfway up and fades continuously to zero at both boundaries. Color is the sRGB tint of scattered sunlight. A perpendicular path through a one-kilometer layer at density 0.2 transmits about 82% of its direct light. Overlapping layers contribute together, and sight lines cross them in altitude order. Set `enabled` to false to hide a layer and keep its settings.
 
 The sky, reflected sky and distant terrain use cached scattering. Editing a color rebuilds the scattering caches. The sunlight transmittance texture holds clear air only; the shaders add each active layer's extinction exactly, because the texture's altitude rows are too far apart for sub-kilometer layers. Changing a layer's bounds or density still rebuilds the texture, whose alpha keeps the layers' transmission. Camera rotation and repeated draws at a fixed altitude reuse the caches.
+
+The aerial cache also samples direct sunlight at one-meter elevation intervals around the camera.
+Terrain looks up sunlight using its current elevation. Near the horizon, outside that altitude range
+and wherever transmission changes rapidly, the shader evaluates sunlight directly.
 
 `Atmosphere::setSkyColor($hex)` recolors the sky through its molecular scattering law. The color is how the zenith should display with the sun 35° up at an exposure of 1; the default `#4b698a` keeps Earth's coefficients. Each channel's radiance is compared with the default sky's, and a density and a wavelength exponent are fitted to the ratios (Earth's air has exponent 4). The exponent stays between 3 and 5: freer channels turn sunsets yellow-green. A deeper blue raises the exponent and thins the air, so distant land stays clearer, and `#41659a` displays as `#436590`. A paler blue lowers the exponent or thickens the air, which also deepens sunsets. Colors outside the fitted family land on the nearest sky in it. The change rebuilds the sunlight texture and the sky caches.
 

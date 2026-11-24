@@ -56,7 +56,12 @@ uniform vec2 uMountainZones; // Treeline and the foot of the tundra, in meters f
 uniform vec3 uMountainAmounts; // Talus, stain and lichen.
 #endif
 uniform vec3 uSkyAmbient; // The sky's light on level ground over pi, already scaled by the sky-light setting.
+#ifdef WRITE_SURFACE_SAMPLES
+layout(location=0) out vec4 color;
+layout(location=1) out vec4 surfaceNormal;
+#else
 out vec4 color;
+#endif
 float mountainShadow(vec3 position)
 {
 	if(uSunDirection.y <= 0.0) return 0.0;
@@ -192,6 +197,9 @@ void main()
 	// Neighboring fragments can be millimeters apart many kilometers from the origin.
 	// Differentiate the camera-relative position to retain those small ground distances.
 	vec3 worldDx = dFdx(vRelative), worldDy = dFdy(vRelative);
+	#ifdef READ_SURFACE_SAMPLES
+	nativeDepthSlope=vec2(dFdx(gl_FragCoord.w),dFdy(gl_FragCoord.w));
+	#endif
 	float footprint = max(length(worldDx), length(worldDy));
 	float slopeMask = roadSlopeMask(cross(worldDx,worldDy));
 	// Lateral coordinates are in road half-widths. Convert meters of paint into that coordinate
@@ -209,6 +217,10 @@ void main()
 	float roadGradient = fwidth(vPaint1.y);
 	bool pavement = road >= .999999 && roadGradient <= .000001;
 	#ifdef JOURNEY_REGIONS
+	#ifdef WRITE_SURFACE_SAMPLES
+	// Retain natural material just inside a spline shoulder for its full-resolution edge pixels.
+	if(pavement && vSplinePaint>.99 && outline+4.*dot(abs(outlinePixel),vec2(1.))>=1.) pavement=false;
+	#endif
 	vec3 lightingNormal, bounce;
 	vec2 finish;
 	vec3 albedo = journeySurface(vWorld,n,vRelative,footprint,pavement,lightingNormal,finish,bounce);
@@ -225,7 +237,11 @@ void main()
 	if(!pavement) albedo=materialSurface(local,n,vRelative,footprint,uWaterLevel-uMaterialOrigin.y,macro,lightingNormal);
 	#endif
 	#endif
-	#ifdef WRITE_RIB_FIELD
+	#ifdef WRITE_SURFACE_SAMPLES
+	float depthCode=round(log2(1.+1./gl_FragCoord.w)*(65535./17.));
+	color=vec4(encodePigment(albedo),floor(depthCode/256.)/255.);
+	surfaceNormal=vec4(packSurfaceNormal(lightingNormal),mod(depthCode,256.)/255.,pavement ? 0. : (1.+254.*n.y)/255.);
+	#elif defined(WRITE_RIB_FIELD)
 	// Preserve faint slopes in RGBA8 and reserve one code on either side of the range.
 	color = vec4((128.+126.*ribField/(.02+abs(ribField)))/255.,1.);
 	#else
@@ -256,7 +272,11 @@ void main()
 		markingGlow=mix(ochre*centerPaint,white,edgePaint)*.006*smoothstep(0.,.17364818,-uSunDirection.y);
 	}
 	albedo *= 1.0 + 0.07 * detail * (1.0 - smoothstep(1.0,8.0,footprint));
+	#ifdef TERRAIN_SOLAR_TABLE
+	vec3 direct = terrainCachedSunlight(vWorld.y) / 3.14159265;
+	#else
 	vec3 direct = terrainSunlight(vWorld.y) / 3.14159265;
+	#endif
 	float facing = max(0.0,dot(mix(lightingNormal,n,painted),uSunDirection));
 	float shadow = mountainShadow(vWorld);
 	#ifdef SURFACE_LAYERS

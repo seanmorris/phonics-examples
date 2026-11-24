@@ -71,16 +71,16 @@ final class AtmosphereRenderer
 
 			$this->targets[] = new RenderTarget(
 				$azimuths * $distances
-				, $latitudes
-				, GL_NEAREST
+				, $latitudes+1
+				, GL_LINEAR
 				, false
 				, 'Aerial extinction'
 			);
 
 			$this->targets[] = new RenderTarget(
 				$azimuths * $distances
-				, $latitudes
-				, GL_NEAREST
+				, $latitudes+1
+				, GL_LINEAR
 				, false
 				, 'Aerial radiance'
 			);

@@ -67,6 +67,10 @@ vec4 terrainOpticalLookup(float altitude, float mu)
 	mu = clamp(mu, -1.0, 1.0);
 	vec2 uv = vec2(0.5 + 0.5 * sign(mu) * sqrt(abs(mu)), sqrt(altitude / uAtmosphereHeight));
 	vec2 pixel = uv * (uTransmittanceSize - 1.0);
+	#ifdef READ_SURFACE_SAMPLES
+	// The scene owns a linearly filtered RGBA8 optical table. Address the centers of its end texels.
+	return textureLod(uTransmittance,(pixel+.5)/uTransmittanceSize,0.);
+	#else
 	ivec2 low = ivec2(floor(pixel));
 	ivec2 high = min(low + ivec2(1), ivec2(uTransmittanceSize) - ivec2(1));
 	vec2 weight = fract(pixel);
@@ -75,6 +79,7 @@ vec4 terrainOpticalLookup(float altitude, float mu)
 	vec4 b = mix(texelFetch(uTransmittance, ivec2(low.x, high.y), 0),
 		texelFetch(uTransmittance, high, 0), weight.x);
 	return mix(a, b, weight.y);
+	#endif
 }
 
 vec2 terrainInsideSphere(float eye, float projection, float height);

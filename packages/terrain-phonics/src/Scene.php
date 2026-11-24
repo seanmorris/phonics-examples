@@ -48,6 +48,9 @@ final class Scene
 	private string $materialKey = '', $groundVertexSource, $groundFragmentSource;
 	private ?Program $chartProgram = null, $ribProgram = null;
 	private ?RenderTarget $ribTarget = null;
+	private ?SurfaceSampleBuffer $surfaceSamples = null;
+	private ?Program $surfaceProgram = null;
+	private bool $sampleMaterials = true;
 	private ?MaterialFieldCache $materialFields = null;
 	private ?Landscape $preparing = null;
 	private int $preparingRevision = -1, $preparingSourceRevision = -1;
@@ -277,8 +280,8 @@ final class Scene
 		if($this->textures === []) glGenTextures(1, $this->textures);
 
 		glBindTexture(GL_TEXTURE_2D, $this->textures[0]);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		$lut = $this->atmosphere->transmittanceLut(64, 16, 24);
@@ -2395,7 +2398,8 @@ final class Scene
 		);
 
 		$materials = $this->regionalMaterials();
-		$this->selectMaterials($materials);
+		// On smaller targets and at the detailed setting the material shader runs at native resolution.
+		$this->selectMaterials($materials,$width*$height >= 1280*720 && $this->quality < 2.);
 		if($this->clipmap && count($materials)>1) {
 			$this->materialFields ??= new MaterialFieldCache;
 			$this->materialFields->update($camera->position,$materials,$this->vao[0]);
@@ -2428,10 +2432,12 @@ final class Scene
 				$ceiling = max($ceiling, $recipe['heightScale']);
 			}
 			$groups = $this->clipmap->visibleGroups($camera,$planes,[$floor,$ceiling]);
-			if($this->ribProgram) $this->drawRibField($camera,$width,$height,$materials,$groups);
+			if($this->surfaceProgram) $this->drawSurfaceSamples($camera,$width,$height,$materials,$groups);
+			elseif($this->ribProgram) $this->drawRibField($camera,$width,$height,$materials,$groups);
 		}
 		$groundProgram->use();
 		$this->materialFields?->bind($groundProgram);
+		$this->surfaceSamples?->bind($groundProgram,$width,$height);
 		if($this->ribProgram) glUniform1i($groundProgram->location('uRibField'),11);
 		[$palette,$form] = $materials[0];
 		$joined = count($materials)>1;
@@ -2813,7 +2819,7 @@ final class Scene
 	/** Link both lighting variants and the minimap before replacing a committed surface. */
 	public function prepareMaterial(SurfaceLayers $stack): void
 	{
-		$this->preparePrograms($this->regionalMaterials($stack));
+		$this->preparePrograms($this->regionalMaterials($stack),$this->sampleMaterials);
 	}
 
 	/** Capture this view's ridge relief on the same triangles, including committed edits and LOD morphing. */
@@ -2841,21 +2847,54 @@ final class Scene
 		glBindTexture(GL_TEXTURE_2D,$this->ribTarget->texture());
 	}
 
-	private function preparePrograms(array $materials): string
+	/** Capture unlit pigment and relief from the same edited clipmap triangles used by the display pass. */
+	private function drawSurfaceSamples(Camera $camera, int $width, int $height, array $materials, array $groups): void
+	{
+		$w = intdiv($width+1,2);
+		$h = intdiv($height+1,2);
+		if(!$this->surfaceSamples || !$this->surfaceSamples->fits($w,$h)) {
+			$this->surfaceSamples?->close();
+			$this->surfaceSamples = new SurfaceSampleBuffer($w,$h);
+		}
+		$this->surfaceSamples->begin();
+		try {
+			$p = $this->surfaceProgram;
+			$p->use();
+			$this->materialFields->bind($p);
+			$this->bindJourney($p,$materials);
+			$this->vector($p,'uEye',$camera->position);
+			$this->scalar($p,'uWaterLevel',$this->water->level());
+			glUniform2f($p->location('uSourceScale'),$w/$width,$h/$height);
+			glUniformMatrix4fv($p->location('uViewProjection'),1,false,$camera->viewProjection($width,$height));
+			$this->clipmap->drawGroups($p,$camera,$groups);
+		} finally {
+			$this->surfaceSamples->end($width,$height);
+		}
+	}
+
+	private function preparePrograms(array $materials, bool $sampleMaterials): string
 	{
 		$stacks = array_column($materials,0);
+		$joinedClipmap = $this->useClipmap && count($stacks)>1;
+		$ribRegion = null;
+		if($joinedClipmap) foreach($stacks as $i=>$stack) {
+			if(in_array('ribs',array_column($stack->layers,'relief'),true)) { $ribRegion = $i; break; }
+		}
+		$sampled = $sampleMaterials && $ribRegion !== null && !in_array(true,array_column($stacks,'reflective'),true);
 		$key = count($stacks)===1 ? $stacks[0]->structure : 'journey:'.json_encode(array_column($stacks,'structure'),JSON_THROW_ON_ERROR);
+		if($sampled) $key = 'sampled/'.$key;
 		if(isset($this->materialPrograms[$key])) return $key;
 		$source = MaterialShader::assemble($this->groundFragmentSource,$stacks,clipmap:$this->useClipmap);
-		$joinedClipmap = $this->useClipmap && count($stacks)>1;
 		$read = $joinedClipmap ? "#define WORLD_MATERIAL_FIELDS\n" : '';
 		$capture = '';
-		if($joinedClipmap) foreach($stacks as $i=>$stack) {
-			if(!in_array('ribs',array_column($stack->layers,'relief'),true)) continue;
-			$region = "#define RIB_FIELD_REGION $i\n";
+		if($sampled) {
+			$library = file_get_contents(dirname(__DIR__).'/shaders/surface-samples.glsl');
+			$capture = $read."#define WRITE_SURFACE_SAMPLES\n".$library;
+			$read .= "#define READ_SURFACE_SAMPLES\n".$library;
+		} elseif($ribRegion !== null) {
+			$region = "#define RIB_FIELD_REGION $ribRegion\n";
 			$read .= $region.'#define READ_RIB_FIELD';
 			$capture = $region.'#define WRITE_RIB_FIELD';
-			break;
 		}
 		$ground = str_replace('// MATERIAL PASSES',$read,$source);
 		$set = [];
@@ -2868,7 +2907,7 @@ final class Scene
 					MaterialShader::assemble(file_get_contents($root.'chart.frag'),$stacks,chart:true));
 				if($capture !== '') {
 					$field = str_replace(['// MATERIAL PASSES','// SPOT LIGHTS'],[$capture,SpotLights::shaderSource(false)],$source);
-					$set[] = new Program($this->groundVertexSource,$field);
+					$set[$sampled ? 'samples' : 'ribs'] = new Program($this->groundVertexSource,$field);
 				}
 			}
 		} catch(\Throwable $error) {
@@ -2891,16 +2930,19 @@ final class Scene
 		return $key;
 	}
 
-	private function selectMaterials(array $materials): void
+	private function selectMaterials(array $materials, bool $sampleMaterials = true): void
 	{
-		if($materials === $this->selectedMaterials) return;
-		$key = $this->preparePrograms($materials);
+		if($materials === $this->selectedMaterials && $this->sampleMaterials === $sampleMaterials) return;
+		$key = $this->preparePrograms($materials,$sampleMaterials);
+		$this->sampleMaterials = $sampleMaterials;
 		$this->selectedMaterials = $materials;
 		if($this->materialKey === $key) return;
 		$this->materialKey = $key;
 		[$this->groundProgram,$this->litGroundProgram] = $this->materialPrograms[$key];
 		$this->chartProgram = $this->materialPrograms[$key][2] ?? null;
-		$this->ribProgram = $this->materialPrograms[$key][3] ?? null;
+		$this->ribProgram = $this->materialPrograms[$key]['ribs'] ?? null;
+		$this->surfaceProgram = $this->materialPrograms[$key]['samples'] ?? null;
+		if(!$this->surfaceProgram) { $this->surfaceSamples?->close(); $this->surfaceSamples = null; }
 		if(!$this->ribProgram) { $this->ribTarget?->close(); $this->ribTarget = null; }
 		if(count($materials) === 1) { $this->materialFields?->close(); $this->materialFields = null; }
 		$this->litDrawn['ground'] = false;
@@ -2963,6 +3005,8 @@ final class Scene
 		// like every selection whose surroundings were replaced, and its replacement is spread like any other.
 		$this->abandonSelection();
 		$this->ribTarget?->restore();
+		$this->surfaceSamples?->close();
+		$this->surfaceSamples = null;
 		$this->materialFields?->close();
 		$this->materialFields = null;
 		if($this->clipmap) { $this->clipmap->close(); $this->clipmap = new Clipmap; }
@@ -3037,6 +3081,7 @@ final class Scene
 
 		$this->clipmap?->close();
 		$this->materialFields?->close();
+		$this->surfaceSamples?->close();
 		$this->ribTarget?->close();
 		if($this->paletteBuffer) glDeleteBuffers(1,$this->paletteBuffer);
 		foreach($this->materialPrograms as $set) foreach($set as $program) $program->close();

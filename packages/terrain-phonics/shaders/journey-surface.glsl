@@ -39,7 +39,22 @@ vec3 journeySurface(vec3 world, vec3 normal, vec3 relative, float footprint, boo
 	litNormal = vec3(0.);
 	finish = vec2(0.);
 	bounce = vec3(0.);
+	#ifdef READ_SURFACE_SAMPLES
+	litNormal = normal;
+	if(!pavement && uCraft<.5 && !sampleSurface(normal,albedo,litNormal)) {
+		// An isolated subpixel tip can miss the source grid completely. Use its own landscapes' base pigment.
+		albedo = weights.x*palettes[0].colors[0]+weights.y*palettes[1].colors[0];
+		#if JOURNEY_REGIONS == 3
+		albedo += weights.z*palettes[2].colors[0];
+		#endif
+	}
+	bounce=weights.x*palettes[0].bounce.rgb+weights.y*palettes[1].bounce.rgb;
+	#if JOURNEY_REGIONS == 3
+	bounce+=weights.z*palettes[2].bounce.rgb;
+	#endif
+	#else
 	// SAMPLE REGIONS
 	litNormal = pavement ? normal : normalize(litNormal);
+	#endif
 	return albedo;
 }
