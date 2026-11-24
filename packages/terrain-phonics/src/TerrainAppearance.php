@@ -231,6 +231,24 @@ final class TerrainAppearance
 			, 'bandContrast' => .65
 			, 'macroVariation' => 1.
 		]
+		// Fern and rainforest over every slope that holds soil, mossy fluted cliffs, red earth where the steepest
+		// faces slip, and black sand where the ridges meet the sea.
+		, 'emerald-ridges' => [
+			'grassColor' => '#2f5a26'
+			, 'meadowColor' => '#244a20'
+			, 'forestColor' => '#17361e'
+			, 'soilColor' => '#8a4a2e'
+			, 'rockColor' => '#284a24'
+			, 'rockBandColor' => '#3f6a32'
+			, 'sandColor' => '#3d3b38'
+
+			, 'rockSlopeStart' => .28
+			, 'rockSlopeEnd' => .48
+			, 'beachHeight' => 1.5
+			, 'beachWidth' => 3.
+			, 'snowline' => 1500.
+			, 'treeline' => -1000.
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
@@ -433,6 +451,22 @@ final class TerrainAppearance
 			, 'snowline'
 			, 'treeline'
 		]
+		, 'emerald-ridges' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'roadColor'
+			, 'forestColor'
+			, 'meadowColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'snowline'
+			, 'treeline'
+		]
 		, 'salt-pans' => [
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
 			'rockSlopeStart', 'rockSlopeEnd',
@@ -571,7 +605,7 @@ final class TerrainAppearance
 			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon',
 			'heather-moor', 'salt-pans', 'cinder-highlands',
 			'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe',
-			'alaska-range', 'chalk-headlands', 'karst-bay', 'tepui-highlands' => $recipe['preset'],
+			'alaska-range', 'chalk-headlands', 'karst-bay', 'tepui-highlands', 'emerald-ridges' => $recipe['preset'],
 			default => 'coast'
 		};
 	}
