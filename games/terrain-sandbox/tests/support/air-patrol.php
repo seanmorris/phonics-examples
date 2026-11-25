@@ -103,18 +103,29 @@ expect(isset($afterHit['events']['airPatrol']['seeker']['mount']) && !isset($cop
 $copy->restorePatrolSmoke($rewound,$hitTime+.6,$afterHit);
 expect($rewound->smoke?->active()===true && !$rewound->smoke->showsLodgedSeeker(),'The fast car has left its shell in the fading burst, including on a demo seek.');
 
-// Start each handbrake turn from the same recorded launch, including the old fly-out win.
-foreach([[.02,'KeyD',false],[.53,'KeyD',false],[1.55,'KeyA',false],[3.,'KeyD',false],[3.,'KeyA',true]] as [$delay,$steer,$wins]) {
+// Try the handbrake during the fly-out, the swing down, and from both sides of the rear chase.
+foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,true],[3.,'KeyD',true,false],[3.,'KeyA',true,true]] as [$delay,$steer,$shakes,$wins]) {
 	$game=new Session($flat);
 	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$releaseTime+$delay],'demo-take-control'] as $action)
 		$game->input(['actions'=>[$action]],0.,16/9);
-	$lockedAt=$wonAt=$previousPose=null; $missed=$followed=$boosted=false;
+	$lockedAt=$wonAt=$previousPose=null; $missed=$followed=$boosted=$driftedOnApproach=false;
 	for($tick=0;$tick<360;$tick++) {
 		if($tick===0 || $tick===24) $game->input(['keys'=>$tick===0 ? ['KeyW'=>1,$steer=>1,'Space'=>1] : ['KeyW'=>1]],0.,16/9);
+		$beforeShot=$game->airPatrol->seeker();
+		$beforeCar=$game->car->state();
 		$game->step(1/60); $game->demo->capture($game);
 		$patrol=$game->airPatrol->snapshot(); $shot=$patrol['seeker'] ?? [];
+		if(($beforeShot['phase'] ?? '')==='drop' && abs($game->car->state()['drift'])>=.18) {
+			$driftedOnApproach=true;
+			expect(in_array($shot['phase'],['drop','chase'],true),'A slide during the approach leaves the car lock intact.');
+		}
 		if(($shot['phase'] ?? '')==='chase') $followed=true;
-		if(($shot['phase'] ?? '')==='missed') $missed=true;
+		if(($shot['phase'] ?? '')==='missed' && !$missed) {
+			$missed=true;
+			$body=VehicleModel::basis($beforeCar); $at=$beforeShot['pose'];
+			$along=($at['x']-$beforeCar['x'])*$body[6]+($at['y']-$beforeCar['y'])*$body[7]+($at['z']-$beforeCar['z'])*$body[8];
+			expect($beforeShot['phase']==='chase' && $along<=-Car::BODY_REAR,'A drift only releases the seeker from behind the bumper.');
+		}
 		if(($shot['phase'] ?? '')==='return') {
 			$at=$shot['pose'];
 			if($lockedAt===null) {
@@ -134,7 +145,9 @@ foreach([[.02,'KeyD',false],[.53,'KeyD',false],[1.55,'KeyA',false],[3.,'KeyD',fa
 				$patrol['phase']==='departure' && $game->airPatrol->carImpact===null,'The return bursts on the plane and sends the pilot away.');
 		}
 	}
-	expect($missed && ($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'Only a drift that brings the loose seeker back near the F5 wins.');
+	if($delay<1.95) expect($driftedOnApproach && $followed,'An early handbrake slide still leads into the bumper chase.');
+	expect($missed===$shakes,'A slide that ends before the bumper chase cannot shake the lock later.');
+	expect(($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'Only a drift that brings the loose seeker back near the F5 wins.');
 	if($wins) {
 		expect($boosted && abs($wonAt-$lockedAt-.5)<.04,'The visible return accelerates in its first tenth of a second and continues through impact.');
 		$won=$game->airPatrol->snapshot();
@@ -203,6 +216,12 @@ $checkpoint=$pilot->snapshot();
 expect($checkpoint['phase']==='escort' && $checkpoint['seeker']['phase']==='chase','A joined escort releases a seeker which reaches the rear bumper.');
 $tail=$checkpoint['seeker']['pose'];
 expect($driver['z']-$tail['z']>2. && $driver['z']-$tail['z']<3.2 && abs($tail['x'])<1.5 && $tail['y']>$driver['y']+Car::BODY_HEIGHT+1.,'The seeker floats over the rear bumper with visible clearance above the car.');
+// A turning car can put the seeker beside it even during the closing animation.
+$sidePass=$checkpoint['seeker']; $sidePass['pose']['z']=$driver['z']; $sidePass['pose']['x']+=4.;
+$prop=new SpeedSeeker; $prop->resume($sidePass);
+$skid=$driver; $skid['drift']=.3;
+$prop->step(1/60,$skid,$checkpoint['pose'],'escort',$land,-10.,$driver);
+expect($prop->state()['phase']==='chase','A slide with the seeker beside the car keeps the lock even during the closing animation.');
 // Replay the same rear-quarter station at different step sizes, including one late escape.
 foreach([30,60,120] as $fps) {
 	$prop=new SpeedSeeker; $prop->resume($checkpoint['seeker']); $car=$driver;

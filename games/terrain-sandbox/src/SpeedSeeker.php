@@ -51,8 +51,8 @@ final class SpeedSeeker
 		}
 		if($this->phase==='return' && $plane!==null && $patrol==='escort')
 			return $this->returnToPlane($dt,$plane,$beforeCar ?? $car,$car,$land,$water);
-		if($this->phase!=='missed' && ($drifting || $patrol==='departure' || $plane===null)) {
-			$rearDrift=$drifting && $this->phase==='chase' && $this->behindBumper($beforeCar ?? $car);
+		$rearDrift=$drifting && $this->phase==='chase' && $this->behindBumper($beforeCar ?? $car);
+		if($this->phase!=='missed' && ($rearDrift || $patrol==='departure' || $plane===null)) {
 			$this->rearPassGap=$rearDrift && $plane!==null && $patrol==='escort' ? $this->planeGap($plane) : null;
 			$this->phase='missed'; $this->clock=0.; $this->carFrames=[];
 			$this->velocity ??= self::motionAlongPose($this->pose,$car['speed']);
