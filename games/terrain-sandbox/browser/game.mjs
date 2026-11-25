@@ -3026,7 +3026,7 @@ function markup(journeyMarkup)
 	<button data-action="demo-hold" hidden>Hold frame</button><button data-action="demo-take-control" hidden>Take control &amp; record</button></div></div></fieldset>
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button><button data-action="delivery">Package run</button></div>
 	<label class="terrain-check"><input data-value="airPatrolEnabled" type="checkbox" aria-describedby="terrain-patrol-hint">F5 air patrol above 60 mph</label>
-	<p id="terrain-patrol-hint" class="terrain-note">Drift to shake the speed-seeker. Stay below 55 mph for 45 seconds to lose the patrol.</p>
+	<p id="terrain-patrol-hint" class="terrain-note">Watch the F5’s wing. Drift before the seeker closes on your bumper. Stay below 55 mph for 45 seconds to lose the patrol.</p>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div class="terrain-row"><button data-action="beach-ball-spawn">Spawn beach ball</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>

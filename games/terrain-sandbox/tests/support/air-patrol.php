@@ -1,6 +1,6 @@
 <?php
 use TerrainPhonics\{Camera,Landscape};
-use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,FlightTrails,Jet,Session,SpeedSeeker};
+use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,FlightTrails,Jet,Session,SpeedSeeker,VehicleModel};
 
 $flat = ['worldSize'=>4096,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-10.];
 $land = new Landscape($flat);
@@ -32,21 +32,35 @@ for($i=0;$i<900 && $drive->car->state()['speed']<=60.*Car::MPS_PER_MPH;$i++) {
 expect($i<900 && $drive->airPatrol->snapshot()===null, 'Crossing the limit keeps the sky clear while the checkbox is off.');
 $drive->input(['values'=>['airPatrolEnabled'=>true],'keys'=>['KeyW'=>1,'ShiftLeft'=>1]],0.,16/9);
 $bank=$visible=0.; $minSide=INF; $maxSide=0.; $minSeparation=INF; $first=null; $entryTime=0.; $wingRelease=false;
+$releaseTime=$stationTime=$hitTime=null; $visibleRelease=false;
+$maxLead=0.; $swing=false;
 for($i=0;$i<880;$i++) {
 	$drive->step(1/60); $drive->demo->capture($drive);
 	$pilot=$drive->airPatrol->snapshot();
 	if(!isset($pilot['pose'])) continue;
 	$p=$pilot['pose']; [$eye,$car]=$drive->view(1.);
 	$first ??= abs($car['speed'])/Car::MPS_PER_MPH;
-	if($pilot['seeker']['phase']==='drop' && $pilot['seeker']['clock']===0.) {
+	$shot=$pilot['seeker']; $time=$drive->demo->duration();
+	if($shot['phase']==='drop' && $shot['clock']===0.) {
+		$releaseTime=$time;
 		$wing=Jet::projectileMount($p,0); $released=$pilot['seeker']['pose'];
 		$wingRelease=abs($released['x']-$wing['x'])+abs($released['y']-$wing['y'])+abs($released['z']-$wing['z'])<1e-6;
 	}
+	if($shot['phase']==='drop') {
+		$wing=Jet::projectileMount($p,0); $nose=array_slice(VehicleModel::basis($p),6);
+		$prop=$shot['pose']; $lead=0.;
+		foreach(['x','y','z'] as $j=>$axis) $lead+=($prop[$axis]-$wing[$axis])*$nose[$j];
+		if($shot['clock']<.55) $maxLead=max($maxLead,$lead);
+		if($maxLead>12. && $lead< -5. && abs($prop['x']-$car['x'])>5. && $prop['y']<$p['y']-3.) $swing=true;
+	}
+	if($shot['phase']==='chase') $stationTime ??= $time;
+	if($drive->airPatrol->carImpact!==null) $hitTime ??= $time;
 	[$f,$r,$up]=$eye->basis();
 	$rel=[$p['x']-$eye->position[0],$p['y']-$eye->position[1],$p['z']-$eye->position[2]];
 	$dot=static fn($v)=>$rel[0]*$v[0]+$rel[1]*$v[1]+$rel[2]*$v[2];
 	$depth=$dot($f); $height=$depth*tan($eye->fov/2);
 	if($depth>0. && abs($dot($r))<$height*16/9 && abs($dot($up))<$height) {
+		if($shot['phase']==='drop' && $shot['clock']===0.) $visibleRelease=true;
 		if($pilot['phase']==='arrival' && abs($p['roll'])>$bank) { $bank=abs($p['roll']); $entryTime=$drive->demo->duration(); }
 		if($pilot['phase']==='escort') $visible++;
 	}
@@ -57,7 +71,10 @@ for($i=0;$i<880;$i++) {
 		$minSeparation=min($minSeparation,hypot($x,$z));
 	}
 }
-expect($wingRelease,'The seeker starts at the visible wing mount on the frame it detaches.');
+expect($wingRelease && $visibleRelease,'The seeker starts at the visible wing mount on the frame it detaches.');
+expect($releaseTime!==null && $stationTime!==null && abs($stationTime-$releaseTime-1.95)<.05 && $maxLead>13. && $swing,'The prop passes ahead of the moving F5, falls back alongside it and arcs down outside the car.');
+expect($stationTime!==null && $hitTime!==null && $hitTime-$stationTime>=3. && $hitTime-$stationTime<=4.,
+	'Driving straight through the rear-quarter warning produces a real bumper hit in three to four seconds.');
 expect($first>60. && $first<62. && $bank>.67,'The F5 visibly banks into the chase camera just after the driver exceeds 60 mph.');
 expect($minSide<2. && $maxSide>11. && $visible>300 && $minSeparation>30.,'The pilot paces overhead and alongside with a clear view of the car.');
 $drive->input(['actions'=>['demo-stop']],0.,16/9);
@@ -74,7 +91,7 @@ expect($drive->car->state()['speed']>60.*Car::MPS_PER_MPH && $drive->airPatrol->
 $drive->close();
 
 $rewound=new AirPatrol;
-$when=$copy->duration()-.5;
+$when=$stationTime+.5;
 $copy->restorePatrolSmoke($rewound,$when,$copy->frame($when));
 expect($rewound->smoke?->active()===true,'Seeking into a chase reconstructs the smoke already in the air.');
 $copy->restorePatrolSmoke($rewound,0.,$copy->frame(0.));
@@ -82,17 +99,34 @@ expect($rewound->smoke===null,'Rewinding before launch clears later smoke.');
 
 // A sudden move of the formation station can command a turn but cannot relocate the airframe.
 $driver=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>0.,'drift'=>0.,'speed'=>72.];
-$eye=new Camera; $eye->yaw=M_PI;
+$eye=new Camera; $eye->yaw=M_PI; $eye->pitch=.1;
 $eyeAt=function() use (&$eye) { return $eye; };
 $pilot=new AirPatrol;
-for($i=0;$i<480;$i++) {
+for($i=0;$i<720 && ($pilot->seeker()['phase'] ?? null)!=='chase';$i++) {
 	$driver['z']+=$driver['speed']/60.; $eye->position=[0.,3.,$driver['z']-7.];
 	$pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
 }
 $checkpoint=$pilot->snapshot();
 expect($checkpoint['phase']==='escort' && $checkpoint['seeker']['phase']==='chase','A joined escort releases a seeker which reaches the rear bumper.');
 $tail=$checkpoint['seeker']['pose'];
-expect($driver['z']-$tail['z']>2. && $driver['z']-$tail['z']<3. && abs($tail['x'])<Car::BODY_HALF_WIDTH && $tail['y']>$driver['y']+Car::BODY_HEIGHT+1.,'The seeker floats over the rear bumper with visible clearance above the car.');
+expect($driver['z']-$tail['z']>2. && $driver['z']-$tail['z']<3.2 && abs($tail['x'])<1.5 && $tail['y']>$driver['y']+Car::BODY_HEIGHT+1.,'The seeker floats over the rear bumper with visible clearance above the car.');
+// Replay the same rear-quarter station at different step sizes, including one late escape.
+foreach([30,60,120] as $fps) {
+	$prop=new SpeedSeeker; $prop->resume($checkpoint['seeker']); $car=$driver;
+	for($tick=1;$tick<=4*$fps;$tick++) {
+		$oldCar=$car; $car['z']+=$car['speed']/$fps;
+		$hit=$prop->step(1/$fps,$car,$checkpoint['pose'],'escort',$land,-10.,$oldCar);
+		if($hit!==null) break;
+	}
+	expect(($hit['kind'] ?? null)==='car' && $tick/$fps>=3. && $tick/$fps<=4., "Bumper contact stays in the warning window at $fps Hz.");
+}
+$prop=new SpeedSeeker; $prop->resume($checkpoint['seeker']); $car=$driver;
+for($tick=1;$tick<=181;$tick++) {
+	$oldCar=$car; $car['z']+=$car['speed']/60.;
+	if($tick===181) $car['drift']=.3;
+	$hit=$prop->step(1/60,$car,$checkpoint['pose'],'escort',$land,-10.,$oldCar);
+}
+expect($hit===null && $prop->state()['phase']==='missed','A drift three seconds into the closing pass still breaks the lock.');
 $restart=new AirPatrol; $restart->resume($checkpoint);
 $pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
 $restart->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
@@ -100,6 +134,8 @@ expect($pilot->snapshot()===$restart->snapshot(),'Branching a recording retains 
 $displaced=$driver; $displaced['x']+=90.; $displaced['yaw']=M_PI;
 $restart->resume($checkpoint);
 $restart->step(1/60,$displaced,$eyeAt,16/9,$land,-10.);
+$moved=$restart->seeker()['pose']; $ref=$pilot->seeker()['pose'];
+expect($moved['x']>$ref['x']+1. && $moved['x']<$ref['x']+30.,'The rear-quarter prop starts following a sudden steering change without snapping to the new mark.');
 $p=$restart->pose(); $a=$checkpoint['pose']; $straight=$pilot->pose();
 expect(abs(hypot($p['x']-$a['x'],$p['z']-$a['z'])-$p['speed']/60.)<.01 &&
 	hypot($p['x']-$straight['x'],$p['z']-$straight['z'])<.03,'An abrupt change in car position and heading leaves the aircraft on its own flight path.');
@@ -147,9 +183,9 @@ $pilot->resume($checkpoint); $parked=$driver; $parked['speed']=0.;
 for($i=0;$i<600;$i++) $pilot->step(1/60,$parked,$eyeAt,16/9,$land,-10.);
 $pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
 for($i=0;$i<2699;$i++) $pilot->step(1/60,$parked,$eyeAt,16/9,$land,-10.);
-expect($pilot->snapshot()['phase']==='escort' && $pilot->seeker()['phase']==='chase','The patrol and its seeker stay through 44.98 continuous seconds under speed.');
+expect($pilot->snapshot()['phase']==='escort','The patrol stays through 44.98 continuous seconds under speed.');
 $pilot->step(1/60,$parked,$eyeAt,16/9,$land,-10.);
-expect($pilot->snapshot()['phase']==='departure' && $pilot->seeker()['phase']==='missed','Both break off at 45 seconds below the threshold.');
+expect($pilot->snapshot()['phase']==='departure','The pilot breaks off at 45 seconds below the threshold.');
 
 // The drop clears a raised ridge even with the parked driver on its low side.
 $ridge=new Landscape($flat);
@@ -157,9 +193,22 @@ $ridge->queue(['type'=>'raise','x'=>0.,'z'=>20.,'radius'=>14.,'amount'=>18.]); $
 $drop=new SpeedSeeker;
 $car=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>0.,'speed'=>72.,'drift'=>0.];
 $plane=$checkpoint['pose']; $plane['x']=0.; $plane['y']=26.; $plane['z']=44.; $plane['yaw']=$plane['pitch']=$plane['roll']=0.;
+$wingEye=new Camera; $wingEye->position=[0.,1.,-8.]; $wingEye->yaw=M_PI; $wingEye->pitch=.35;
+for($i=0;$i<120;$i++) $drop->step(1/60,$car,$plane,'escort',$ridge,-10.,null,fn()=>$wingEye,16/9);
+expect($drop->state()['phase']==='mounted','A ridge hiding the wing holds the release even when the wing projects on screen.');
+$wingEye->position=[0.,30.,-8.]; $wingEye->pitch=-.08; $wingEye->yaw=0.;
+for($i=0;$i<120;$i++) $drop->step(1/60,$car,$plane,'escort',$ridge,-10.,null,fn()=>$wingEye,16/9);
+expect($drop->state()['clock']===0.,'A plane behind the camera cannot start a release.');
+$wingEye->yaw=M_PI;
+for($i=0;$i<75;$i++) $drop->step(1/60,$car,$plane,'escort',$ridge,-10.,null,fn()=>$wingEye,16/9);
+$wingEye->yaw=0.;
+$drop->step(1/60,$car,$plane,'escort',$ridge,-10.,null,fn()=>$wingEye,16/9);
+$wingEye->yaw=M_PI;
+for($i=0;$i<75;$i++) $drop->step(1/60,$car,$plane,'escort',$ridge,-10.,null,fn()=>$wingEye,16/9);
+expect($drop->state()['phase']==='mounted','Looking away resets the visible warning beat.');
 $minGap=INF;
-for($i=0;$i<255;$i++) {
-	$drop->step(1/60,$car,$plane,'escort',$ridge,-10.);
+for($i=0;$i<240 && $drop->state()['phase']!=='chase';$i++) {
+	$drop->step(1/60,$car,$plane,'escort',$ridge,-10.,null,fn()=>$wingEye,16/9);
 	$body=$drop->state()['pose']; if($body===null) continue;
 	$b=TerrainSandbox\VehicleModel::basis($body);
 	foreach([-2.,0.,2.] as $along) {

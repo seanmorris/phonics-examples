@@ -74,7 +74,7 @@ final class AirPatrol
 		$this->carImpact=null;
 		if($this->phase==='idle') {
 			$fading=$this->seeker!==null || $this->smoke!==null;
-			$this->advanceSeeker($dt,$car,null,'departure',$land,$water,$beforeCar);
+			$this->advanceSeeker($dt,$car,null,'departure',$land,$water,$beforeCar,$eye,$aspect);
 			if(!$this->smoke && !isset($this->seeker?->state()['pose'])) $this->seeker=null;
 			$this->elapsed=max(0.,$this->elapsed-$dt);
 			if($this->elapsed>0. || $car['speed']<=60.*Car::MPS_PER_MPH) return $fading;
@@ -147,7 +147,7 @@ final class AirPatrol
 		}
 		$flying=$this->jet->fly($dt,$throttle,$bank,$climb,$land,$water);
 		$next=$this->jet->state();
-		$this->advanceSeeker($dt,$car,$next,$flying ? $this->phase : 'departure',$land,$water,$beforeCar);
+		$this->advanceSeeker($dt,$car,$next,$flying ? $this->phase : 'departure',$land,$water,$beforeCar,$eye,$aspect);
 		if($this->circleRemaining>0.) $this->circleRemaining=max(0.,$this->circleRemaining-
 			$this->side*self::angle($next['yaw']-$p['yaw']));
 		if(!$flying || ($this->phase==='departure' && $this->elapsed>2. && !self::visible($next,$eye(),$aspect))) {
@@ -173,10 +173,10 @@ final class AirPatrol
 		return $p;
 	}
 
-	private function advanceSeeker(float $dt,array $car,?array $plane,string $phase,Landscape $land,float $water,?array $beforeCar): void
+	private function advanceSeeker(float $dt,array $car,?array $plane,string $phase,Landscape $land,float $water,?array $beforeCar,callable $eye,float $aspect): void
 	{
 		$before=$this->seeker?->state();
-		$hit=$this->seeker?->step($dt,$car,$plane,$phase,$land,$water,$beforeCar);
+		$hit=$this->seeker?->step($dt,$car,$plane,$phase,$land,$water,$beforeCar,$eye,$aspect);
 		$this->stepSmoke($dt,$before,$this->seeker?->state());
 		if(($hit['kind'] ?? null)==='car') $this->carImpact=$hit['point'];
 	}
