@@ -9,6 +9,7 @@ use TerrainPhonics\Landscape;
 final class SpeedSeeker
 {
 	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 12.;
+	private const LOOM_ABOVE_ROOF = 2.12;
 	// The F5 normally escorts about 42 m ahead and above the car.
 	private const RETURN_RADIUS = 50., RETURN_SECONDS = .55, BOOST_RAMP = .20;
 	/** An eligible coast tracks this gap; its last value marks the boosted return in recorded takes. */
@@ -16,7 +17,7 @@ final class SpeedSeeker
 	private string $phase = 'mounted';
 	private float $clock = 0., $passSpeed = 0.;
 	private ?array $velocity = null, $impact = null;
-	/** Start of the drop, expressed in the car's frame so the animation works on winding roads. */
+	/** Drop poses end with the loom clearance above the roof. Older recorded drops used 1.32 m. */
 	private array $start = [];
 	/** Two smoothed copies of the driver's animation frame, retained when branching a demo mid-pass. */
 	private array $carFrames = [];
@@ -45,7 +46,7 @@ final class SpeedSeeker
 			$course=$car['yaw']-$car['drift']; $f=sin($course); $g=cos($course);
 			$x=$wing['x']-$car['x']; $z=$wing['z']-$car['z'];
 			$this->start=[$x*$g-$z*$f,$x*$f+$z*$g,$wing['y']-$car['y'],
-				atan2(sin($wing['yaw']-$course),cos($wing['yaw']-$course)),$wing['pitch'],$wing['roll']];
+				atan2(sin($wing['yaw']-$course),cos($wing['yaw']-$course)),$wing['pitch'],$wing['roll'],self::LOOM_ABOVE_ROOF];
 			$this->velocity=[$plane['vx'],$plane['vy'],$plane['vz']];
 			$this->phase='drop'; $this->clock=0.;
 		}
@@ -55,7 +56,13 @@ final class SpeedSeeker
 		if($this->phase!=='missed' && ($rearDrift || $patrol==='departure' || $plane===null)) {
 			$this->rearPassGap=$rearDrift && $plane!==null && $patrol==='escort' ? $this->planeGap($plane) : null;
 			$this->phase='missed'; $this->clock=0.; $this->carFrames=[];
+			$this->start=array_slice($this->start,0,6);
 			$this->velocity ??= self::motionAlongPose($this->pose,$car['speed']);
+			if($rearDrift) {
+				// Give the loose prop one upward flick, then let it coast along the player's drift.
+				$this->pose['pitch']+=deg2rad(5.);
+				$this->velocity[1]+=2.5;
+			}
 			$this->passSpeed=sqrt(array_sum(array_map(static fn($v)=>$v*$v,$this->velocity)));
 		}
 		if($this->phase==='missed') {
@@ -80,8 +87,9 @@ final class SpeedSeeker
 		$closing=$drop ? 0. : min(1.,$this->clock/self::CLOSE_SECONDS);
 		$shoulder=$this->start[0]>=0. ? 1. : -1.;
 		// Move the mark from above one rear corner into the bumper. The last dip is the driver's drift cue.
+		$clearance=$this->start[6] ?? 1.32;
 		$mark=[$shoulder*(1.34*(1.-$closing)+.8*sin(2.*M_PI*$closing)*(1.-$closing)),
-			Car::BODY_HEIGHT+1.32-1.48*$closing**1.8, -Car::BODY_REAR-.9+1.08*$closing];
+			Car::BODY_HEIGHT+$clearance-($clearance+.16)*$closing**1.8, -Car::BODY_REAR-.9+1.08*$closing];
 		$p=$carFrame;
 		foreach(['x','y','z'] as $i=>$axis) $p[$axis]+=$body[$i]*$mark[0]+$body[$i+3]*$mark[1]+$body[$i+6]*$mark[2];
 		if($drop) {

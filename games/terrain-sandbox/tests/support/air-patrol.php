@@ -131,7 +131,7 @@ $copy->restorePatrolSmoke($rewound,$hitTime+.6,$afterHit);
 expect($rewound->smoke?->active()===true && !$rewound->smoke->showsLodgedSeeker(),'The fast car has left its shell in the fading burst, including on a demo seek.');
 
 // Try the handbrake during the fly-out, the swing down, and from both sides of the rear chase.
-foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,true],[3.,'KeyD',true,false],[3.,'KeyA',true,true]] as [$delay,$steer,$shakes,$wins]) {
+foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,true],[2.65,'KeyD',true,true],[3.,'KeyD',true,false],[3.,'KeyA',true,true]] as [$delay,$steer,$shakes,$wins]) {
 	$game=new Session($flat);
 	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$releaseTime+$delay],'demo-take-control'] as $action)
 		$game->input(['actions'=>[$action]],0.,16/9);
@@ -246,7 +246,15 @@ for($i=0;$i<720 && ($pilot->seeker()['phase'] ?? null)!=='chase';$i++) {
 $checkpoint=$pilot->snapshot();
 expect($checkpoint['phase']==='escort' && $checkpoint['seeker']['phase']==='chase','A joined escort releases a seeker which reaches the rear bumper.');
 $tail=$checkpoint['seeker']['pose'];
-expect($driver['z']-$tail['z']>2. && $driver['z']-$tail['z']<3.2 && abs($tail['x'])<1.5 && $tail['y']>$driver['y']+Car::BODY_HEIGHT+1.,'The seeker floats over the rear bumper with visible clearance above the car.');
+expect($driver['z']-$tail['z']>2. && $driver['z']-$tail['z']<3.2 && abs($tail['x'])<1.5 &&
+	abs($tail['y']-$driver['y']-Car::BODY_HEIGHT-2.12)<.02,'The seeker looms above the roof over the rear bumper.');
+// A take recorded before the higher pass should continue at its original height when branched.
+$oldTail=$checkpoint['seeker'];
+array_pop($oldTail['start']); $oldTail['pose']['y']-=.8;
+$prop=new SpeedSeeker; $prop->resume($oldTail);
+$nextCar=$driver; $nextCar['z']+=$driver['speed']/60.;
+$prop->step(1/60,$nextCar,$checkpoint['pose'],'escort',$land,-10.,$driver);
+expect(abs($prop->state()['pose']['y']-$oldTail['pose']['y'])<.01,'An older bumper chase resumes without jumping up.');
 // A turning car can put the seeker beside it even during the closing animation.
 $sidePass=$checkpoint['seeker']; $sidePass['pose']['z']=$driver['z']; $sidePass['pose']['x']+=4.;
 $prop=new SpeedSeeker; $prop->resume($sidePass);
@@ -311,13 +319,21 @@ $skid=$driver; $skid['drift']=.3;
 $pilot->step(1/60,$skid,$eyeAt,16/9,$land,-10.);
 $miss=$pilot->seeker();
 expect($miss['phase']==='missed','A real slide immediately shakes the current seeker.');
+$coast=new SpeedSeeker; $coast->resume($checkpoint['seeker']);
+$coast->step(1/60,$driver,null,'departure',$land,-10.);
+$plain=$coast->state();
+expect(abs($miss['pose']['pitch']-$plain['pose']['pitch']-deg2rad(5.))<1e-9 &&
+	$miss['velocity'][1]>$plain['velocity'][1]+2. && $miss['pose']['y']>$plain['pose']['y'] &&
+	$miss['velocity'][0]===$plain['velocity'][0] && $miss['velocity'][2]===$plain['velocity'][2],
+	'Shaking the seeker lifts its nose and its path while carrying the sideways drift.');
 $widePass=$pilot->snapshot(); $widePass['pose']['x']+=180.; // Keep the F5 out of retargeting range on both paths.
 $pilot->resume($widePass); $other=new AirPatrol; $other->resume($widePass);
 for($i=0;$i<60;$i++) {
 	$pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
 	$other->step(1/60,$displaced,$eyeAt,16/9,$land,-10.);
 }
-expect($pilot->seeker()['pose']===$other->seeker()['pose'] && $pilot->seeker()['pose']['z']>$miss['pose']['z']+30.,
+expect($pilot->seeker()['pose']===$other->seeker()['pose'] && $pilot->seeker()['pose']['z']>$miss['pose']['z']+30. &&
+	abs($pilot->seeker()['pose']['y']-$miss['pose']['y']-$miss['velocity'][1])<.0001,
 	'Once shaken, the prop sails past on the same course whichever way the car turns.');
 // With the patrol peeling away, the same loose shot expires and cannot score a return.
 $escaping=new SpeedSeeker; $escaping->resume($miss);

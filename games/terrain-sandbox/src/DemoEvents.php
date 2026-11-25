@@ -136,7 +136,9 @@ final class DemoEvents
 				if(in_array($s['phase'] ?? null,['mounted','reload'],true)) {
 					if($s['pose']!==null || ($s['start'] ?? null)!==[]) return false;
 				} elseif(!in_array($s['phase'] ?? null,['drop','chase','missed','return'],true)
-					|| !(self::vector($s['start'] ?? null,6) || ($s['phase']==='return' && isset($s['rearPassGap']) && self::vector($s['start'] ?? null,9)))
+					|| !(self::vector($s['start'] ?? null,6)
+						|| (in_array($s['phase'],['drop','chase'],true) && self::vector($s['start'] ?? null,7) && $s['start'][6]>=0. && $s['start'][6]<=5.)
+						|| ($s['phase']==='return' && isset($s['rearPassGap']) && self::vector($s['start'] ?? null,9)))
 					|| !is_array($s['pose']) || count($s['pose'])!==6 ||
 					!self::vector(array_map(fn($k)=>$s['pose'][$k] ?? null,$keys),6)) return false;
 			}
