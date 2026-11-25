@@ -23,17 +23,26 @@ final class JourneyRoad
 
 	public static function build(Landscape $land, array $arrival = [], ?callable $report = null, ?array $entry = null): \Generator
 	{
+		foreach($arrival as $road) yield from $land->queueSteps($road);
+		if($entry===null && $arrival) {
+			$last=end($arrival)['points'];
+			$entry=end($last);
+		}
+		$survey=yield from self::survey($land,$report,$entry);
+		foreach($survey['roads'] as $road) yield from $land->queueSteps($road);
+		$land->commit();
+		return $survey['views'];
+	}
+
+	/** Fit portable road records before a network reconciles approaches and grades the final pavement. */
+	public static function survey(Landscape $land,?callable $report,?array $entry): \Generator
+	{
 		$r = $land->recipe();
 		$half = $r['worldSize']/2;
 		$span = $r['join']['span'];
 		$origins = JoinedTerrain::origins($span,count($r['join']['destinations']));
 		$split = count($origins) === 3;
 		$survey = new JourneySurvey($r);
-		foreach($arrival as $road) yield from $land->queueSteps($road);
-		if($entry===null && $arrival) {
-			$last=end($arrival)['points'];
-			$entry=end($last);
-		}
 		$phases=count($r['join']['destinations'])+3;
 		if($report) $report('Surveying valley entrances and exits…',0.);
 		$tailX = $half-1536.;
@@ -156,7 +165,7 @@ final class JourneyRoad
 		$lower=self::envelope($graph,array_map(static fn($h)=>-$h,$anchors));
 		foreach($height as $key=>$h) $height[$key]=max(-$lower[$key],min($upper[$key],$h));
 
-		$views=[];
+		$views=$roads=[];
 		foreach($paths as $leg=>$path) {
 			$points = [];
 			foreach($path as $i=>[$x,$z]) $points[] = [$x,$height[$routes[$leg][$i]],$z];
@@ -177,13 +186,12 @@ final class JourneyRoad
 			}
 			// Slice the fitted spline with its original handles so adjacent road records meet tangentially.
 			for($i=0;$i<$last;$i+=96) {
-				yield from $land->queueSteps(['type'=>'road','material'=>'road','width'=>self::WIDTH,'shoulder'=>18.,'stationSpacing'=>7.,
-					'points'=>array_slice($points,$i,97),'handles'=>array_slice($handles,$i,97)]);
+				$roads[]=['type'=>'road','points'=>array_slice($points,$i,97),'width'=>self::WIDTH,'shoulder'=>18.,
+					'crown'=>0.,'material'=>'road','stationSpacing'=>7.,'handles'=>array_slice($handles,$i,97)];
 				yield;
 			}
 		}
-		$land->commit();
-		return $views;
+		return ['roads'=>$roads,'views'=>$views];
 	}
 
 	/** The end of a destination's highway depends only on its own terrain. A distant stage

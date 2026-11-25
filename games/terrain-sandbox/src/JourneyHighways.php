@@ -7,7 +7,7 @@ use TerrainPhonics\{JoinedTerrain,Landscape};
 /** Compose adjacent map windows from the same surveyed road curves in each named square. */
 final class JourneyHighways
 {
-	private array $surveys=[], $landings=[], $windows=[], $prepared=[];
+	private array $surveys=[], $landings=[], $windows=[], $prepared=[], $merges=[];
 	private \WeakMap $generated;
 
 	public function __construct(public readonly JourneyNetwork $network,public readonly int $span,public readonly int $version=2)
@@ -56,16 +56,11 @@ final class JourneyHighways
 		if(!$edited && isset($this->surveys[$id])) {
 			$data=$this->surveys[$id];
 			unset($this->surveys[$id]); $this->surveys[$id]=$data;
-			if($target) {
-				foreach($data['roads'] as $road) yield from $target->queueSteps($road);
-				$target->commit();
-			}
 			return $data;
 		}
 		$land=$target ?? new Landscape($this->recipe($id));
 		try {
-			$views=yield from JourneyRoad::build($land,report:$report,entry:$edited ? $actualEntry : $entry);
-			$data=['roads'=>$land->roadRecords(),'views'=>$views];
+			$data=yield from JourneyRoad::survey($land,$report,$edited ? $actualEntry : $entry);
 			if(!$edited) {
 				$this->surveys[$id]=$data;
 				if(count($this->surveys)>6) unset($this->surveys[array_key_first($this->surveys)]);
@@ -83,6 +78,25 @@ final class JourneyHighways
 		$roads=yield from JourneyPavement::square($data['roads'],$origin,$this->span/2);
 		if(isset($this->surveys[$parent])) $this->surveys[$parent]['squares'][$child]=$roads;
 		return $roads;
+	}
+
+	/** Use parent order and square-local coordinates so all three windows select the same through road. */
+	private function mergedSquare(string $stage,string $id,array $base,array $origin,bool $custom,?callable $report): \Generator
+	{
+		if(!$custom && array_key_exists($stage,$this->merges)) return $this->merges[$stage];
+		$roads=[];
+		foreach($this->network->parents[$stage] as $parent) {
+			$group=$parent===$id
+				? (yield from JourneyPavement::square($base,$origin,$this->span/2))
+				: (yield from $this->approach($parent,$stage,$report));
+			foreach($group as $road) $roads[JourneyPavement::key($road)]=$road;
+		}
+		$result=yield from JourneyMerge::apply(array_values($roads));
+		if(!$custom) {
+			$this->merges[$stage]=$result;
+			if(count($this->merges)>6) unset($this->merges[array_key_first($this->merges)]);
+		}
+		return $result;
 	}
 
 	/** An edited arrival only describes the route reached through that particular landscape revision. */
@@ -114,7 +128,7 @@ final class JourneyHighways
 			} finally { if(!$first) $land->close(); }
 		}
 		// The compact stage archive now supplies both driving and map previews.
-		$this->surveys=$this->windows=[];
+		$this->surveys=$this->windows=$this->merges=[];
 		return $departureViews;
 	}
 
@@ -156,24 +170,47 @@ final class JourneyHighways
 			}
 		}
 		$base=isset($r['join']) ? (yield from $this->survey($id,$land,$report,$actualEntry)) : ['roads'=>[],'views'=>[]];
-		$seen=[];
-		foreach($base['roads'] as $road) { $seen[JourneyPavement::key($road)]=true; yield; }
+		$roads=$base['roads']; $revised=[];
+		$custom=$this->customSource($id,$from,$active);
 		foreach($sites as $stage=>$origin) {
 			$groups=[];
 			if($stage===$id && $arrived!==null) $groups[]=$arrived;
-			else foreach($this->network->parents[$stage] as $parent) {
-				if($parent!==$id) $groups[]=yield from $this->approach($parent,$stage,$report);
+			else {
+				$parents=$this->network->parents[$stage];
+				$merged=count($parents)>1 ? (yield from $this->mergedSquare($stage,$id,$base['roads'],$origin,
+					$custom!==null && $stage!==$id,$report)) : null;
+				if($merged!==null) {
+					if($stage!==$id) {
+						$outside=yield from JourneyPavement::square($roads,$origin,$this->span/2,true);
+						$roads=array_map(static fn($road)=>JourneyPavement::translated($road,$origin),$outside);
+					}
+					$groups[]=$merged;
+					$revised[]=[$origin,$merged];
+				} else foreach($parents as $parent) {
+					if($parent!==$id) $groups[]=yield from $this->approach($parent,$stage,$report);
+				}
 			}
-			foreach($groups as $roads) foreach($roads as $road) {
-				$road=JourneyPavement::translated($road,$origin);
-				$key=JourneyPavement::key($road);
-				if(isset($seen[$key])) continue;
-				$seen[$key]=true;
-				yield from $land->queueSteps($road);
-			}
+			foreach($groups as $group) foreach($group as $road) $roads[]=JourneyPavement::translated($road,$origin);
+		}
+		$seen=[];
+		foreach($roads as $road) {
+			$key=JourneyPavement::key($road);
+			if(isset($seen[$key])) continue;
+			$seen[$key]=true;
+			yield from $land->queueSteps($road);
 		}
 		$land->commit();
-		$custom=$this->customSource($id,$from,$active);
+		foreach($base['views'] as &$view) {
+			[$x,$z]=$view;
+			foreach($revised as [[$ox,$oy,$oz],$merged]) {
+				if(max(abs($x-$ox),abs($z-$oz))>$this->span/2 || $land->material($x,$z)==='road') continue;
+				$survey=new JourneySurvey($r);
+				$points=[];
+				foreach($merged as $road) foreach($road['points'] as [$px,$py,$pz]) $points[]=[$px+$ox,$py+$oy,$pz+$oz];
+				$view=(yield from $survey->roadsideView($points,[$ox,$oz])) ?? $view;
+			}
+		}
+		unset($view);
 		if(!$custom) $this->generated[$land]=$land->revision();
 		unset($this->windows[$id]);
 		$this->windows[$id]=['roads'=>$land->roadRecords(),'source'=>$custom ? \WeakReference::create($custom) : null,'revision'=>$custom?->revision()];

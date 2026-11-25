@@ -14,7 +14,7 @@ final class JourneyPavement
 	}
 
 	/** Clip Bézier spans at the square boundary while retaining their exact curvature and elevation. */
-	public static function square(array $roads,array $origin,float $half): \Generator
+	public static function square(array $roads,array $origin,float $half,bool $outside=false): \Generator
 	{
 		$pieces=[];
 		foreach($roads as $road) {
@@ -23,7 +23,7 @@ final class JourneyPavement
 			$part=null; $left=Edits::roadHandles($points,$handles,0);
 			$banks=$road['banks'] ?? null;
 			// Keep a feathered cap outside the square so clipping doesn't fade the road inside it.
-			$margin=$road['endBlend'] ?? 0.; $touches=$margin===0.; $firstPiece=count($pieces);
+			$margin=$outside ? 0. : ($road['endBlend'] ?? 0.); $touches=$margin===0.; $firstPiece=count($pieces);
 			for($i=1;$i<count($points);$i++) {
 				$right=Edits::roadHandles($points,$handles,$i);
 				$a=$points[$i-1]; $d=$points[$i];
@@ -31,7 +31,14 @@ final class JourneyPavement
 				$c=array_map(static fn($v,$h)=>$v+$h,$d,$right['in']);
 				$left=$right; $curve=[$a,$b,$c,$d];
 				if(!$touches && self::inside($curve,$half)) $touches=true;
-				foreach(self::inside($curve,$half+$margin) as [$t0,$t1]) {
+				$ranges=self::inside($curve,$half+$margin);
+				if($outside) {
+					$gaps=[]; $at=0.;
+					foreach($ranges as [$lo,$hi]) { if($lo>$at) $gaps[]=[$at,$lo]; $at=$hi; }
+					if($at<1.) $gaps[]=[$at,1.];
+					$ranges=$gaps;
+				}
+				foreach($ranges as [$t0,$t1]) {
 					[$p,$q,$r,$s]=self::portion($curve,$t0,$t1);
 					if(hypot($s[0]-$p[0],$s[2]-$p[2])<.001) continue;
 					if($part===null || end($part['points'])!==$p) {
@@ -57,7 +64,7 @@ final class JourneyPavement
 		return array_map(static fn($v,$w)=>$v+($w-$v)*$t,$a,$b);
 	}
 
-	private static function split(array $curve,float $t): array
+	public static function split(array $curve,float $t): array
 	{
 		[$a,$b,$c,$d]=$curve;
 		$ab=self::mix($a,$b,$t); $bc=self::mix($b,$c,$t); $cd=self::mix($c,$d,$t);

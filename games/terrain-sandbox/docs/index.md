@@ -198,7 +198,7 @@ G coast
 H rolling-prairie
 ```
 
-A forks toward B or C. B and C each have an exit to F, so their roads rejoin in the same River Valley landscape. From F, one highway continues to H. A row without exits is a destination where the journey ends. Add named squares to extend the drive. On A → C → F, C appears on both junction maps. You cross C once. As you drive, the game loads the prepared pavement for the next junction and carries your position and speed across the map boundary. Save files keep the network and the active stretch of highway.
+A forks toward B or C. B and C each have an exit to F, so their roads rejoin in the same River Valley landscape. When both approaches reach the same stretch of ground early, the planner moves the merge there and keeps a single highway for the rest of the stage. From F, one highway continues to H. A row without exits is a destination where the journey ends. Add named squares to extend the drive. On A → C → F, C appears on both junction maps. You cross C once. As you drive, the game loads the prepared pavement for the next junction and carries your position and speed across the map boundary. Save files keep the network and the active stretch of highway.
 
 Overhead signs mark one-quarter, one-half and three-quarters of the road through each landscape. Each mileage sign appears as a green dot on the vehicle minimap. The signs give the driving distance to the next surveyed junction, or to the end of the stage when there is no junction ahead in the surveyed road. Half a mile before a fork, a gantry carries both lane-exit signs. The backs of the mileage and exit gantries warn drivers going the wrong way. The yellow fork sign stands between the two roads, just beyond the point where their pavement separates.
 
