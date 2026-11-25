@@ -2,12 +2,14 @@
 declare(strict_types=1);
 namespace TerrainSandbox;
 
-use TerrainPhonics\{JoinedTerrain,Landscape};
+use TerrainPhonics\{Edits,JoinedTerrain,Landscape};
 
 /** Highway signs positioned by distance along the committed pavement in each journey landscape. */
 final class JourneySigns
 {
 	public const MILE = 1000. * DisplayUnits::KM_PER_MILE;
+	private const FORK_STEP = 4.;      // Spacing between cross sections of the two departing roads, in meters.
+	private const FORK_CLEARANCE = 2.; // Room for the 2.65 m sign face and a margin at both ends.
 
 	private static function node(array $point): string
 	{
@@ -34,7 +36,7 @@ final class JourneySigns
 			yield;
 		}
 
-		$sites=[];
+		$sites=$forks=[];
 		// Start a run on each entrance and each outgoing arm. Shared arrivals can feed one
 		// fork, but a fork ends the incoming run, so successive splits never multiply routes.
 		foreach($starts as $root=>$a) {
@@ -59,7 +61,11 @@ final class JourneySigns
 				return self::pose($roads[array_key_first($run)],0.);
 			};
 			if(count($next)>1) {
-				$sites['fork:'.$b]=['kind'=>'fork']+$at($length);
+				if(count($next)===2 && !isset($forks[$b])) {
+					$forks[$b]=true;
+					$post=yield from self::forkPost($land,$roads,$next,$ends,$outgoing,$at($length));
+					if($post!==null) $sites['fork:'.$b]=$post;
+				}
 				$pose=$at(max(0.,$length-self::MILE));
 				$sites['exits:'.self::node($pose['position'])]=['kind'=>'exits']+$pose;
 			}
@@ -90,6 +96,73 @@ final class JourneySigns
 			yield;
 		}
 		return array_values($sites);
+	}
+
+	/** A single outgoing road continues the same arm, including across a join from an unrelated side road. */
+	private static function forkArm(int $id,array $roads,array $ends,array $outgoing): array
+	{
+		$arm=[];
+		while(!isset($arm[$id])) {
+			$arm[$id]=$roads[$id];
+			$next=$outgoing[$ends[$id]] ?? [];
+			if(count($next)!==1) break;
+			$id=$next[0];
+		}
+		return $arm;
+	}
+
+	/** Walk equal driving distances independent of editable road chunk lengths. */
+	private static function armStations(array $arm): \Generator
+	{
+		$distance=self::FORK_STEP;
+		foreach($arm as $road) {
+			$stations=$road['_road']['stations'];
+			$length=$stations[array_key_last($stations)];
+			for(;$distance<$length;$distance+=self::FORK_STEP) yield self::pose($road,$distance);
+			$distance-=$length;
+		}
+	}
+
+	/** Put the post in the first open median large enough for the sign, centered between the two inside edges. */
+	private static function forkPost(Landscape $land,array $roads,array $arms,array $ends,array $outgoing,array $approach): \Generator
+	{
+		$leftRoads=self::forkArm($arms[0],$roads,$ends,$outgoing);
+		$rightRoads=self::forkArm($arms[1],$roads,$ends,$outgoing);
+		// A shared continuation is beyond the rejoin, even if one branch travels farther to reach it.
+		$left=self::armStations(array_diff_key($leftRoads,$rightRoads));
+		$right=self::armStations(array_diff_key($rightRoads,$leftRoads));
+		[$tx,$tz]=$approach['heading'];
+		for($i=0;$left->valid() && $right->valid();$left->next(),$right->next(),$i++) {
+			if(($i&15)===0) yield;
+			$a=$left->current(); $b=$right->current();
+			[$ax,,$az]=$a['position']; [$bx,,$bz]=$b['position'];
+			$dx=$bx-$ax; $dz=$bz-$az; $span=hypot($dx,$dz);
+			if($span<=.5*($a['width']+$b['width'])+2*self::FORK_CLEARANCE) continue;
+
+			// Start in the gap between these centerlines, accounting for different pavement widths.
+			$mid=.5+($a['width']-$b['width'])/(4.*$span);
+			if(Edits::onRoad($ax+$mid*$dx,$az+$mid*$dz,$roads)) continue;
+			// Find the two actual asphalt edges along this cross section, including curves, caps and adjacent edits.
+			$edges=[];
+			foreach([0.,1.] as $paved) {
+				$bare=$mid;
+				while(abs($paved-$bare)*$span>.10) {
+					$t=.5*($paved+$bare);
+					if(Edits::onRoad($ax+$t*$dx,$az+$t*$dz,$roads)) $paved=$t;
+					else $bare=$t;
+				}
+				$edges[]=$bare;
+			}
+			if(($edges[1]-$edges[0])*$span<2*self::FORK_CLEARANCE) continue;
+			$t=.5*($edges[0]+$edges[1]);
+			$x=$ax+$t*$dx; $z=$az+$t*$dz;
+			// The sign faces arriving traffic even when the two branches depart at unequal angles.
+			foreach([-self::FORK_CLEARANCE,0.,self::FORK_CLEARANCE] as $across)
+				if(Edits::onRoad($x-$tz*$across,$z+$tx*$across,$roads)) continue 2;
+			$approach['position']=[$x,$land->height($x,$z),$z];
+			return ['kind'=>'fork']+$approach;
+		}
+		return null;
 	}
 
 	private static function append(?array &$ranges,float $from,float $to): void

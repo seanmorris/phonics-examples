@@ -34,6 +34,7 @@ const junction=mileage(['TO NEXT','JUNCTION'],4), stage=mileage(['TO STAGE','END
 const left=paste(render(await read('left-lane-exit-sign.svg'),500),4,245);
 const right=paste(render(await read('right-lane-exit-sign.svg'),500),516,245);
 const fork=paste(render(await read('fork-sign.svg'),224),4,536);
+const wrongWay=paste(render(await read('wrong-way-sign.svg'),256),764,536);
 
 let cursor=240;
 const glyphY=548, glyphHeight=64;
@@ -42,7 +43,7 @@ const glyphY=548, glyphHeight=64;
 const green=atlas.subarray(4*(18*width+220),4*(18*width+220)+3);
 const backing=Buffer.from([...green,255]);
 for(let y=glyphY-8;y<glyphY+glyphHeight+8;y++)
-	atlas.fill(backing,4*(y*width+232),4*((y+1)*width));
+	atlas.fill(backing,4*(y*width+232),4*(y*width+wrongWay[0]-6));
 for(const value of [...'0123456789.','MILE','MILES']) {
 	const image=render('<svg xmlns="http://www.w3.org/2000/svg" width="170" height="64"><text x="3" y="48" font-family="Highway Gothic" font-size="48" fill="#f9f9f9">'+value+'</text></svg>');
 	const pixels=image.pixels;
@@ -51,12 +52,13 @@ for(const value of [...'0123456789.','MILE','MILES']) {
 		if(pixels[4*(y*image.width+x)+3]) { l=Math.min(l,x); r=Math.max(r,x); }
 	if(r<l) throw Error('Missing Highway Gothic glyph '+value);
 	const w=r-l+3;
+	if(cursor+w>wrongWay[0]-6) throw Error('Mileage lettering exceeds its atlas strip');
 	for(let row=0;row<glyphHeight;row++) for(let col=0;col<w;col++) {
 		const a=pixels[4*(row*image.width+l-1+col)+3]/255;
 		const offset=4*((glyphY+row)*width+cursor+col);
 		for(let c=0;c<3;c++) atlas[offset+c]=Math.round(green[c]+a*(249-green[c]));
 	}
-	glyphs[value]=[cursor,w]; cursor+=w+8;
+	glyphs[value]=[cursor,w]; cursor+=w+5;
 }
 
 function vertex(p,n,uv,part) {
@@ -75,9 +77,16 @@ function quad(corners,normal,rect,part) {
 	const [a,b,c,d]=corners.map((p,i)=>vertex(p,normal,uv[i],part));
 	indices.push(a,b,c,a,c,d);
 }
-function panel(rect,mid,bottom,w,part=tag.face,z=-.56) {
+function panel(rect,mid,bottom,w,z=-.56,normalZ=-1) {
 	const h=w*rect[3]/rect[2];
-	quad([[mid-w/2,bottom,z],[mid+w/2,bottom,z],[mid+w/2,bottom+h,z],[mid-w/2,bottom+h,z]],[0,0,-1],rect,part);
+	// Left and right are as seen by a driver facing this side of the gantry.
+	const left=mid+normalZ*w/2, right=mid-normalZ*w/2;
+	quad([[left,bottom,z],[right,bottom,z],[right,bottom+h,z],[left,bottom+h,z]],[0,0,normalZ],rect,tag.face);
+}
+function gantryPanel(rect,mid,w) {
+	const bottom=4.85, h=w*rect[3]/rect[2], rearHeight=.90*h;
+	panel(rect,mid,bottom,w);
+	panel(wrongWay,mid,bottom+(h-rearHeight)/2,rearHeight*wrongWay[2]/wrongWay[3],.56,1);
 }
 function range(kind,build) {
 	const start=indices.length; build(); ranges[kind]=[start,indices.length-start];
@@ -104,7 +113,7 @@ for(let i=0;i<gate.readUInt32LE(4);i+=3) {
 
 function mileageMesh(rect) {
 	indices.push(...bracket);
-	panel(rect,0,4.85,10.5);
+	gantryPanel(rect,0,10.5);
 	// One quad per printed token. The instance supplies the number and singular/plural unit.
 	for(let i=0;i<8;i++) quad([[0,0,-.575],[1,0,-.575],[1,1,-.575],[0,1,-.575]],[0,0,-1],[0,0,1,1],tag.digit+i);
 }
@@ -112,8 +121,8 @@ range('junction',()=>mileageMesh(junction));
 range('stage',()=>mileageMesh(stage));
 range('exits',()=>{
 	indices.push(...bracket);
-	panel(left,-4.08,4.85,7.8);
-	panel(right,4.08,4.85,7.8);
+	gantryPanel(left,-4.08,7.8);
+	gantryPanel(right,4.08,7.8);
 });
 range('fork',()=>{
 	const r=.095,z=.04,b=-1.4,t=3.35,none=[0,0,1,1];
@@ -121,7 +130,7 @@ range('fork',()=>{
 	quad([[r,b,z+r],[-r,b,z+r],[-r,t,z+r],[r,t,z+r]],[0,0,1],none,tag.hardware);
 	quad([[-r,b,z+r],[-r,b,z-r],[-r,t,z-r],[-r,t,z+r]],[-1,0,0],none,tag.hardware);
 	quad([[r,b,z-r],[r,b,z+r],[r,t,z+r],[r,t,z-r]],[1,0,0],none,tag.hardware);
-	panel(fork,0,1.60,2.65,tag.face,-.085);
+	panel(fork,0,1.60,2.65,-.085);
 });
 
 const header=Buffer.alloc(16), indexBytes=Buffer.alloc(2*indices.length);

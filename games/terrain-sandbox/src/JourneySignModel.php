@@ -90,7 +90,7 @@ final class JourneySignModel
 			}
 			[$tx,$tz]=$site['heading']; $span=$site['width']+2.; $kind=$site['kind'];
 			if(!isset($site['feet'])) {
-				$ground=$this->land->height($x,$z);
+				$ground=$kind==='fork' ? $y : $this->land->height($x,$z);
 				$offset=$span*.5+.4;
 				$this->sites[$i]['ground']=$ground;
 				$this->sites[$i]['feet']=$kind==='fork' ? [0.,0.] : [

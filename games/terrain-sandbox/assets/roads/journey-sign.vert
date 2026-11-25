@@ -44,8 +44,8 @@ void main() {
 	vec2 dir=right*normal.x+tangent*normal.z;
 	vec3 n=vec3(dir.x,normal.y,dir.y);
 	brightness=mix(.10,.71+.29*max(dot(n,sun),0.),day);
-	front=dot(eye.xz-foot.xz,-tangent);
+	front=dot(n,-relative);
 	retro=0.;
 	if(part==5 || part>=16)
-		retro=retroreflection(foot+vec3(0.,p.y,0.),eye,vec3(-tangent.x,0.,-tangent.y),sun,day);
+		retro=retroreflection(foot+vec3(offset.x,p.y,offset.y),eye,n,sun,day);
 }

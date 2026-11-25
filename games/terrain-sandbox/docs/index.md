@@ -192,7 +192,7 @@ H rolling-prairie
 
 A forks toward B or C. B and C each have an exit to F, so their roads rejoin in the same River Valley landscape. From F, one highway continues to H. A row without exits is a destination where the journey ends. Add named squares to extend the drive. On A → C → F, C appears on both junction maps. You cross C once. The next junction is surveyed ahead of the car, and the map change preserves your position and speed. Save files keep the network and the active stretch of highway.
 
-Overhead signs mark one-quarter, one-half and three-quarters of the road through each landscape. They give the driving distance to the next surveyed junction, or to the end of the stage when there is no junction ahead in the surveyed road. One mile before a fork, a gantry carries both lane-exit signs. A yellow fork sign marks the split.
+Overhead signs mark one-quarter, one-half and three-quarters of the road through each landscape. They give the driving distance to the next surveyed junction, or to the end of the stage when there is no junction ahead in the surveyed road. One mile before a fork, a gantry carries both lane-exit signs. The backs of the mileage and exit gantries warn drivers going the wrong way. The yellow fork sign stands between the two roads, just beyond the point where their pavement separates.
 
 Return to free flight to reshape the highway with the road editor. Edits to a shared endpoint move the adjoining roads together. Use **Landscape → Save file** to keep the terrain, roads and forks together.
 

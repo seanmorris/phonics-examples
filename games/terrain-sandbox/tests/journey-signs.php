@@ -3,7 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
 
-use TerrainPhonics\{JoinedTerrain,Landscape};
+use TerrainPhonics\{Edits,JoinedTerrain,Landscape};
 use TerrainSandbox\{JourneySignModel,JourneySigns};
 
 function expectSign(bool $test, string $why): void { if(!$test) throw new RuntimeException($why); }
@@ -14,6 +14,12 @@ function layout(Landscape $land,bool $stage=false): array
 	return $work->getReturn();
 }
 function distance(array $a,array $b): float { return hypot(hypot($a[0]-$b[0],$a[2]-$b[2]),$a[1]-$b[1]); }
+// Signed planar distance to a straight arm, positive on its right in world XZ.
+function lateral(array $p,array $a,array $b): float
+{
+	$dx=$b[0]-$a[0]; $dz=$b[2]-$a[2];
+	return ($dx*($p[2]-$a[2])-$dz*($p[0]-$a[0]))/hypot($dx,$dz);
+}
 function road(Landscape $land,array $a,array $b,float $width=28.): void
 {
 	$land->queue(['type'=>'road','width'=>$width,'stationSpacing'=>8.,'shoulder'=>4.,'points'=>[$a,$b]]);
@@ -54,7 +60,12 @@ foreach([$west,$north,$south] as $i=>$square) {
 	}
 }
 $exits=kinds($signs,'exits')[0]; $fork=kinds($signs,'fork')[0];
-expectSign(distance($fork['position'],$split)<.001 && $fork['heading'][1]<0,'The single post faces traffic at the surveyed split.');
+$p=$fork['position'];
+$fromLeft=lateral($p,$split,$detour)-14.; $fromRight=-lateral($p,$split,$s)-14.;
+expectSign(min($fromLeft,$fromRight)>1.3 && max($fromLeft,$fromRight)<3.2 && abs($fromLeft-$fromRight)<.1,
+	'The fork sign fits near the tip of the unpaved median, centered between both inside edges.');
+expectSign(!Edits::onRoad($p[0],$p[2],$land->roads()) && $p[1]===$land->height($p[0],$p[2]) && $fork['heading'][1]<0,
+	'The single post meets the ground between the branches and faces approaching traffic.');
 expectSign(abs(distance($exits['position'],$bend)+distance($bend,$split)-JourneySigns::MILE)<.05
 	&& $exits['heading'][1]>0 && $exits['width']===34.,'The warning is a driven mile upstream, with the width and heading of that section.');
 expectSign(distance($exits['position'],$split)<JourneySigns::MILE-500.,'The warning does not use a one-mile radius.');
@@ -72,6 +83,37 @@ $restored->close();
 $land->undo(); $cache->update($land);
 expectSign($cache->count===0,'Undo clears obsolete signs from the renderer before the next draw.');
 $cache->close(); $land->close(); $visible->close();
+
+// The narrow arm is on the left. Both first records end while the asphalt still overlaps.
+$staggered=new Landscape($form+['worldSize'=>1024]);
+$joint=[0.,0.,0.]; $left=[320.,0.,-160.]; $right=[320.,0.,160.];
+road($staggered,[-300.,0.,0.],$joint);
+road($staggered,$joint,[8.,0.,4.],34.);
+road($staggered,[6.,0.,-3.],$left,12.);
+road($staggered,$joint,[6.,0.,-3.],12.);
+road($staggered,[8.,0.,4.],$right,34.);
+// An unrelated approach ends at this short section. The original two arms still open into one median.
+road($staggered,[-150.,0.,70.],[8.,0.,4.],8.);
+$staggered->commit();
+$post=kinds(layout($staggered,true),'fork')[0];
+$p=$post['position'];
+$leftGap=lateral($p,$joint,$left)-6.; $rightGap=-lateral($p,$joint,$right)-17.;
+expectSign($p[2]<-5. && min($leftGap,$rightGap)>1.3 && abs($leftGap-$rightGap)<.12,
+	'Unequal widths move the post toward the narrower arm, across editable road chunks.');
+foreach([-1.325,0.,1.325] as $width)
+	expectSign(!Edits::onRoad($p[0],$p[2]+$width,$staggered->roads()),'The whole fork sign clears the pavement.');
+$staggered->close();
+
+$short=new Landscape($form+['worldSize'=>1024]);
+road($short,[-300.,0.,0.],$joint);
+foreach([-2.,2.] as $side) {
+	road($short,$joint,[40.,0.,$side]); road($short,[40.,0.,$side],[80.,0.,0.]);
+}
+road($short,[80.,0.,0.],[200.,0.,0.]); $short->commit();
+$signs=layout($short,true);
+expectSign(!kinds($signs,'fork') && count(kinds($signs,'exits'))===1,
+	'Overlapping arms that rejoin without opening a median keep their overhead warning and get no post on the asphalt.');
+$short->close();
 
 $terminal=new Landscape($form+['worldSize'=>16384]);
 $gore=[3000.,100.,0.]; $finish=[8192.,100.,0.];
