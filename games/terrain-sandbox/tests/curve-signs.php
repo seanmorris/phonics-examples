@@ -190,18 +190,49 @@ $group=function(array $placements,bool $closed=false) {
 	foreach($placements as [$at,$symbol]) $sites[]=['at'=>$at,'slack'=>INF,'lead'=>120.,'symbol'=>$symbol,'pose'=>[$at,0.,1.,0.]];
 	$job=(function() use($sites,$closed) {
 		$this->closed=$closed; $this->length=500.;
-		return $this->sharedPoles($sites);
+		$feet=[];
+		return $this->sharedPoles($sites,1,[],$feet);
 	})->call($path);
 	return array_values(array_filter(iterator_to_array($job,false)));
 };
 $hundred=100*\TerrainSandbox\DisplayUnits::FOOT;
-$poles=$group([[0.,2],[0.,2],[$hundred,-3],[2*$hundred,7]]);
-check(count($poles)===2 && array_slice($poles[0],4)===[2,-3] && $poles[1][4]===7,
+$poles=$group([[0.,2],[0.,2],[$hundred,RoadWarnings::HILL],[2*$hundred,RoadWarnings::DIP]]);
+check(count($poles)===2 && array_slice($poles[0],4)===[2,RoadWarnings::HILL] && $poles[1][4]===RoadWarnings::DIP,
 	'Include exactly 100 feet, omit duplicate artwork and keep a distant third sign at its own site.');
 check(count($group([[0.,2],[$hundred+.001,7]]))===2,'Just beyond 100 feet gets two poles.');
 $poles=$group([[5.,7],[475.,-2]],true);
 check(count($poles)===1 && $poles[0][0]===475. && array_slice($poles[0],4)===[-2,7],
 	'Across a lap seam the first hazard stays on top at the upstream pole.');
+// With a compatible panel between the turn requests, the group must still remember its first turn.
+$turns=[RoadWarnings::CURVE,-RoadWarnings::CURVE,RoadWarnings::HAIRPIN,-RoadWarnings::HAIRPIN,
+	RoadWarnings::SWERVE,-RoadWarnings::SWERVE,RoadWarnings::KINK,-RoadWarnings::KINK];
+foreach($turns as $firstTurn) foreach($turns as $nextTurn) {
+	$poles=$group([[0.,$firstTurn],[4.,RoadWarnings::HILL],[12.,$nextTurn]]);
+	check(array_slice($poles[0],4)===[$firstTurn,RoadWarnings::HILL],'The compatible hill stays with the first turn.');
+	if($firstTurn===$nextTurn) check(count($poles)===1,'Identical arrows share one face.');
+	else check(count($poles)===2 && array_slice($poles[1],4)===[$nextTurn],'A different turn arrow requires its own post.');
+}
+$poles=$group([[5.,RoadWarnings::KINK],[475.,-RoadWarnings::SWERVE]],true);
+check(count($poles)===2 && $poles[0][0]===475. && $poles[1][0]===5.,'Conflicting turns spanning the lap line keep their own posts.');
+
+// Equal-radius fork arms request opposing arrows at exactly the same station on the incoming road.
+$symmetric=new Landscape(['worldSize'=>2048]);
+$symmetric->queue(pavement([0.,0.,-450.],[0.,0.,0.]));
+foreach([-1,1] as $turn) $symmetric->queue(bend(45.,$turn));
+$symmetric->commit();
+$poles=array_values(array_filter(iterator_to_array(RoadWarnings::sites($symmetric),false)));
+check(count($poles)===2 && count($poles[0])===5 && count($poles[1])===5 && $poles[0][4]===-$poles[1][4],
+	'Both opposing turns at a fork have dedicated sign faces.');
+check(hypot($poles[0][0]-$poles[1][0],$poles[0][1]-$poles[1][1])>5.3,
+	'Coincident turn warnings get visibly separate footings at the fork.');
+foreach($poles as [$x,,,$tz,$arrow]) check($x*$arrow<0. && $tz>.99,'The two fork warnings face the driver from their respective shoulders.');
+// Only the right shoulder remains available for these warnings.
+$symmetric->queue(pavement([8.5,0.,-190.],[8.5,0.,-60.]));
+$symmetric->commit();
+$poles=array_values(array_filter(iterator_to_array(RoadWarnings::sites($symmetric),false)));
+check(count($poles)===2 && $poles[0][0]<0. && $poles[1][0]<0. && abs($poles[0][1]-$poles[1][1])>5.3,
+	'An occupied shoulder moves one warning along the pavement so both signs are visible.');
+$symmetric->close();
 // Only one incoming road has a turn before the merge. Delay its next turn warning on that arm alone.
 $junction=new Landscape(['worldSize'=>2048]);
 $exit=[-125.,0.,45.]; $join=[-100.,0.,45.];

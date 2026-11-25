@@ -10,6 +10,7 @@ final class RoadWarnings
 	public const CURVE=2, HAIRPIN=3, SWERVE=4, KINK=5, MERGE=6, HILL=7, DIP=8;
 	public const LEAD=400*DisplayUnits::FOOT;
 	private const POLE_SPACING=100*DisplayUnits::FOOT;
+	private const FACE_WIDTH=5.30; // Keep separate turn diamonds clear of one another.
 	private const PAIR_DISTANCE=200*DisplayUnits::FOOT;
 	private const STEP=6.; // Survey interval in meters; vertical grades use a two-interval wheel path on either side.
 	private array $sections=[], $starts=[], $features=[], $posts=[];
@@ -117,6 +118,7 @@ final class RoadWarnings
 		}
 		foreach($paths as $path) foreach($path->features as $travel=>$families) foreach($families as $family=>$features)
 			foreach($features as $i=>[$start,,$symbol]) yield from $path->schedule($start,$travel,$family,$i,$symbol,$incoming);
+		$turnPosts=[];
 		foreach($paths as $path) {
 			$approaches=[];
 			foreach($path->posts as [$hazard,$at,$travel,$symbol,$minimum]) {
@@ -124,7 +126,7 @@ final class RoadWarnings
 				if($placed!==null) $approaches[$travel][]=$placed;
 				yield null;
 			}
-			foreach($approaches as $approach) yield from $path->sharedPoles($approach);
+			foreach($approaches as $travel=>$approach) yield from $path->sharedPoles($approach,$travel,$roads,$turnPosts);
 		}
 	}
 
@@ -250,17 +252,14 @@ final class RoadWarnings
 			}
 			if($previous>=0) {
 				[$priorStart,$end,$prior]=$features[$previous]; $end+=$offset;
-				if($at<=$end+self::STEP) {
-					if($prior===$symbol) {
-						// A lap made entirely of overlapping identical warnings still needs its first sign.
-						$covered=$path->closed || $priorStart>=self::LEAD || isset($incoming[$path->entrance]);
-						if($covered && !($offset<0. && $path->oneCluster($features))) continue;
-					}
-					elseif($family==='turn') {
-						// Give the first turn its own sign until the driver clears the entire bend.
-						$minimum=$end+max(.1,min(self::STEP,.5*($hazard-$end)));
-						$at=max($at,$minimum);
-					}
+				if($prior!==$symbol && $family==='turn') {
+					// Even if the pole must move to find a clear shoulder, keep it past the previous bend.
+					$minimum=$end+max(.1,min(self::STEP,.5*($hazard-$end)));
+					$at=max($at,$minimum);
+				} elseif($prior===$symbol && $at<=$end+self::STEP) {
+					// A lap made entirely of overlapping identical warnings still needs its first sign.
+					$covered=$path->closed || $priorStart>=self::LEAD || isset($incoming[$path->entrance]);
+					if($covered && !($offset<0. && $path->oneCluster($features))) continue;
 				}
 			}
 			if($travel>0 && !$path->closed && $at<0. && isset($incoming[$path->entrance])) {
@@ -291,9 +290,10 @@ final class RoadWarnings
 	}
 
 	/** Combine actual shoulder sites on one approach. Distances and sign order follow the pavement. */
-	private function sharedPoles(array $sites): \Generator
+	private function sharedPoles(array $sites,int $travel,array $roads,array &$turnPosts): \Generator
 	{
-		usort($sites,static fn($a,$b)=>$a['at']<=>$b['at']);
+		// At a symmetric fork, give the right-hand arrow first choice of the right shoulder.
+		usort($sites,static fn($a,$b)=>($a['at']<=>$b['at']) ?: ($a['lead']<=>$b['lead']) ?: ($b['symbol']<=>$a['symbol']));
 		if($this->closed && count($sites)>1) {
 			// Cut the circular list at its widest gap so a lap line cannot separate a pair.
 			$cut=0; $widest=$sites[0]['at']+$this->length-end($sites)['at'];
@@ -306,39 +306,75 @@ final class RoadWarnings
 			$sites=[...array_slice($sites,$cut),...$wrapped];
 		}
 
-		$symbols=[];
+		$symbols=[]; $turn=null; $minimum=-INF;
 		foreach($sites as $i=>$site) {
 			if(($i&31)===0) yield null;
 			$at=$site['at'];
 			$earliest=$at-$site['slack']; // Earliest legal position after a preceding, conflicting turn.
-			if($symbols && ($at-$first>self::POLE_SPACING+1.e-6 || ($earliest>$anchor['at'] && $at>=min($symbols)))) {
-				asort($symbols,SORT_NUMERIC);
-				yield [...$anchor['pose'],...array_keys($symbols)];
-				$symbols=[];
+			$symbol=$site['symbol']; $isTurn=abs($symbol)<=self::KINK;
+			$conflict=$isTurn && $turn!==null && $turn!==$symbol;
+			if($symbols && ($conflict || $at-$first>self::POLE_SPACING+1.e-6 || ($earliest>$anchor['at'] && $at>=min($symbols)))) {
+				yield $this->mount($anchor,$symbols,$turn,$minimum,$travel,$roads,$turnPosts);
+				$symbols=[]; $turn=null; $minimum=-INF;
 			}
 			if(!$symbols) { $first=$at; $anchor=$site; }
 			elseif($earliest>$anchor['at']) $anchor=$site;
-			$symbol=$site['symbol'];
+			if($isTurn) $turn=$symbol;
+			$minimum=max($minimum,$earliest);
 			$symbols[$symbol]=min($symbols[$symbol] ?? INF,$at+$site['lead']);
 		}
-		if($symbols) {
-			asort($symbols,SORT_NUMERIC);
-			yield [...$anchor['pose'],...array_keys($symbols)];
+		if($symbols) yield $this->mount($anchor,$symbols,$turn,$minimum,$travel,$roads,$turnPosts);
+	}
+
+	/** Separate even coincident requests on the common approach to a fork. */
+	private function mount(array $anchor,array $symbols,?int $turn,float $minimum,int $travel,array $roads,array &$turnPosts): ?array
+	{
+		$pose=$anchor['pose'];
+		if($turn!==null) {
+			if(!self::clearFooting($pose[0],$pose[1],$turn,$turnPosts)) {
+				$site=$this->post($anchor['at'],$travel,$turn,$minimum,min($symbols),$roads,$turnPosts);
+				if($site===null) return null;
+				$pose=$site['pose'];
+			}
+			[$x,$z]=$pose;
+			// Index the footprint in every cell it touches so a placement only queries one cell.
+			$left=(int)floor(($x-self::FACE_WIDTH)/self::POLE_SPACING);
+			$right=(int)floor(($x+self::FACE_WIDTH)/self::POLE_SPACING);
+			$near=(int)floor(($z-self::FACE_WIDTH)/self::POLE_SPACING);
+			$far=(int)floor(($z+self::FACE_WIDTH)/self::POLE_SPACING);
+			for($col=$left;$col<=$right;$col++) for($row=$near;$row<=$far;$row++) {
+				$turnPosts[$col][$row][]=[$x,$z,$turn];
+			}
 		}
+		asort($symbols,SORT_NUMERIC);
+		return [...$pose,...array_keys($symbols)];
+	}
+
+	private static function clearFooting(float $x,float $z,int $turn,array $turnPosts): bool
+	{
+		foreach($turnPosts[(int)floor($x/self::POLE_SPACING)][(int)floor($z/self::POLE_SPACING)] ?? [] as [$px,$pz,$other])
+			if($other!==$turn && hypot($x-$px,$z-$pz)<self::FACE_WIDTH) return false;
+		return true;
 	}
 
 	/** Put a driver-facing diamond on the right shoulder. Try the other shoulder if the intersection covers it. */
-	private function post(float $station,int $travel,int $symbol,float $minimum,float $hazard,array $roads): ?array
+	private function post(float $station,int $travel,int $symbol,float $minimum,float $hazard,array $roads,array $turnPosts=[]): ?array
 	{
-		foreach([0.,-5.,5.,-10.,10.] as $shift) {
+		$shifts=[0.,-5.,5.,-10.,10.];
+		if($turnPosts) {
+			for($distance=15.;$distance<=self::POLE_SPACING;$distance+=5.) {
+				$shifts[]=-$distance; $shifts[]=$distance;
+			}
+		}
+		foreach($shifts as $shift) {
 			$along=$station+$shift;
-			if($along<$minimum) continue;
+			if($along<$minimum || ($turnPosts && $along>$hazard)) continue;
 			if(!$this->closed && ($along<-.01 || $along>$this->length+.01)) continue;
 			$at=$travel<0 ? $this->length-$along : $along;
 			$p=$this->pose($at); [$x,,$z]=$p['position']; [$tx,$tz]=$p['heading']; $tx*=$travel; $tz*=$travel;
 			foreach([1,-1] as $shoulder) {
 				$offset=$shoulder*($p['width']/2.+2.5); $sx=$x-$tz*$offset; $sz=$z+$tx*$offset;
-				if(Edits::onRoad($sx,$sz,$roads)) continue;
+				if(($turnPosts && !self::clearFooting($sx,$sz,$symbol,$turnPosts)) || Edits::onRoad($sx,$sz,$roads)) continue;
 				$wrapped=$this->closed ? fmod(fmod($along,$this->length)+$this->length,$this->length) : $along;
 				return ['at'=>$wrapped,'lead'=>$hazard-$along,'slack'=>$along-$minimum,
 					'pose'=>[$sx,$sz,$tx,$tz],'symbol'=>$symbol];
