@@ -783,7 +783,7 @@ final class Session
 		{
 			$before = $this->car->state();
 			$this->chase->look = $this->lookAngle();
-			[$pedal,$steer,$handbrake,$boost] = $this->journeyDriver?->controls($before)
+			[$pedal,$steer,$handbrake,$boost] = $this->journeyDriver?->controls($before,$seconds)
 				?? $this->driver?->controls($before,$seconds,$this->race->state === 'finished') ?? [
 				$this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
 				$this->blend('KeyA', 'KeyD', $this->pad['x']),
@@ -1069,6 +1069,8 @@ final class Session
 	private function guardRace(): void
 	{
 		if($this->journeyDriver && ($this->mode!=='car' || $this->course->count() || $this->delivery)) $this->journeyDriver=null;
+		if($this->journeyDriver && $this->journeyDriver->revision!==$this->landscape->revision())
+			$this->startJourneyDriver($this->journeyDriver->exit);
 		if($this->driver !== null && ($this->mode !== 'car' || $this->circuit !== $this->driver->circuit
 			|| $this->course !== $this->driver->course || $this->course->revision !== $this->driver->revision))
 			$this->stopDemo();

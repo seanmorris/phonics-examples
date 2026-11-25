@@ -11,7 +11,7 @@ final class CircuitDriver
 
 	private const TOP_SPEED = Car::TOP_SPEED_MPH * Car::MPS_PER_MPH;
 	private array $line, $speedLimit = [], $sight = [];
-	private array $bends = [], $nextBend = [];
+	private array $bends = [], $nextBend = [], $slideRoom = [];
 	private int $count, $segment;
 	private ?int $activeBend = null;
 	private float $spacing, $phaseTime = 0.;
@@ -38,6 +38,14 @@ final class CircuitDriver
 		$this->segment = 0;
 		$crestCount = count($crests);
 		$braking = [];
+		// Takeoff and landing can both be tens of meters from the crest at highway speed.
+		$nearCrests=[];
+		$neighbors=min(6,intdiv($crestCount,2));
+		foreach($crests as $j=>$v) {
+			$peak=$v;
+			for($n=-$neighbors;$n<=$neighbors;$n++) $peak=max($peak,$crests[($j+$crestCount+$n)%$crestCount]);
+			$nearCrests[]=$peak;
+		}
 		// A short change of heading and a sustained turn have different demands on the tires.
 		$span = max(1, (int)round(12. / $this->spacing));
 		$curvatures = [];
@@ -57,7 +65,7 @@ final class CircuitDriver
 			$this->sight[] = max(4.,min(36.,sqrt(6.*$margin/$k)));
 
 			// On a broad, brief bend the driver can rotate the tail and catch it with nitrous.
-			// A narrow road or a sustained turn needs a speed the unboosted tires can hold.
+			// Use ordinary tire grip as the baseline when the turn tightens or the pavement narrows.
 			$widthAllowance = max(0., min(1., ($halfWidth - 6.) / 6.));
 			$steadyGrip = min(9.2,7.2+.65*$margin);
 			$slideGrip = min(15.,8.+2.*$margin);
@@ -67,13 +75,23 @@ final class CircuitDriver
 			// Blend in the slide allowance as the radius tightens from about 870 m to 435 m.
 			$slideEntry = max(0., min(1., ($k - .00115) / .00115));
 			$grip = $steadyGrip + $widthAllowance * $slideEntry * ($slideGrip - $steadyGrip);
+			// On wide pavement repeated slide-and-catch inputs can redirect the car through a sustained bend.
+			$ordinaryGrip=$grip;
+			$traction=1.;
+			$sweeper=max(0.,min(1.,(.52-$turn)/.24,(.010-$k)/.004));
+			$grip += min(1.,max(0.,($halfWidth-13.)/5.))*min(1.,max(0.,($k-.0013)/.0017))*6.*$sweeper;
 			if($crestCount > 0) {
 				$sample = $i * $crestCount / $this->count;
 				$j = (int)$sample;
 				$nextCrest = $crests[($j + 1) % $crestCount];
 				$crest = $crests[$j] + ($sample - $j) * ($nextCrest - $crests[$j]);
+				// Extra cornering authority requires tire contact. Keep the original crest budget as the road falls away.
+				$vertical=$nearCrests[$j]*min(self::TOP_SPEED**2,$grip/$k);
+				$traction=max(0.,min(1.,(7.-$vertical)/4.,(.0024-$nearCrests[$j])/.0009));
+				$grip=$ordinaryGrip+($grip-$ordinaryGrip)*$traction;
 				$k += .45*$crest;
 			}
+			$this->slideRoom[]=$halfWidth>=13. && $sweeper>.50 && $traction>.25;
 			$this->speedLimit[] = min(self::TOP_SPEED, sqrt($grip/$k));
 			// Net deceleration includes tire braking and rolling drag. Leave more room on narrow entries.
 			$braking[] = 14. + 3.5*$widthAllowance;
@@ -175,6 +193,7 @@ final class CircuitDriver
 		$this->phaseTime = 0.;
 		$this->phase = 'Driving';
 		$this->serviceBraking = false;
+		$this->resetSlide();
 	}
 
 	/** Interpolate the braking envelope in distance, where speed squared varies linearly under constant braking. */
@@ -266,6 +285,7 @@ final class CircuitDriver
 		// Keep the route cursor under the car during a jump so landing resumes on the correct bend.
 		if(!$finished && $car['motion'] === 'airborne') $this->locate($car['x'],$car['z']);
 		if($finished || $car['motion'] !== 'driving' || $car['roadHold'] > 0.) {
+			$this->resetSlide();
 			$this->phase = $finished ? 'Finished' : 'Coasting';
 			$this->serviceBraking = false;
 			$this->activeBend = null;
@@ -291,9 +311,16 @@ final class CircuitDriver
 		$outgoing = self::angle(atan2($bx-$ax,$bz-$az) - $bearing);
 		$exitHeading = $bearing + max(-.30,min(.30,.70*$outgoing));
 		$noseError = self::angle($exitHeading - $car['yaw']);
+		$exitLimit = $this->limitAt($at + .18*$speed/$this->spacing);
+		$slide = $this->slideControls($car,$dt,$steer,$error,self::angle($noseError+$car['drift']),$limit,
+			$this->slideRoom[$this->segment] && $exitLimit>$speed-6.
+			&& ($this->slideSide || $this->catchingSlide || ($speed>44. && $this->phase!=='Handbraking')));
+		if($slide!==null) {
+			$this->phase=$slide[2] ? 'Handbraking' : ($slide[3] ? 'Boosting' : 'Driving');
+			return $slide;
+		}
 		$limit = $this->corner($car, $dt, $at, $limit, $error, $noseError);
 		// Feed in throttle as the bend opens during the next fraction of a second.
-		$exitLimit = $this->limitAt($at + .18*$speed/$this->spacing);
 		$limit += max(0., min(1.6, $exitLimit - $limit));
 		if($this->phase === 'Handbraking') {
 			// Turn the nose toward the exit while the rear wheels are locked, easing off as it lines up.

@@ -30,7 +30,9 @@ final class RacingLine
 				// The shoulder contributes to grading, but ends outside the asphalt half-width in mark[2].
 				$across = $offset[0]*$nx + $offset[1]*$nz;
 				$along = $offset[0]*$nz - $offset[1]*$nx;
-				$room = max(0., $mark[2] - self::CLEARANCE);
+				// A faster slide on broad pavement needs extra room for the rear tires at the apex.
+				$driftMargin=max(0.,min(1.,($mark[2]-10.)/6.));
+				$room = max(0., $mark[2] - self::CLEARANCE - $driftMargin);
 				$half = sqrt(max(0., $room*$room - $along*$along));
 				$low = -$across-$half; $high = -$across+$half;
 				// A car holding one heading needs less side clearance than one sliding into a bend.
@@ -85,6 +87,11 @@ final class RacingLine
 					[$px,$pz] = $points[($i+$count-2*$span)%$count]; [$qx,$qz] = $points[($i+2*$span)%$count];
 					// The fourth difference vanishes on a locally smooth line.
 					$dx = (4*($ax+$bx)-$px-$qx)/6 - $x; $dz = (4*($az+$bz)-$pz-$qz)/6 - $z;
+					// On wide roads also shorten the path toward the chord. Keep the bend-smoothing
+					// term dominant so the entry and exit have room to open up.
+					$cut=.06*max(0.,min(1.,($high-$low-14.)/12.));
+					$dx += $cut*(($ax+$bx)*.5-$x);
+					$dz += $cut*(($az+$bz)*.5-$z);
 					$lateral = (($x-$cx)+.48*$dx)*$nx + (($z-$cz)+.48*$dz)*$nz;
 					$lateral = max($low,min($high,$lateral));
 					$next[] = [$cx+$lateral*$nx,$cz+$lateral*$nz];

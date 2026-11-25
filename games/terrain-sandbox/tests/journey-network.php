@@ -48,13 +48,19 @@ $highway->commit();
 $car=new Car;
 $car->spawn($car->checkedSite($highway,-10.,$x,-3480.,0.,[]),$highway,-10.);
 $driver=JourneyDriver::board($highway,$car->state(),0);
-$peak=$entrySpeed=0.; $launchBoost=$braked=$exitBoost=false;
+$peak=$entrySpeed=$insideCut=0.; $handAt=-100;
+$launchBoost=$braked=$exitBoost=$caughtSlide=false;
 for($i=0;$i<12000 && !$driver->arrived;$i++) {
 	$p=$car->state();
 	[$pedal,$steer,$handbrake,$boost]=$driver->controls($p);
 	networkCheck($car->step(1/60,$pedal,$steer,$highway,-10.,$handbrake,[],$boost),'Highway remains drivable.');
 	$q=$car->state();
 	$burned=$q['nitrous']<$p['nitrous'];
+	networkCheck(!($handbrake && $boost),'Release the rear tires before catching the slide.');
+	if($handbrake && $p['speed']>24.) $handAt=$i;
+	if($i-$handAt<20 && $burned && abs($p['drift'])>.025) $caughtSlide=true;
+	if($q['x']>$x && $q['x']<$x+$radius && $q['z']>0. && $q['z']<$radius)
+		$insideCut=max($insideCut,$radius-hypot($q['x']-($x+$radius),$q['z']));
 	if($p['z']<0.) {
 		$peak=max($peak,$q['speed']);
 		$launchBoost=$launchBoost || $burned;
@@ -65,7 +71,9 @@ for($i=0;$i<12000 && !$driver->arrived;$i++) {
 	if($i%30===0) networkCheck(Car::onPavement($highway,$q['x'],$q['z']),'The racing line stays on the pavement.');
 }
 networkCheck($launchBoost && $peak>235.*Car::MPS_PER_MPH,'The CPU spends nitrous and approaches top speed on a clear straight.');
-networkCheck($braked && $entrySpeed>0. && $entrySpeed<35.,'The CPU releases boost and brakes before a tight bend.');
+networkCheck($braked && $entrySpeed>0. && $entrySpeed<45.,'The CPU releases boost and brakes before a tight bend.');
+networkCheck($caughtSlide && $insideCut>3. && $insideCut<$pavement['width']/2.,
+	'Use the inside pavement and catch a high-speed handbrake slide with real nitrous.');
 networkCheck($exitBoost && $driver->arrived && abs($q['x']-($edge-25.))<5.,
 	'The CPU spends recharged nitrous after the bend and parks at the destination.');
 $highway->close();

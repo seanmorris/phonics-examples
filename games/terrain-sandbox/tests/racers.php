@@ -227,6 +227,36 @@ check($pedal === 1. && $boost, 'Keep accelerating into a sweeper while tire grip
 check($pedal < 0. && !$handbrake && !$boost, 'Brake for sustained lateral load on a broad high-speed curve.');
 $table->close();
 
+// A continuous sweeper has no distinct exit apex. The driver can rotate and catch the car repeatedly.
+$table=new Session(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-12]);
+$ring=[];
+for($i=0;$i<96;$i++) {
+	$angle=2.*M_PI*$i/96;
+	$ring[]=[285.*cos($angle),0.,285.*sin($angle)];
+}
+$table->landscape->queue(CircuitRoad::closeLoop(['type'=>'road','width'=>36.,'shoulder'=>10.,'points'=>$ring]));
+$table->landscape->commit();
+$loop=CircuitRoad::manualCircuit($table->landscape,0,-12.);
+$file=json_decode($table->save(),true);
+$file['course']=$loop->course($table->landscape,$table->gateShapes,2,false)->export();
+$file['circuit']=['route'=>$loop->export(),'variant'=>'dry'];
+$table->load(json_encode($file)); $table->input(['actions'=>['cpu-demo']],1/60,1.);
+$catches=0; $sliding=false;
+for($i=0;$i<5000 && $table->race->state!=='finished';$i++) {
+	$before=$table->car->state(); $table->step(1/60); $after=$table->car->state();
+	if($after['speed']>150.*Car::MPS_PER_MPH && abs($after['drift'])>.08
+		&& abs($after['drift'])>abs($before['drift']) && $after['nitrous']>=$before['nitrous']) $sliding=true;
+	if($sliding && $after['nitrous']<$before['nitrous'] && abs($after['drift'])<abs($before['drift'])) {
+		$catches++; $sliding=false;
+	}
+	if(abs($after['drift'])<.025) $sliding=false;
+	if($i%10===0) check(RacingLine::edgeDistance($table->landscape,$after['x'],$after['z'])>Car::BODY_HALF_WIDTH,
+		'High-speed slides stay within the painted curve.');
+}
+check($table->race->state==='finished' && $catches>=3 && $after['recoveries']===0,
+	'Repeatedly catch live slides above 150 mph with nitrous in a sustained curve.');
+$table->close();
+
 // Drive the same authored S-bends at several widths. The wide grading shoulder is outside the asphalt.
 $points = [[-140,-80],[-140,55],[-130,84],[-104,100],[-40,100],[-22,88],[-14,66],[-5,47],
 	[22,40],[90,40],[110,26],[118,0],[110,-40],[75,-100],[-40,-132],[-100,-120]];
