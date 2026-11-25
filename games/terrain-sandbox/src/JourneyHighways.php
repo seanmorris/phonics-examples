@@ -7,7 +7,7 @@ use TerrainPhonics\{JoinedTerrain,Landscape};
 /** Compose adjacent map windows from the same surveyed road curves in each named square. */
 final class JourneyHighways
 {
-	private array $surveys=[], $landings=[], $windows=[];
+	private array $surveys=[], $landings=[], $windows=[], $prepared=[];
 	private \WeakMap $generated;
 
 	public function __construct(public readonly JourneyNetwork $network,public readonly int $span,public readonly int $version=2)
@@ -92,12 +92,45 @@ final class JourneyHighways
 		return ($this->generated[$active] ?? null)===$active->revision() ? null : $active;
 	}
 
+	/** Build each stage before boarding. Keep its editable splines, not its terrain or tire samples. */
+	public function prepare(Landscape $departure,?array $departureViews,callable $stage,callable $report): \Generator
+	{
+		foreach($this->network->order as $done=>$id) {
+			$stage($id,$done);
+			$first=$id===$this->network->start;
+			if(!$first && isset($this->prepared[$id])) { yield; continue; }
+			$land=$first ? $departure : new Landscape($this->recipe($id));
+			try {
+				$views=$first && $departureViews!==null ? $departureViews : (yield from $this->build($land,$id,$report));
+				if(!isset($this->prepared[$id])) {
+					$roads=[];
+					foreach($land->roadRecords() as $road) {
+						$roads[]=gzdeflate(json_encode($road,JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR),1);
+						yield;
+					}
+					$this->prepared[$id]=['roads'=>$roads,'views'=>$views];
+				}
+				if($first) { $departureViews=$views; $this->generated[$departure]=$departure->revision(); }
+			} finally { if(!$first) $land->close(); }
+		}
+		// The compact stage archive now supplies both driving and map previews.
+		$this->surveys=$this->windows=[];
+		return $departureViews;
+	}
+
+	private static function unpackRoad(string $bytes): array
+	{
+		return json_decode(gzinflate($bytes),true,flags:JSON_THROW_ON_ERROR);
+	}
+
 	/** The map can draw a completed window directly from its control points, without grading it again. */
 	public function completedRoads(string $id,?string $from=null,?Landscape $active=null): ?array
 	{
 		$window=$this->windows[$id] ?? null;
-		if($window===null) return null;
 		$custom=$this->customSource($id,$from,$active);
+		if($custom===null && isset($this->prepared[$id]) && ($window===null || $window['source']!==null))
+			return array_map(self::unpackRoad(...),$this->prepared[$id]['roads']);
+		if($window===null) return null;
 		if($window['source']===null) return $custom===null ? $window['roads'] : null;
 		return $custom && $window['source']->get()===$custom && $window['revision']===$custom->revision() ? $window['roads'] : null;
 	}
@@ -105,6 +138,12 @@ final class JourneyHighways
 	/** A live incoming window carries the player's actual pavement, including applied road edits. */
 	public function build(Landscape $land,string $id,?callable $report=null,?string $from=null,?Landscape $active=null): \Generator
 	{
+		if(isset($this->prepared[$id]) && $this->customSource($id,$from,$active)===null) {
+			foreach($this->prepared[$id]['roads'] as $bytes) yield from $land->queueSteps(self::unpackRoad($bytes));
+			$land->commit();
+			$this->generated[$land]=$land->revision();
+			return $this->prepared[$id]['views'];
+		}
 		$r=$land->recipe();
 		$sites=$this->origins($id,$r); $actualEntry=null; $arrived=null;
 		if($active && $from!==null && in_array($from,$this->network->parents[$id],true)) {

@@ -38,8 +38,24 @@ $atlas->request(['id'=>3,'span'=>16384,'plan'=>$plan,'stage'=>'A','survey'=>true
 while($roads===null) $atlas->step($s,$report,true);
 networkCheck(count($roads)>=3 && count($roads[0][1])===6 && $s->landscape===$original && $s->mode==='fly',
 	'The preview produces road curves and leaves the playing landscape undisturbed.');
-$s->input(['actions'=>[['type'=>'journey-build','network'=>$plan]]],0.,1.);
-networkCheck(!$s->preparingRoad() && $s->mode==='car','Build reuses the completed survey in one input tick.');
+$s->input(['actions'=>[['type'=>'journey-build','network'=>$plan]]],0.,1.,0.);
+networkCheck($s->preparingRoad() && $s->mode==='fly','Previewing A does not skip building the rest of the network.');
+$stages=[];
+while($s->preparingRoad()) {
+	if($progress=$s->status()['journeyBuildProgress']) {
+		networkCheck($progress['total']===7 && $s->mode==='fly','Driving waits for all seven stages.');
+		$stages[$progress['stage']]=$progress['done'];
+	}
+	$s->input([],0.,1.,2.);
+}
+networkCheck($s->mode==='car' && $stages['A']===0 && max($stages)>=5,'The progress count advances before boarding.');
+$planner=$s->highways(new JourneyNetwork($plan),16384);
+foreach($planner->network->nodes as $id=>$_) networkCheck(!empty($planner->completedRoads($id)),"Roads for $id are ready at departure.");
+$window=new \TerrainPhonics\Landscape($planner->recipe('B'));
+foreach($planner->build($window,'B',static function() { throw new RuntimeException('A prepared stage started a new survey.'); },
+	'A',$s->landscape) as $_) {}
+networkCheck($window->roadRecords()===$planner->completedRoads('B'),'Driving restores the exact prepared splines.');
+$window->close();
 networkCheck($s->landscape->recipe()['join']['span']===16384,'A new network defaults to 16,384 meters per square.');
 $initial=$s->save();
 
@@ -123,6 +139,54 @@ foreach([[0,'B',1],[1,'C',0]] as [$branch,$parent,$toF]) {
 		'Save and load keep one onward road from the shared destination.');
 	$s->input(['actions'=>['journey-drive']],0.,1.);
 	onward($s,0,'H');
+}
+$s->close();
+
+// Exercise the reported cold right fork. Drive to the edge faster than the survey can
+// advance, then let the regular input clock finish it without a further driving tick.
+$plan="A karst-bay -> B,C\nB autumn-folds -> E,F\nC yardang-desert -> F,G\nE tepui-highlands\nF chalk-headlands\nG salt-pans";
+$s=new Session;
+$s->input(['actions'=>[['type'=>'journey-build','network'=>$plan]]],0.,1.);
+settleNetwork($s);
+$land=$s->landscape;
+$half=$land->recipe()['worldSize']/2;
+[$forkX,$forkZ]=JourneyRoad::entrances($land)['junction'];
+$arm=$edge=null;
+foreach($land->roads() as $road) {
+	if($road['points'][0][0]===$forkX && $road['points'][0][2]===$forkZ && $road['points'][1][2]>$forkZ) {
+		foreach($road['_road']['samples'] as [$x,,$z,$tx,$tz]) {
+			if($x<$forkX+JourneyRoad::SPLIT_RUN+20.) continue;
+			$arm=$s->car->checkedSite($land,$s->water->heightRange()[1],$x,$z,atan2($tx,$tz),[]);
+			if($arm) break;
+		}
+	}
+	foreach($road['_road']['samples'] as [$x,,$z,$tx,$tz]) {
+		if(abs($x-($half-450.))>7. || $z<=0.) continue;
+		$edge=$s->car->checkedSite($land,$s->water->heightRange()[1],$x,$z,atan2($tx,$tz),[]);
+		if($edge) break;
+	}
+}
+networkCheck($arm!==null && $edge!==null,'Two dry stations on the road into C.');
+$s->car->spawn($arm,$land,$s->water->level());
+$s->input(['keys'=>['KeyW'=>true]],.01,1.);
+$s->step(1/60);
+networkCheck($s->status()['journeySurveying']==='C','The right fork starts the C survey at the split.');
+$s->car->spawn($edge,$land,$s->water->level());
+$s->step(1/60);
+$held=$s->car->state();
+networkCheck($s->status()['journeyWaiting'] && $held['speed']>0.,'A late window holds a moving car on the highway.');
+for($i=0;$i<90;$i++) $s->step(1/60);
+networkCheck($s->car->state()===$held,'The car cannot roll into the void while the next window loads.');
+$shift=(new JourneyNetwork($plan))->translation('A','C',$land->recipe());
+settleNetwork($s);
+$after=$s->car->state();
+networkCheck($s->status()['journeySquare']==='C' && $s->status()['journeyExits']===['F','G']
+	&& !$s->status()['journeyWaiting'] && $after['speed']===$held['speed']
+	&& abs($after['x']-$held['x']-$shift[0])<1.e-6 && $s->landscape->material($after['x'],$after['z'])==='road',
+	'The input clock resumes C on the same pavement with both onward destinations.');
+$mid=$s->save();
+foreach(['F','G'] as $branch=>$leaf) {
+	$s->load($mid); $s->input(['actions'=>['journey-fork']],0.,1.); onward($s,$branch,$leaf);
 }
 $s->close();
 echo "Shared F reached through B and C with continuous car motion and pavement.\n";

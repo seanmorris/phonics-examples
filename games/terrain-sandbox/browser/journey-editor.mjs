@@ -45,6 +45,7 @@ function markup(options) {
 	.journey-footer{position:sticky;bottom:-16px;z-index:1;margin:0 0 -10px;padding:9px 0;background:#19362b;border-top:1px solid #496352}.journey-footer p:not(:empty){margin-top:5px}.journey-planner details .journey-actions{margin:8px 10px 10px}
 	.journey-actions [data-action=journey-build]{background:#e4bf7a;color:#16271d;border-color:#efd69f;font-weight:700}
 	.journey-planner [data-journey-error]{color:#ffd2a5}
+	.journey-footer progress{width:100%;height:10px;margin-top:7px;accent-color:#e4bf7a}
 	.journey-planner [data-journey-progress]:empty,.journey-planner [data-journey-error]:empty{display:none}
 	@container terrain-lab (min-width:445px){.journey-map-grid{grid-template-columns:minmax(0,1.27fr) minmax(0,1fr)}}
 	@container terrain-lab (max-width:444px){.journey-stops{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px}
@@ -82,6 +83,7 @@ function markup(options) {
 	<button type="button" data-edit-flight hidden>Return to free flight</button>
 	<button type="button" data-action="journey-drive" hidden>Drive from west edge</button>
 	<button type="button" data-action="journey-fork" hidden>Drive from fork</button></div>
+	<progress data-journey-meter aria-label="Journey build progress" hidden></progress>
 	<p class="terrain-note" data-journey-progress role="status"></p></div></div>`;
 }
 

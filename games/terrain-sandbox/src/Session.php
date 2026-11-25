@@ -8,6 +8,7 @@ use Phonics\Ecs\Scheduler;
 use TerrainPhonics\Atmosphere;
 use TerrainPhonics\Camera;
 use TerrainPhonics\GrassShells;
+use TerrainPhonics\JoinedTerrain;
 use TerrainPhonics\Landscape;
 use TerrainPhonics\RayQuery;
 use TerrainPhonics\Scene;
@@ -504,7 +505,8 @@ final class Session
 	private ?Landscape $journeyReady = null, $surveyedDeparture = null;
 	private array $surveyedViews = [];
 	private ?string $surveyedPlan = null;
-	private ?JourneyHighways $highways = null;
+	private ?JourneyHighways $highways = null, $driveHighways = null;
+	private ?array $journeyBuildProgress = null;
 	private array $journeyEntrances = [], $journeyViews = [], $preparedViews = [];
 	private ?string $journeyBuildPhase = null;
 	private ?JourneyNetwork $network = null, $buildingNetwork = null;
@@ -524,6 +526,8 @@ final class Session
 
 	public function highways(JourneyNetwork $network,int $span,int $version=2): JourneyHighways
 	{
+		if($this->driveHighways?->network->plan===$network->plan && $this->driveHighways->span===$span && $this->driveHighways->version===$version)
+			return $this->driveHighways;
 		if($this->highways?->network->plan!==$network->plan || $this->highways->span!==$span || $this->highways->version!==$version)
 			$this->highways=new JourneyHighways($network,$span,$version);
 		return $this->highways;
@@ -665,9 +669,9 @@ final class Session
 				$this->journeyReady = null;
 				$network=$this->buildingNetwork;
 				$this->buildingNetwork=null;
-				$this->journeyBuildPhase=null;
+				$this->journeyBuildPhase=null; $this->journeyBuildProgress=null;
 				$previous = $this->landscape->recipe()['preset'];
-				$this->replace($next);
+				$this->replace($next,$this->driveHighways);
 				$this->network=$network; $this->square=$network?->start;
 				$this->journeyViews=$this->preparedViews;
 				$this->course = new Course($this->gateShapes);
@@ -744,7 +748,8 @@ final class Session
 
 	private function simulate(float $seconds): void
 	{
-		if($this->paused) return;
+		// Input keeps surveying while the car waits on supported pavement for a late window.
+		if($this->paused || ($this->mode==='car' && $this->transfer && $this->onwardWork!==null)) return;
 		$mode = $this->mode;
 		// Shade belongs to one drive: leaving the car clears the light sensor.
 		if($mode !== 'car' && ($this->carShaded || $this->sunQuery !== null || $this->lampAdaptation !== 1.0)) $this->resetShade();
@@ -1722,24 +1727,33 @@ final class Session
 				$span=$action['span'] ?? 16384;
 				$next = new Landscape($network ? $network->recipe($network->start,$span) : JourneyRoad::recipe($west,$east,$span));
 				$this->buildingNetwork=$network;
+				$views=null;
 				if($this->surveyedDeparture && $this->surveyedPlan===$network?->plan && $this->surveyedDeparture->recipe() === $next->recipe()) {
 					$next->close();
-					$this->journeyReady = $this->surveyedDeparture;
-					$this->preparedViews = $this->surveyedViews;
-					$this->surveyedDeparture = null;
-					$this->surveyedViews = [];
-					break;
+					$next=$this->surveyedDeparture; $views=$this->surveyedViews;
+					$this->surveyedDeparture=null; $this->surveyedViews=[];
 				}
+				$highways=$network ? $this->highways($network,$span) : null;
 				$this->message = $this->journeyBuildPhase = 'Surveying the highway…';
 				$this->preparing = true;
-				$this->roadWork = (function() use ($next,$network,$span) {
+				$this->roadWork = (function() use ($next,$network,$highways,$views) {
 					try {
-						$report=function(string $phase) {
+						$report=function(string $phase,float $fraction=0.) {
+							$this->journeyBuildProgress['fraction']=max($this->journeyBuildProgress['fraction'],$fraction);
 							$this->message=$this->journeyBuildPhase=$phase; $this->dirty=true;
 						};
-						$this->preparedViews=yield from ($network ? $this->highways($network,$span)->build($next,$network->start,$report)
-							: JourneyRoad::build($next,report:$report));
-						$this->journeyReady = $next;
+						if($highways) {
+							$stage=function(string $id,int $done) use($network,$report) {
+								$this->journeyBuildProgress=['stage'=>$id,'done'=>$done,'total'=>count($network->nodes),'fraction'=>0.];
+								$report('Preparing pavement…');
+							};
+							$this->preparedViews=yield from $highways->prepare($next,$views,$stage,$report);
+						} else {
+							$this->journeyBuildProgress=['stage'=>null,'done'=>0,'total'=>1,'fraction'=>0.];
+							$this->preparedViews=$views ?? (yield from JourneyRoad::build($next,report:$report));
+						}
+						$this->driveHighways=$highways;
+						$this->journeyReady=$next;
 					} finally {
 						if($this->journeyReady !== $next) $next->close();
 					}
@@ -2241,11 +2255,23 @@ final class Session
 		}
 	}
 
+	/** Both the HUD and the streaming survey follow the actual arms of an off-center fork. */
+	private function journeyBranch(array $pose): ?string
+	{
+		$junction=$this->journeyEntrances['junction'] ?? null;
+		$start=$junction ? $junction[0]+JourneyRoad::SPLIT_RUN : JourneyRoad::FORK;
+		if($pose['x']<$start) return null;
+		$divide=$junction ? JourneySurvey::branchLimit($pose['x'],$start,$junction[1],0,$this->landscape->recipe()['join']['span']) : 0.;
+		return $this->network->destination($this->square,$pose,$divide);
+	}
+
 	private function approachSquare(array $pose): void
 	{
 		$r=$this->landscape->recipe(); $half=$r['worldSize']/2; $span=$r['join']['span'];
-		if($pose['x']<$half-.45*$span) { if($this->nextSquare!==null) $this->discardOnward(); return; }
-		$child=$this->network->destination($this->square,$pose);
+		$child=$this->journeyBranch($pose);
+		// A leaf is already in this window. Announce arrival only once well inside it.
+		if($child!==null && !$this->network->nodes[$child]['exits'] && $pose['x']<$half-.45*$span) $child=null;
+		if($child===null) { if($this->nextSquare!==null) $this->discardOnward(); return; }
 		if($child!==$this->nextSquare) {
 			$this->discardOnward();
 			$this->nextSquare=$child;
@@ -2263,7 +2289,11 @@ final class Session
 				} finally { if($this->onwardReady!==$next) $next->close(); }
 			})();
 		}
-		$this->transfer=$this->onwardReady!==null && $pose['x']>$half-min(3000.,.1*$span);
+		// Rebase in the middle of the shared square, with real terrain on both sides.
+		// On a slow survey, retain the moving pose before the old world's physical edge.
+		$inSquare=count($r['join']['destinations'])===1 || abs($pose['z'])>=JoinedTerrain::GAP/2;
+		$this->transfer=$inSquare && (($this->onwardReady!==null && $pose['x']>=$half-.5*$span)
+			|| ($this->onwardWork!==null && $pose['x']>=$half-512.));
 	}
 
 	private function enterSquare(): void
@@ -2279,7 +2309,7 @@ final class Session
 			if(abs($x)<= $next->recipe()['worldSize']/2 && abs($z)<=$next->recipe()['worldSize']/2 && $next->material($x,$z)==='road')
 				$views[]=[$x,$z,$relief];
 		}
-		$this->replace($next);
+		$this->replace($next,$this->driveHighways);
 		$this->journeyViews=$views;
 		$this->network=$network; $this->square=$child; $this->mode='car';
 		$this->course=new Course($this->gateShapes);
@@ -2298,6 +2328,7 @@ final class Session
 		$site = $pose === null ? null : $this->car->checkedSite($this->landscape,$this->water->heightRange()[1],
 			$pose[0],$pose[1],$pose[2],$this->course->posts());
 		if($site === null) { $this->message = 'This highway entrance has no dry pavement.'; return; }
+		$this->discardOnward();
 		$this->stopDemo();
 		$this->cancelPick(); $this->carSearch = null; $this->delivery = null;
 		$this->releasePin();
@@ -2523,8 +2554,10 @@ final class Session
 	 * @param Landscape $landscape Validated new landscape instance.
 	 * @return void Retires the old surface and advances the renderer generation.
 	 */
-	private function replace(Landscape $landscape): void
+	private function replace(Landscape $landscape,?JourneyHighways $highways=null): void
 	{
+		if($this->highways===$this->driveHighways) $this->highways=$highways;
+		$this->driveHighways=$highways;
 		$this->discardOnward(); $this->network=null; $this->square=null; $this->journeyViews=[];
 		$this->cancelPick(); $this->carSearch = null;
 		$this->draft?->close(); $this->draft = null;
@@ -2631,7 +2664,7 @@ final class Session
 			if($this->roadWork->valid()) return;
 		} catch(\Throwable $error) {
 			$this->roadWork = null;
-			$this->journeyBuildPhase = null;
+			$this->journeyBuildPhase = null; $this->journeyBuildProgress=null;
 			$this->buildingNetwork = null;
 			$this->preparing = false;
 			$this->roadEditor->applyResult($error->getMessage());
@@ -2900,7 +2933,8 @@ final class Session
 			throw new \InvalidArgumentException('Invalid saved camera direction.');
 		}
 		catch(\Throwable $error) { $candidate->close(); throw $error; }
-		$this->replace($candidate);
+		$highways=$network ? $this->highways($network,$r['join']['span'],$r['join']['version'] ?? 1) : null;
+		$this->replace($candidate,$highways);
 		$this->network=$network; $this->square=$square; $this->journeyViews=$views;
 		$this->balloons = $balloons;
 		$this->atmosphere->setLayers($air->rows);
@@ -3034,7 +3068,6 @@ final class Session
 		$junction = $this->journeyEntrances['junction'] ?? null;
 		if($this->mode === 'car' && ($junction || $this->network)) {
 			$car = $this->car->state();
-			$divide = 0.;
 			if($junction) {
 				[$x,$z,$heading] = $junction;
 				$dx = $x - $car['x']; $dz = $z - $car['z'];
@@ -3042,15 +3075,13 @@ final class Session
 				$side = $dx*cos($heading) - $dz*sin($heading);
 				$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;
 			}
-			if($this->network && $car['x'] >= -JourneyRoad::FORK) {
-				// The arms of an off-center fork can still be on the same side of map zero.
-				if($junction) $divide=JourneySurvey::branchLimit($car['x'],$x+JourneyRoad::SPLIT_RUN,$z,0,$this->landscape->recipe()['join']['span']);
-				$branch = $this->network->destination($this->square,$car,$divide);
-				if($branch === $this->nextSquare && !$this->network->nodes[$branch]['exits']) $arrival = $branch;
+			if($this->network) {
+				$branch=$this->journeyBranch($car);
+				if($branch!==null && $branch===$this->nextSquare && !$this->network->nodes[$branch]['exits']) $arrival=$branch;
 			}
 		}
-		return ['journeyBuildPhase'=>$this->journeyBuildPhase,'journeySurveying'=>$this->onwardWork ? $this->nextSquare : null,
-			'journeyReady'=>$this->onwardReady ? $this->nextSquare : null,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyHasFork'=>$junction!==null,'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,
+		return ['journeyBuildProgress'=>$this->journeyBuildProgress,'journeyBuildPhase'=>$this->journeyBuildPhase,'journeySurveying'=>$this->onwardWork ? $this->nextSquare : null,
+			'journeyWaiting'=>$this->transfer && $this->onwardWork!==null,'journeyReady'=>$this->onwardReady ? $this->nextSquare : null,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyHasFork'=>$junction!==null,'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,
 			'demo'=>$this->demoStatus(),'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),

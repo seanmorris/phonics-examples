@@ -34,7 +34,8 @@ final class JourneyRoad
 			$last=end($arrival)['points'];
 			$entry=end($last);
 		}
-		if($report) $report('Surveying valley entrances and exits…');
+		$phases=count($r['join']['destinations'])+3;
+		if($report) $report('Surveying valley entrances and exits…',0.);
 		$tailX = $half-1536.;
 		$arrivals = [];
 		foreach(array_slice($origins,1) as [, $cz]) {
@@ -42,7 +43,7 @@ final class JourneyRoad
 		}
 		[$forkX,$forkZ] = yield from $survey->junction($entry,$arrivals);
 		$first = $entry ? [$entry[0],$entry[2]] : [-$half,0.];
-		if($report) $report('Following terrain through the departure square…');
+		if($report) $report('Following terrain through the departure square…',1./$phases);
 		$approach = yield from $survey->route([$first,[$forkX-192.,$forkZ]],!$entry,!$entry);
 		$approach[]=[$forkX-96.,$forkZ]; $approach[]=[$forkX,$forkZ];
 		$paths=[$approach];
@@ -51,7 +52,7 @@ final class JourneyRoad
 		foreach($arrivals as $i=>[, $tail]) {
 			$side=$i===0 ? -1 : 1;
 			$tailZ=$tail[0][1];
-			if($report) $report('Finding an overlook and a road through '.($split ? ($side<0 ? 'the northern' : 'the southern') : 'the').' destination…');
+			if($report) $report('Finding an overlook and a road through '.($split ? ($side<0 ? 'the northern' : 'the southern') : 'the').' destination…',($i+2)/$phases);
 			if($split) {
 				// Only the shared pavement fixes the shape. Survey a single continuous
 				// alignment from the diverging lanes all the way to each destination.
@@ -70,7 +71,7 @@ final class JourneyRoad
 			$paths[]=$tail;
 		}
 
-		if($report) $report('Fitting the pavement to the surveyed ground…');
+		if($report) $report('Fitting the pavement to the surveyed ground…',($phases-1)/$phases);
 		// Each knot has one elevation, even when several branches meet there. Cap the grade in both
 		// directions along every incident stretch; a third leg must not introduce a step at the fork.
 		$graph = $height = $routes = [];

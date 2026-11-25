@@ -580,7 +580,9 @@ export function activate({module, canvas, session, services})
 				journeyResult = '';
 				field.disabled = true;
 				field.textContent = 'Building journey…';
-				journeyProgress.textContent = 'Surveying the highway. You’ll start driving when the road is ready.';
+				journeyMeter.hidden = false;
+				journeyMeter.removeAttribute('value');
+				journeyProgress.textContent = 'Preparing the route before the drive…';
 				push({type, west: value('west'), destinations, span: Number(value('span')), ...network});
 			}
 			else if(type === 'load') frame.querySelector('[data-file]').click();
@@ -612,6 +614,7 @@ export function activate({module, canvas, session, services})
 	const destinationNames = new Map([...journeyField('east').options].map(option => [option.value, option.text]));
 	const networkField = journeyField('network');
 	const journeyProgress = frame.querySelector('[data-journey-progress]');
+	const journeyMeter = frame.querySelector('[data-journey-meter]');
 	const planner = module.terrainJourneyEditor.mount(frame,canvas,signal,()=>module.journeyMap);
 	shell.bridge('terrainJourneyMap',planner.receive);
 	const guideError = frame.querySelector('[data-journey-error]');
@@ -1250,6 +1253,10 @@ export function activate({module, canvas, session, services})
 				const [left, right] = [...new Set(state.journeyExits)];
 				let text;
 				if(state.journeyArrival) text = 'Arrived at ' + name(state.journeyArrival) + ' · End of route';
+				else if(state.journeySurveying) {
+					const next = name(state.journeySurveying);
+					text = state.journeyWaiting ? 'Loading the highway beyond ' + next + '…' : here + ' → ' + next + ' · Loading onward roads…';
+				}
 				else if(state.journeyBranch) text = here + ' → ' + name(state.journeyBranch);
 				else if(right) text = here + ' — Left to ' + name(left) + ' / Right to ' + name(right);
 				else text = here + ' → ' + name(left);
@@ -1294,10 +1301,17 @@ export function activate({module, canvas, session, services})
 			if(state.journeyBuildPhase) journeyRequest = 'building';
 			else if(journeyRequest === 'sent' || journeyRequest === 'building') {
 				journeyResult = state.generation !== lastGeneration && state.recipe.join && state.mode === 'car'
-					? 'Highway ready. Driving from the west edge.' : state.message;
+					? (state.journeySquare && activeNetwork ? `All ${Object.keys(activeNetwork.nodes).length} stages ready. Driving from the west edge.` : 'Highway ready. Driving from the west edge.') : state.message;
 				journeyRequest = null;
 			}
-			const progress = state.journeyBuildPhase ?? (journeyRequest ? 'Surveying the highway…' : journeyResult);
+			const stage = state.journeyBuildProgress;
+			journeyMeter.hidden = !journeyRequest;
+			if(stage) {
+				journeyMeter.max = stage.total;
+				journeyMeter.value = stage.done + stage.fraction;
+			} else journeyMeter.removeAttribute('value');
+			const progress = stage?.stage ? `Stage ${stage.stage} · ${stage.done} of ${stage.total} stages ready · ${state.journeyBuildPhase}`
+				: state.journeyBuildPhase ?? (journeyRequest ? 'Surveying the highway…' : journeyResult);
 			if(journeyProgress.textContent !== progress) journeyProgress.textContent = progress;
 			button('journey-build').textContent = journeyRequest ? 'Building journey…' : 'Build and drive';
 			button('journey-build').disabled = !editable || Boolean(journeyRequest) || (junction.value === 'network' && !preview?.nodes);

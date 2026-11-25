@@ -7,7 +7,7 @@ use TerrainPhonics\{JoinedTerrain,Landscape,Recipe};
 /** Named landscape squares with up to two onward roads. Only the current junction needs terrain assets. */
 final class JourneyNetwork
 {
-	public readonly array $nodes, $parents;
+	public readonly array $nodes, $parents, $order;
 	public readonly string $start;
 
 	public function __construct(public readonly string $plan)
@@ -36,6 +36,7 @@ final class JourneyNetwork
 			throw new \InvalidArgumentException('Every square must be reachable from the first one, with exits leading onward.');
 		$this->nodes=$nodes;
 		$this->parents=$parents;
+		$this->order=$order;
 	}
 
 	public function recipe(string $id,int $span): array
