@@ -8,10 +8,10 @@ use TerrainPhonics\{Edits,Landscape};
 final class RoadWarnings
 {
 	public const CURVE=2, HAIRPIN=3, SWERVE=4, KINK=5, MERGE=6, HILL=7, DIP=8;
-	public const LEAD=1200*DisplayUnits::FOOT;
+	public const LEAD=400*DisplayUnits::FOOT;
 	private const PAIR_DISTANCE=200*DisplayUnits::FOOT;
 	private const STEP=6.; // Survey interval in meters; vertical grades use a two-interval wheel path on either side.
-	private array $sections=[], $starts=[], $occupied=[];
+	private array $sections=[], $starts=[], $features=[], $posts=[], $occupied=[];
 	private float $length=0.;
 	private bool $closed=false;
 	private string $entrance;
@@ -78,7 +78,7 @@ final class RoadWarnings
 			}
 			$paths[]=$path;
 		}
-		foreach($paths as $path) yield from $path->survey($roads,$incoming);
+		foreach($paths as $path) yield from $path->survey();
 
 		// Two incoming arms join a departing trunk. A fork has an arriving trunk and needs no merge warning.
 		foreach($approaches as $arms) {
@@ -104,8 +104,21 @@ final class RoadWarnings
 				$p=$poses[$index]; $q=$poses[$pair[1-$k]];
 				[$tx,$tz]=$p['heading'];
 				$side=$travel*(-$tz*($q['position'][0]-$p['position'][0])+$tx*($q['position'][2]-$p['position'][2]));
-				if(abs($side)>.1) yield from $path->warn($end,$travel,self::MERGE,$side>0 ? 1 : -1,$roads,$incoming);
+				if(abs($side)>.1) $path->feature($end,$end,$travel,self::MERGE*($side>0 ? 1 : -1));
 			}
+		}
+		// Survey all branches before resolving upstream warnings across a junction.
+		foreach($paths as $path) {
+			foreach($path->features as &$families) foreach($families as &$features)
+				usort($features,static fn($a,$b)=>$a[0]<=>$b[0]);
+			unset($families,$features);
+			yield null;
+		}
+		foreach($paths as $path) foreach($path->features as $travel=>$families) foreach($families as $family=>$features)
+			foreach($features as $i=>[$start,,$symbol]) yield from $path->schedule($start,$travel,$family,$i,$symbol,$incoming);
+		foreach($paths as $path) {
+			usort($path->posts,static fn($a,$b)=>$a[0]<=>$b[0]);
+			foreach($path->posts as [,$at,$travel,$symbol,$minimum]) yield $path->post($at,$travel,$symbol,$minimum,$roads);
 		}
 	}
 
@@ -120,7 +133,7 @@ final class RoadWarnings
 	}
 
 	/** Detect lateral turns and downward changes of vertical grade in the same, time-sliced sampling pass. */
-	private function survey(array $roads,array $incoming): \Generator
+	private function survey(): \Generator
 	{
 		$n=max(1,(int)ceil($this->length/self::STEP)); $step=$this->length/$n;
 		$bends=$crests=$window=[]; $bend=null; $crest=null;
@@ -166,7 +179,7 @@ final class RoadWarnings
 				array_shift($bends);
 			}
 		}
-		yield from $this->turns(array_values(array_filter($bends,static fn($b)=>$b['angle']>=CurveSigns::MIN_TURN)),$roads,$incoming);
+		$this->turns(array_values(array_filter($bends,static fn($b)=>$b['angle']>=CurveSigns::MIN_TURN)));
 		if($this->closed && count($crests)>1 && $crests[0]['start']+$this->length-end($crests)['end']<2.5*self::STEP) {
 			$last=array_pop($crests);
 			$crests[0]['start']=$last['start']-$this->length;
@@ -177,7 +190,7 @@ final class RoadWarnings
 			$before=$this->pose($at-24.)['position'];
 			$rise=$here[1]-$before[1];
 			$kind=$rise>.015*hypot($here[0]-$before[0],$here[2]-$before[2]) ? self::HILL : self::DIP;
-			yield from $this->warn($at,1,$kind,1,$roads,$incoming);
+			$this->feature($at,$c['end'],1,$kind);
 		}
 	}
 
@@ -187,52 +200,110 @@ final class RoadWarnings
 			&& max($a['angle'],$b['angle'])<3*M_PI/4;
 	}
 
-	private function turns(array $bends,array $roads,array $incoming): \Generator
+	private function turns(array $bends): void
 	{
 		if($this->closed && count($bends)>1) {
 			$first=$bends[0]; $first['start']+=$this->length; $first['end']+=$this->length;
 			if(self::compound(end($bends),$first)) { array_shift($bends); $bends[]=$first; }
 		}
 		for($i=0;$i<count($bends);$i++) {
-			$a=$bends[$i]; $kind=$a['angle']>=3*M_PI/4 ? self::HAIRPIN : self::CURVE;
+			$a=$bends[$i]; $end=$a['end']; $kind=$a['angle']>=3*M_PI/4 ? self::HAIRPIN : self::CURVE;
 			if(isset($bends[$i+1]) && self::compound($a,$bends[$i+1])) {
-				$b=$bends[++$i];
+				$b=$bends[++$i]; $end=$b['end'];
 				$kind=min($a['angle'],$b['angle'])>=deg2rad(65.) ? self::KINK : self::SWERVE;
 			}
-			yield from $this->warn($a['start'],1,$kind,$a['side'],$roads,$incoming);
+			$this->feature($a['start'],$end,1,$kind*$a['side']);
 		}
 	}
 
-	/** Measure through a junction if the hazard lies less than one warning distance beyond it. */
-	private function warn(float $station,int $travel,int $kind,int $side,array $roads,array $incoming): \Generator
+	/** Keep road stations in driving order, including a compound bend spanning the lap seam. */
+	private function feature(float $start,float $end,int $travel,int $symbol): void
 	{
-		$pending=[[$this,$station]]; $seen=[];
+		$span=$end-$start;
+		if($travel<0) $start=$this->length-$start;
+		if($this->closed) $start=fmod(fmod($start,$this->length)+$this->length,$this->length);
+		$family=abs($symbol)<=self::KINK ? 'turn' : abs($symbol);
+		$this->features[$travel][$family][]=[$start,$start+$span,$symbol];
+	}
+
+	/** Follow the warning distance upstream. Compare against the previous feature on each actual approach. */
+	private function schedule(float $start,int $travel,int|string $family,int $index,int $symbol,array $incoming): \Generator
+	{
+		if($this->closed && $this->length<self::LEAD) return;
+		$pending=[[$this,$start,$index-1,[]]]; $seen=[];
 		while($pending) {
-			[$path,$at]=array_pop($pending);
+			[$path,$hazard,$previous,$onward]=array_pop($pending);
 			$id=spl_object_id($path);
 			if(isset($seen[$id])) continue;
 			$seen[$id]=true;
-			if($travel>0 && !$path->closed && $at<self::LEAD && isset($incoming[$path->entrance])) {
-				foreach($incoming[$path->entrance] as $parent) $pending[]=[$parent,$parent->length+$at];
-				yield null;
-			} else yield $path->post($at,$travel,$kind,$side,$roads);
+			$at=$hazard-self::LEAD; $minimum=-INF;
+			$features=$path->features[$travel][$family] ?? [];
+			$offset=0.;
+			if($path->closed && $previous<0 && count($features)>1) {
+				$previous=count($features)-1; $offset=-$path->length;
+			}
+			if($previous>=0) {
+				[$priorStart,$end,$prior]=$features[$previous]; $end+=$offset;
+				if($at<=$end+self::STEP) {
+					if($prior===$symbol) {
+						// A lap made entirely of overlapping identical warnings still needs its first sign.
+						$covered=$path->closed || $priorStart>=self::LEAD || isset($incoming[$path->entrance]);
+						if($covered && !($offset<0. && $path->oneCluster($features))) continue;
+					}
+					elseif($family==='turn') {
+						// Give the first turn its own sign until the driver clears the entire bend.
+						$minimum=$end+max(.1,min(self::STEP,.5*($hazard-$end)));
+						$at=max($at,$minimum);
+					}
+				}
+			}
+			if($travel>0 && !$path->closed && $at<0. && isset($incoming[$path->entrance])) {
+				$onward[]=$path;
+				foreach($incoming[$path->entrance] as $parent) {
+					$last=count($parent->features[$travel][$family] ?? [])-1;
+					$pending[]=[$parent,$parent->length+$hazard,$last,$onward];
+				}
+			} else {
+				while($onward && $at>$path->length) {
+					$at-=$path->length; $minimum-=$path->length; $hazard-=$path->length;
+					$path=array_pop($onward);
+				}
+				$path->posts[]=[$hazard,$at,$travel,$symbol,$minimum];
+			}
+			yield null;
 		}
 	}
 
-	/** Put a driver-facing diamond on the right shoulder. Try the other shoulder if the intersection covers it. */
-	private function post(float $hazard,int $travel,int $kind,int $side,array $roads): ?array
+	private function oneCluster(array $features): bool
 	{
-		if($this->closed && $this->length<self::LEAD) return null;
+		[, $end,$symbol]=end($features); $end-=$this->length;
+		foreach($features as [$start,$next,$kind]) {
+			if($kind!==$symbol || $start-self::LEAD>$end+self::STEP) return false;
+			$end=$next;
+		}
+		return true;
+	}
+
+	/** Put a driver-facing diamond on the right shoulder. Try the other shoulder if the intersection covers it. */
+	private function post(float $station,int $travel,int $symbol,float $minimum,array $roads): ?array
+	{
 		foreach([0.,-5.,5.,-10.,10.] as $shift) {
-			$at=$hazard-$travel*(self::LEAD+$shift);
+			$at=$station+$shift;
+			if($at<$minimum) continue;
+			if($travel<0) $at=$this->length-$at;
 			if(!$this->closed && ($at<-.01 || $at>$this->length+.01)) continue;
+			// Reserve the full cross-section. Moving a duplicate to the other shoulder still shows two warnings.
+			if($this->closed) $at=fmod(fmod($at,$this->length)+$this->length,$this->length);
+			$bin=(int)floor($at/self::STEP);
+			for($i=$bin-1;$i<=$bin+1;$i++) foreach($this->occupied[$travel][$i] ?? [] as $used)
+				if(abs($used-$at)<=self::STEP) return null;
 			$p=$this->pose($at); [$x,,$z]=$p['position']; [$tx,$tz]=$p['heading']; $tx*=$travel; $tz*=$travel;
 			foreach([1,-1] as $shoulder) {
 				$offset=$shoulder*($p['width']/2.+2.5); $sx=$x-$tz*$offset; $sz=$z+$tx*$offset;
-				$key=round($sx/5.).','.round($sz/5.);
-				if(isset($this->occupied[$key]) || Edits::onRoad($sx,$sz,$roads)) continue;
-				$this->occupied[$key]=true;
-				return [$sx,$sz,$tx,$tz,$kind*$side];
+				if(Edits::onRoad($sx,$sz,$roads)) continue;
+				$copies=$this->closed ? [$at-$this->length,$at,$at+$this->length] : [$at];
+				foreach($copies as $s) $this->occupied[$travel][(int)floor($s/self::STEP)][]=$s;
+				return [$sx,$sz,$tx,$tz,$symbol];
 			}
 		}
 		return null;

@@ -93,10 +93,30 @@ foreach([[RoadWarnings::CURVE,55,0],[RoadWarnings::HAIRPIN,160,0],[RoadWarnings:
 		$signs=warnings($track,$kind);
 		check(count($signs)===1,'One forward-facing diamond warns of the approach to a bend or pair of bends.');
 		$forward=array_values(array_filter($signs,static fn($s)=>abs($s[0]+8.5)<.1 && abs($s[1]+RoadWarnings::LEAD)<6.1));
-		check(count($forward)===1 && $forward[0][4]===$mirror*$kind,'The first turn controls mirroring on the right shoulder 1,200 feet before the bend.');
+		check(count($forward)===1 && $forward[0][4]===$mirror*$kind,'The first turn controls mirroring on the right shoulder 400 feet before the bend.');
 		$track->close();
 	}
 }
+// An 80 m straight separates the two turns. Each normal 400 ft warning would precede the first turn's exit.
+foreach([90,-90] as $next) {
+	$pair=warningCourse([[90,80.],[$next,220.]]);
+	$signs=warnings($pair,RoadWarnings::CURVE);
+	check(count($signs)===($next===90 ? 1 : 2),'Keep one repeated turn, or both conflicting turns.');
+	check($signs[0][4]===RoadWarnings::CURVE && abs($signs[0][1]+400.*.3048)<6.1,'The first diamond keeps its 400 ft lead.');
+	if($next<0) {
+		[$x,$z,$tx,$tz,$symbol]=$signs[1];
+		// The first 45 m radius quarter turn ends at (-45,45), heading west.
+		check($symbol===-RoadWarnings::CURVE && $tx<-.99 && $x<-45. && $x>-63.,
+			'Show the opposite turn just after clearing the first bend.');
+	}
+	$pair->close();
+}
+$clear=warningCourse([[90,200.],[90,200.]]);
+check(count(warnings($clear,RoadWarnings::CURVE))===2,'Separate hazards keep separate warnings.');
+$clear->close();
+$tightLap=warningCourse(array_fill(0,4,[90,80.]),true);
+check(count(warnings($tightLap,RoadWarnings::CURVE))===1,'A continuous run of like turns keeps one sign across the lap seam.');
+$tightLap->close();
 $race=warningCourse(array_fill(0,4,[90,420.]),true);
 $diamonds=warnings($race,RoadWarnings::CURVE);
 check(count($diamonds)===4 && count(array_filter($diamonds,static fn($s)=>abs($s[0]+8.5)<.1 && abs($s[1]+RoadWarnings::LEAD)<7.))===1,
@@ -110,7 +130,7 @@ $merge->commit(); $arms=warnings($merge,RoadWarnings::MERGE);
 check(count($arms)===2 && $arms[0][4]===-$arms[1][4],'Each merging road depicts the other arm on its actual side.');
 foreach($arms as [$x,$z,$tx,$tz,$symbol]) {
 	check(abs(-($x*$tx+$z*$tz)-RoadWarnings::LEAD)<.05 && !\TerrainPhonics\Edits::onRoad($x,$z,$merge->roads()),
-		'The merge warning stands off the pavement 1,200 driving feet before the shared node.');
+		'The merge warning stands off the pavement 400 driving feet before the shared node.');
 	check(($x<0)==($symbol<0),'The merge artwork shows which shoulder the joining road comes from.');
 }
 // A bend shortly after the two highways meet needs its advance sign on each incoming road.
@@ -121,9 +141,24 @@ $afterMerge->queue(['replaceAt'=>2]+pavement([0.,0.,0.],[0.,0.,100.]));
 $afterMerge->queue($curve); $afterMerge->commit();
 $forwardWarnings=warnings($afterMerge,RoadWarnings::CURVE);
 check(count($forwardWarnings)===2,'A nearby bend beyond a merge warns both forward approaches.');
-foreach($forwardWarnings as [$x,$z,$tx,$tz]) check($tz>0. && abs(100.-($x*$tx+$z*$tz)-1200.*.3048)<7.,
-	'The approach includes the distance driven beyond the merge in its 1,200 ft lead.');
+foreach($forwardWarnings as [$x,$z,$tx,$tz]) check($tz>0. && abs(100.-($x*$tx+$z*$tz)-400.*.3048)<7.,
+	'The approach includes the distance driven beyond the merge in its 400 ft lead.');
 $afterMerge->close();
+// Only one incoming road has a turn before the merge. Delay its next turn warning on that arm alone.
+$junction=new Landscape(['worldSize'=>2048]);
+$exit=[-125.,0.,45.]; $join=[-100.,0.,45.];
+$second=bend(45.,-1);
+foreach($second['points'] as &$point) $point=[$exit[0]-$point[2],0.,$exit[2]+$point[0]];
+unset($point);
+foreach($second['handles'] as &$handle) foreach($handle as &$v) $v=[-$v[2],0.,$v[0]];
+unset($handle,$v);
+foreach([pavement([0.,0.,-450.],[0.,0.,0.]),bend(45.,1),pavement([-45.,0.,45.],$join),
+	pavement([190.,0.,240.],$join),pavement($join,$exit),$second] as $record) $junction->queue($record);
+$junction->commit();
+$opposing=array_values(array_filter(warnings($junction,RoadWarnings::CURVE),static fn($s)=>$s[4]<0));
+check(count($opposing)===2 && count(array_filter($opposing,static fn($s)=>$s[2]<-.99 && $s[0]<-45. && $s[0]>-63.))===1,
+	'The shared turn warns each incoming route according to the bends that driver has passed.');
+$junction->close();
 $hidden=$merge->previewWithoutRoads([0]);
 check(!warnings($hidden,RoadWarnings::MERGE),'Hiding an arm removes the merge warnings.');
 $reversed=new Landscape(['worldSize'=>1024]);
