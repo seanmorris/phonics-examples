@@ -123,25 +123,26 @@ foreach([-1,1] as $direction) {
 	[$driverEntity] = $exhibition->query(CircuitDriver::class);
 	$driver = $exhibition->get($driverEntity,CircuitDriver::class);
 	for($i=0;$i<7000 && $demo->race->state !== 'finished';$i++) {
-		// Replay the release tick with the same travel direction but a nose pointing away from the exit.
-		$replay = !$testedHeading && $driver->phase === 'Handbraking' ? clone $driver : null;
+		// Replay a tick of the slide with the same travel direction but the tail out on the other side.
+		$replay = !$testedHeading && $driver->phase === 'Drifting' ? clone $driver : null;
 		$before = $demo->car->state();
 		$demo->step(1/60);
 		$car = $demo->car->state();
-		if($replay && $driver->phase === 'Boosting' && abs($before['drift']) > .008) {
-			check(abs($car['drift']) < abs($before['drift']) && $car['nitrous'] < $before['nitrous'],
-				'Nitrous brings the travel direction toward the nose on the release tick.');
+		if($replay && $driver->phase === 'Drifting' && $car['nitrous'] < $before['nitrous'] && abs($before['drift']) > .05) {
 			$heading = $before['yaw']-$before['drift'];
-			$before['drift'] = -.5*($before['drift'] <=> 0.);
+			$turned = atan2(sin($car['yaw']-$car['drift']-$heading),cos($car['yaw']-$car['drift']-$heading));
+			check($car['braking'] && $turned*$before['drift'] > 0.,
+				'Nitrous joins the locked rear wheels and pulls the travel direction round after the nose.');
+			$before['drift'] = -$before['drift'];
 			$before['yaw'] = $heading+$before['drift'];
 			[, , , $wrongWayBoost] = $replay->controls($before,1/60,false);
-			check(!$wrongWayBoost, 'Withhold nitrous when the chassis points across the exit.');
+			check(!$wrongWayBoost, 'Withhold nitrous while the tail is out on the wrong side.');
 			$testedHeading = true;
 		}
 	}
 	$result = $demo->race->status($demo->course,$demo->time);
 	check($demo->race->state==='finished' && count($result['lapTimes'])===2 && $testedHeading,
-		'Catch a live slide with nitrous on handbrake release and finish both laps in either direction.');
+		'Hold a live slide with handbrake and nitrous together and finish both laps in either direction.');
 	check($humanRace->status($demo->course,$demo->time)['best'] === null,'Demo finishes leave player records alone.');
 	$beforeRestart = $demo->car->state();
 	$demo->input(['values'=>['waterLevel'=>100.]],1/60,1.);
@@ -166,7 +167,8 @@ foreach([-1,1] as $direction) {
 	check(!$demo->watchingDriver(),'The CPU car is unavailable on a flooded course.');
 	$demo->close();
 }
-// Both bends have the same entry. Only the first has enough road after the apex to spend the bottle.
+// Both bends have the same entry, and the second leads straight into another. The slide that turns the car
+// needs the bottle in either, so the driver spends it in both and goes without when it is empty.
 foreach([false,true] as $chicane) {
 	$exitLeg = $chicane ? [[45,30],[50,25],[50,0],[800,0]] : [[800,30]];
 	$route = new Circuit([[0,-1000],[0,0],[4,15],[15,26],[30,30],...$exitLeg,[800,-1000]],-2.,null);
@@ -175,17 +177,18 @@ foreach([false,true] as $chicane) {
 	foreach([.65, 0.] as $charge) {
 		$driver->restart(0.,-50.);
 		$drift = 0.;
-		$slide = $boostedAfterSlide = false;
+		$slide = $boostedSlide = false;
 		foreach($route->stations(range(950,1075)) as [$x,$z,$heading]) {
 			$yaw = $heading + $drift;
 			[, $steer, $handbrake, $boost] = $driver->controls(
 				$pose + compact('x','z','yaw','drift') + ['nitrous'=>$charge], 1./$pose['speed'], false);
+			check(!$boost || $charge > 0., 'An empty bottle gives no boost.');
+			check(!($handbrake && $boost) || abs($drift) > .02, 'Nitrous joins the handbrake only once the tail is out.');
 			$drift = $handbrake ? -.18*$steer : .6*$drift;
-			check(!($handbrake && $boost), 'Release the handbrake when catching a slide.');
-			$boostedAfterSlide = $boostedAfterSlide || ($slide && $boost);
+			$boostedSlide = $boostedSlide || ($handbrake && $boost);
 			$slide = $slide || $handbrake;
 		}
-		check($slide && $boostedAfterSlide === (!$chicane && $charge > 0.), 'Spend available nitrous only on an open exit.');
+		check($slide && $boostedSlide === ($charge > 0.), 'Lock the rear wheels through the bend and add nitrous while the bottle lasts.');
 	}
 
 	$straight = ['motion'=>'driving','roadHold'=>0.,'x'=>0.,'yaw'=>0.,'drift'=>0.];
@@ -207,7 +210,7 @@ foreach([false,true] as $chicane) {
 }
 echo "CPU exhibition laps, drift exits, records, pause and restart passed.\n";
 
-// A high-speed sweeper lasts much longer than a handbrake slide. Test both sides of its grip limit.
+// A broad curve at speed asks more than the tires hold. The driver turns the car with brief slides rather than brake.
 $table = new Session(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-12]);
 $ring = [];
 for($i = 0; $i < 96; $i++) {
@@ -221,13 +224,22 @@ $driver = new CircuitDriver($loop,$table->course,$table->landscape);
 [[$x,$z,$yaw]] = $loop->stations([.125*$loop->length]);
 $driver->restart($x,$z);
 $pose = compact('x','z','yaw') + ['motion'=>'driving','roadHold'=>0.,'drift'=>0.,'nitrous'=>.5];
-[$pedal,,,$boost] = $driver->controls($pose + ['speed'=>60.],1/60,false);
-check($pedal === 1. && $boost, 'Keep accelerating into a sweeper while tire grip is available.');
-[$pedal,,$handbrake,$boost] = $driver->controls($pose + ['speed'=>100.],1/60,false);
-check($pedal < 0. && !$handbrake && !$boost, 'Brake for sustained lateral load on a broad high-speed curve.');
+[$pedal,,$handbrake,$boost] = $driver->controls($pose + ['speed'=>60.],1/60,false);
+check($pedal === 1. && $boost && !$handbrake, 'Keep accelerating into a sweeper while tire grip is available.');
+// At 100 m/s the tires alone let the car run wide. Its nose is soon a few degrees behind the curve.
+[[, , $later]] = $loop->stations([.125*$loop->length + 40.]);
+$inward = atan2(sin($later-$yaw),cos($later-$yaw)) <=> 0.;
+$wide = ['yaw'=>$yaw - .06*$inward,'speed'=>100.] + $pose;
+[$pedal,$steer,$handbrake] = $driver->controls($wide,1/60,false);
+check($pedal > 0. && $handbrake && $steer*$inward < 0.,
+	'Lock the rear wheels and steer into a broad high-speed curve rather than brake for it.');
+$wide['drift'] = .08*$inward;
+$wide['yaw'] += $wide['drift'];
+[, , , $boost] = $driver->controls(['nitrous'=>0.] + $wide,1/60,false);
+check(!$boost, 'Slide without the boost when the bottle is empty.');
 $table->close();
 
-// A continuous sweeper has no distinct exit apex. The driver can rotate and catch the car repeatedly.
+// A continuous sweeper has no distinct exit apex. The driver slides the car round it again and again.
 $table=new Session(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-12]);
 $ring=[];
 for($i=0;$i<96;$i++) {
@@ -241,20 +253,20 @@ $file=json_decode($table->save(),true);
 $file['course']=$loop->course($table->landscape,$table->gateShapes,2,false)->export();
 $file['circuit']=['route'=>$loop->export(),'variant'=>'dry'];
 $table->load(json_encode($file)); $table->input(['actions'=>['cpu-demo']],1/60,1.);
-$catches=0; $sliding=false;
+$slides=0; $sliding=false; $fastest=0.;
 for($i=0;$i<5000 && $table->race->state!=='finished';$i++) {
 	$before=$table->car->state(); $table->step(1/60); $after=$table->car->state();
-	if($after['speed']>150.*Car::MPS_PER_MPH && abs($after['drift'])>.08
-		&& abs($after['drift'])>abs($before['drift']) && $after['nitrous']>=$before['nitrous']) $sliding=true;
-	if($sliding && $after['nitrous']<$before['nitrous'] && abs($after['drift'])<abs($before['drift'])) {
-		$catches++; $sliding=false;
-	}
-	if(abs($after['drift'])<.025) $sliding=false;
+	// The rear wheels are locked while the tail swings out. Count each slide the boost joins above 150 mph.
+	$locked=$after['braking'] && abs($after['drift'])>abs($before['drift']) && abs($after['drift'])>.04;
+	if($locked && $after['speed']>150.*Car::MPS_PER_MPH) $sliding=true;
+	if($sliding && $after['braking'] && $after['nitrous']<$before['nitrous']) { $slides++; $sliding=false; }
+	if(abs($after['drift'])<.02) $sliding=false;
+	$fastest=max($fastest,$after['speed']);
 	if($i%10===0) check(RacingLine::edgeDistance($table->landscape,$after['x'],$after['z'])>Car::BODY_HALF_WIDTH,
 		'High-speed slides stay within the painted curve.');
 }
-check($table->race->state==='finished' && $catches>=3 && $after['recoveries']===0,
-	'Repeatedly catch live slides above 150 mph with nitrous in a sustained curve.');
+check($table->race->state==='finished' && $slides>=3 && $after['recoveries']===0 && $fastest>200.*Car::MPS_PER_MPH,
+	'Hold repeated slides above 150 mph with handbrake and nitrous together in a sustained curve.');
 $table->close();
 
 // Drive the same authored S-bends at several widths. The wide grading shoulder is outside the asphalt.
@@ -273,6 +285,7 @@ foreach([6,9,12,36] as $width) {
 	$table->load(json_encode($save));
 	$table->input(['actions'=>['cpu-demo']],1/60,1.);
 	$cut = 0.;
+	$strayed = 0;
 	$braking = false;
 	$releasedAt = -100;
 	$brakeTaps = 0;
@@ -283,18 +296,24 @@ foreach([6,9,12,36] as $width) {
 		if(!$braking && $p['braking'] && $i-$releasedAt <= 12) $brakeTaps++;
 		$braking = $p['braking'];
 		$sin = sin($p['yaw']); $cos = cos($p['yaw']);
+		$paved = 0;
 		foreach([Car::WHEELBASE/2,-Car::WHEELBASE/2] as $along) {
 			$track = $along > 0. ? Car::FRONT_TRACK : Car::REAR_TRACK;
 			foreach([-$track/2,$track/2] as $across) {
 				$x = $p['x']+$along*$sin+$across*$cos;
 				$z = $p['z']+$along*$cos-$across*$sin;
 				$material = $table->landscape->material($x,$z,$offset,$mark);
-				check($material === 'road' && $mark !== null && abs($mark[0])+.12 < $mark[2],
-					"All four tires must clear the actual $width m pavement edge through both laps.");
+				if($material !== 'road' || $mark === null || abs($mark[0]) >= $mark[2]) continue;
+				$paved++;
 				if($x < -65. && $z > 65.) $cut = max($cut,-$mark[0]);
 			}
 		}
+		// A slide may carry up to three tires over the edge. The car itself stays on the road.
+		check($paved > 0, "At least one tire must stay on the actual $width m pavement through both laps.");
+		$strayed += (int)($paved < 4);
 	}
+	// On this circuit the driver has no need of the allowance for more than a moment.
+	check($strayed <= 30, "Keep all four tires on the $width m pavement for all but half a second of both laps.");
 	check($table->race->state === 'finished' && $table->car->state()['recoveries'] === 0, 'Finish through every gate at each pavement width.');
 	// Reapplying the brakes within a fifth of a second at successive stations made each bend stutter.
 	check($brakeTaps <= 10, 'Brake continuously through both laps without pulsing at every route sample.');

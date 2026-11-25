@@ -131,6 +131,49 @@ final class CarSuspension
 		if($this->resting) $this->verticalSpeed = $this->pitchRate = $this->rollRate = 0.0;
 	}
 
+	/**
+	 * Step the chassis height alone over one point of road, with all four wheels meeting the same ground. A driver
+	 * planning its speed uses this to find where a crest would throw the car into the air.
+	 * @param float $dt Step in seconds, at most 1/120.
+	 * @param float $y Chassis height, changed in place.
+	 * @param float $verticalSpeed Chassis vertical speed in m/s, changed in place.
+	 * @param float $road Road height at the start of the step.
+	 * @param float $next Road height at the end of the step.
+	 * @param float $landing Seconds of landing damping left, changed in place.
+	 * @param float $downforce Extra downward acceleration from the boost in m/s², which fades as the wheels hang.
+	 * @return bool Whether the wheels reach the road during this step.
+	 */
+	public static function heave(float $dt, float &$y, float &$verticalSpeed, float $road, float $next, float &$landing,
+		float $downforce = 0.): bool
+	{
+		$roadSpeed = ($next-$road)/$dt;
+		$compression = $road+.02 - $y;
+		$supported = $compression > -self::SAG;
+		$force = 0.;
+		if($supported)
+		{
+			$stroke = min($compression,self::BUMP);
+			$droop = max(0., -$stroke/self::SAG);
+			$rate = $roadSpeed-$verticalSpeed;
+			$damping = $rate > 0 ? 5.0 : 10.0 + 3.0*$landing/self::LANDING_SECONDS;
+			$force = max(-self::DROOP_PULL*4*$droop*(1-$droop),
+				Session::DRIVING_GRAVITY*(1+$stroke/self::SAG) + 90*max(0.0, $stroke-.085) + $damping*$rate);
+			$landing = max(0.0, $landing-$dt);
+		}
+		else $landing = self::LANDING_SECONDS;
+		$gap = max(0., -$compression-self::SAG);
+		$lift = $force-Session::DRIVING_GRAVITY-$downforce*max(0., 1.-$gap/self::BOOST_REACH);
+		$y += $dt*($verticalSpeed+.5*$lift*$dt);
+		$verticalSpeed += $dt*$lift;
+		$overrun = $next+.02 - ($y+self::BUMP);
+		if($overrun > 0)
+		{
+			$y += $overrun;
+			$verticalSpeed = max($verticalSpeed,$roadSpeed);
+		}
+		return $supported;
+	}
+
 	/** At the end of the spring stroke the wheel transmits an inelastic contact, with no stored extra spring energy. */
 	private function bottomOut(array $roadSpeed, float $elapsed): void
 	{

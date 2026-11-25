@@ -17,11 +17,14 @@ final class Car
 	// Keep the low-speed resistance while allowing a long straight to reach the speed governor.
 	private const ROAD_DRAG = .0059, ROAD_DRAG_LIMIT = 30, AERO_DRAG = .0001;
 	/** Full pedal braking in m/s² with all four tires on the ground. */
-	private const SERVICE_BRAKE = 15.0;
+	public const SERVICE_BRAKE = 15.0;
 	/** Share of downhill acceleration that pulls the steering downhill on a bank. */
 	private const BANK_PULL = .16;
-	private const BOOST_SECONDS = 4., REFILL_DISTANCE = 1320 * DisplayUnits::FOOT, RESTART_CHARGE = .03;
-	private const BOOST_ACCEL = 13., BOOST_DOWNFORCE = 7.5; // m/s² at full flow.
+	/** Seconds of boost in a full bottle, and the meters of unboosted driving that refill one. */
+	public const BOOST_SECONDS = 4., REFILL_DISTANCE = 1320 * DisplayUnits::FOOT;
+	private const RESTART_CHARGE = .03;
+	/** Acceleration along the road, and the extra load pressing the tires down, in m/s² at full flow. */
+	public const BOOST_ACCEL = 13., BOOST_DOWNFORCE = 7.5;
 	private float $nitrous = 1.;
 	private bool $nitrousDepleted = false;
 	private float $x = 0, $y = 0, $z = 0, $yaw = 0, $pitch = 0, $roll = 0;
@@ -321,9 +324,7 @@ final class Car
 			if($throttle == 0 && ($this->speed != 0 || abs($grade) > .18))
 				$this->speed -= Session::DRIVING_GRAVITY*$grade*$dt*$gripFraction;
 			$speed = abs($this->speed);
-			// The low-speed handling curve gives way to aerodynamic drag on a long straight.
-			$rolling = min($speed,self::ROAD_DRAG_LIMIT)*min(1.,40./max(1.,$speed));
-			$drag = self::AERO_DRAG*$speed**2 + self::ROAD_DRAG*$rolling**2;
+			$drag = self::drag($speed);
 			if($throttle == 0)
 				$this->speed = ($this->speed <=> 0)*max(0.0, $speed - (1.7 + $drag)*$gripFraction*$dt);
 			else
@@ -789,6 +790,16 @@ final class Car
 		$heading = $pose['yaw'] - $pose['drift'];
 		$lead = in_array($pose['motion'], ['driving','airborne'], true) ? .75 * $pose['speed'] * cos($pose['pitch']) : 0.;
 		return [$pose['x'] + $lead*sin($heading), $pose['z'] + $lead*cos($heading)];
+	}
+
+	/**
+	 * Deceleration from rolling and air resistance with all four tires on the ground, in m/s². The low-speed
+	 * handling curve gives way to aerodynamic drag on a long straight.
+	 */
+	public static function drag(float $speed): float
+	{
+		$rolling = min($speed,self::ROAD_DRAG_LIMIT)*min(1.,40./max(1.,$speed));
+		return self::AERO_DRAG*$speed**2 + self::ROAD_DRAG*$rolling**2;
 	}
 
 	public static function steeringLimit(float $speed): float { return .52 / (1 + .035 * abs($speed)); }
