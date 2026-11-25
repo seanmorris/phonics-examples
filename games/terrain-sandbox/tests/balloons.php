@@ -247,5 +247,35 @@ $session->step(1/60);
 check($session->balloons->status() === $frozen, 'Pause freezes shots, dwell, respawn and recharge');
 $input(['actions'=>['fly']]);
 check(!$session->balloons->shots && !$session->balloons->status()['practice'], 'Leaving the F5 clears transient flight state');
+$input(['actions'=>['beach-ball-spawn']]);
+$balls=$session->balloons->beachBalls->states();
+check(count($balls)===1,'Explore spawns a ball outside the jet.');
+$session->load($session->save());
+check($balls==$session->balloons->beachBalls->states(),'The beach ball round-trips through a landscape file.');
+foreach([true,false] as $gun) {
+	$range=new BalloonPractice;
+	$id=$range->beachBalls->spawn([0.,100.,0.],[0.,0.,1.],120.,$land,-10.);
+	for($i=0;$i<24;$i++) $range->step($dt,$pose,false,false,$land,-10.,true);
+	check($range->status()['locked'] && $range->status()['selected']===$id,'The ball can acquire a lock.');
+	$range->step($dt,$pose,!$gun,$gun,$land,-10.,true);
+	for($i=0;$i<40 && $range->shots;$i++) $range->step($dt,$pose,false,false,$land,-10.,true);
+	$b=$range->beachBalls->states()[$id];
+	check($b[5]>($gun ? 10. : 30.) && !$range->shots && $range->hits===0 && $range->status()['selected']===$id,
+		'Both shot types kick the selected ball and preserve it without scoring a balloon.');
+	$range->beachBalls->step($dt,$land,-10.,'fly',null,null);
+	check($range->contacts()[$id][2]>$b[2], 'The radar contact moves with the ball.');
+}
+foreach(['car','craft','jet'] as $mode) {
+	$range=new BalloonPractice;
+	$id=$range->beachBalls->spawn([0.,100.,0.],[0.,0.,1.],10.,$land,-10.);
+	$range->beachBalls->step($dt,$land,-10.,$mode,$pose,array_replace($pose,['z'=>19.]));
+	check($range->beachBalls->states()[$id][5]>0., "A swept $mode contact pushes the ball.");
+}
+foreach([-15.,15.] as $water) {
+	$range=new BalloonPractice;
+	$id=$range->beachBalls->spawn([0.,24.,0.],[0.,0.,1.],0.,$land,$water);
+	for($i=0;$i<1200;$i++) $moving=$range->beachBalls->step($dt,$land,$water,'fly',null,null);
+	check(!$moving && abs($range->contacts()[$id][1]-max($land->height(0,0)+2.,$water+1.))<.03,'Balls settle on terrain and float on water.');
+}
 $session->close(); $land->close();
 echo "$checks balloon practice checks passed.\n";

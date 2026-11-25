@@ -107,7 +107,7 @@ foreach(['car'=>-10.,'craft'=>10.] as $mode=>$water) {
 		$s->course->place('checkpoint','road',0.,0.,50.,0.);
 		$s->race->advance($s->course,[0.,0.,-51.],[0.,0.,-49.],0.,1/60,'car',1);
 	}
-	$s->input(['actions'=>['demo-record'],'keys'=>['KeyW'=>1,'KeyD'=>1]],.01,1.);
+	$s->input(['actions'=>['beach-ball-spawn','demo-record'],'keys'=>['KeyW'=>1,'KeyD'=>1]],.01,1.);
 	for($i=0;$i<90;$i++) { $s->step(1/60); $s->demo->capture($s); }
 	$s->input(['actions'=>['demo-stop']],0.,1.);
 	$file=$s->demo->export();
@@ -116,6 +116,8 @@ foreach(['car'=>-10.,'craft'=>10.] as $mode=>$water) {
 	$selected=$s->demo->branch(); $snap=$selected->frame($selected->duration());
 	$s->input(['actions'=>['demo-take-control']],0.,1.);
 	$p=$s->$mode->state();
+	check(count($snap['events']['beachBalls'])===1 && $s->balloons->beachBalls->states()===$snap['events']['beachBalls'],
+		'A divergent recording restores the ball pose and velocity at the selected time.');
 	check($s->demo->recording && $s->mode===$mode && abs($p['x']-$snap['vehicle']['x'])<.001
 		&& abs($p['speed']-$snap['vehicle']['speed'])<.001 && $p['speed']>.01,'Restore moving '.$mode.' at the selected sample');
 	if($mode==='car') {

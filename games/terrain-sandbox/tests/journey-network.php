@@ -185,6 +185,19 @@ networkCheck($s->status()['journeySquare']==='C' && $s->status()['journeyExits']
 	&& abs($after['x']-$held['x']-$shift[0])<1.e-6 && $s->landscape->material($after['x'],$after['z'])==='road',
 	'The input clock resumes C on the same pavement with both onward destinations.');
 $mid=$s->save();
+foreach([['B','journey-fork'],['G','journey-drive'],['C','journey-drive']] as [$stage,$action]) {
+	$s->input(['actions'=>[['type'=>$action,'stage'=>$stage,'generation'=>$s->generation]]],0.,1.);
+	settleNetwork($s);
+	$car=$s->car->state();
+	[$x,$z]=JourneyRoad::entrances($s->landscape,true)[$action==='journey-fork'?'fork':'west'];
+	networkCheck($s->mode==='car' && $s->journeySquare()===$stage && hypot($car['x']-$x,$car['z']-$z)<3.,
+		"The selected stage $stage supplies the requested entrance.");
+	$s->step(1/60);
+	if($stage==='G') {
+		$s->load($s->save());
+		networkCheck($s->journeySquare()==='G','A terminal map can be saved and reopened.');
+	}
+}
 foreach(['F','G'] as $branch=>$leaf) {
 	$s->load($mid); $s->input(['actions'=>['journey-fork']],0.,1.); onward($s,$branch,$leaf);
 }

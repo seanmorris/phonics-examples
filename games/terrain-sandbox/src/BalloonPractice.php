@@ -27,6 +27,10 @@ final class BalloonPractice
 	public float $elapsed = 0, $ground = 0, $hitUntil = 0;
 	public int $hits = 0;
 
+	public readonly BeachBalls $beachBalls;
+	public function __construct() { $this->beachBalls=new BeachBalls; }
+	public function contacts(): array { return $this->targets()+BeachBalls::positions($this->beachBalls->states()); }
+
 	public function export(): array { return array_values($this->placements); }
 
 	public static function load(mixed $items, Landscape $land, float $water): self
@@ -51,6 +55,7 @@ final class BalloonPractice
 		$half = $land->recipe()['worldSize']/2;
 		if(abs($x) > $half || abs($z) > $half || $height < 12 || $height > 1200)
 			throw new \InvalidArgumentException('Balloon outside the placement area.');
+		if($this->nextId===BeachBalls::FIRST) $this->nextId+=BeachBalls::LIMIT;
 		$id = $this->nextId++;
 		$this->placements[$id] = [$x,$z,$height];
 		$this->positions[$id] = [$x,max($water,$land->height($x,$z))+$height,$z];
@@ -71,6 +76,7 @@ final class BalloonPractice
 
 	public function refit(Landscape $land, float $water): void
 	{
+		$this->beachBalls->wake();
 		foreach($this->placements as $id => [$x,$z,$height])
 			$this->positions[$id][1] = max($water,$land->height($x,$z))+$height;
 		if($this->practicePoint !== null)
@@ -142,17 +148,18 @@ final class BalloonPractice
 
 	public function cycle(): void
 	{
-		$ids = array_keys($this->targets());
+		$ids = array_keys($this->contacts());
 		if(!$ids) return;
 		$i = array_search($this->selected,$ids,true);
 		$this->select($ids[$i === false ? 0 : ($i+1)%count($ids)]);
 	}
 
 	/** Distance along a unit segment direction to the scaled balloon envelope. */
-	private static function intersection(array $a, array $d, array $p): ?float
+	private static function intersection(array $a, array $d, array $p,bool $beachBall=false): ?float
 	{
 		$aa = $bb = 0.0; $cc = -1.0;
-		foreach([6.7,10.0,6.7] as $i => $radius)
+		$radii=$beachBall ? array_fill(0,3,BeachBalls::RADIUS) : [6.7,10.0,6.7];
+		foreach($radii as $i => $radius)
 		{
 			$v = $d[$i]/$radius; $r = ($a[$i]-$p[$i])/$radius;
 			$aa += $v*$v; $bb += $r*$v; $cc += $r*$r;
@@ -182,7 +189,7 @@ final class BalloonPractice
 
 	private function track(array $p, Landscape $land, float $water, float $dt): void
 	{
-		$targets = $this->targets();
+		$targets = $this->contacts();
 		if(!$targets) { $this->select(null); return; }
 		$eye = Jet::cockpit($p);
 		[$nose] = $eye->basis();
@@ -259,7 +266,7 @@ final class BalloonPractice
 			$this->emit($p,null);
 			$this->gunAt = $this->elapsed+.09;
 		}
-		$points = $this->targets();
+		$points = $this->contacts();
 		foreach($this->shots as $i => &$shot)
 		{
 			$a = $shot['position']; $d = $shot['direction'];
@@ -276,7 +283,7 @@ final class BalloonPractice
 			$travel = $shot['speed']*max(0.0,min($dt,$shot['expires']-($this->elapsed-$dt))); $hit = null;
 			foreach($points as $id => $point)
 			{
-				$t = self::intersection($a,$d,$point);
+				$t = self::intersection($a,$d,$point,$this->beachBalls->has($id));
 				if($t !== null && $t <= $travel) { $hit = $id; $travel = $t; }
 			}
 			$surface = self::surfaceDistance($a,$d,$travel,$land,$water);
@@ -291,11 +298,17 @@ final class BalloonPractice
 			}
 			if($hit !== null && !$outside)
 			{
+				$this->hitUntil = $this->elapsed+.65;
+				if($this->beachBalls->has($hit)) {
+					$this->beachBalls->kick($hit,$d,$shot['tracer']);
+					unset($this->shots[$i]);
+					continue;
+				}
 				unset($points[$hit]);
 				if($hit === $this->practiceId) { $this->practicePoint = null; $this->respawn = $this->elapsed+.85; }
 				else $this->popped[$hit] = true;
 				if($this->selected === $hit) $this->select(null);
-				$this->hits++; $this->hitUntil = $this->elapsed+.65;
+				$this->hits++;
 			}
 			if($outside || $surface !== null || $hit !== null || $this->elapsed >= $shot['expires']) unset($this->shots[$i]);
 			else { $shot['previous'] = $a; $shot['position'] = $b; $shot['direction'] = $d; }
@@ -338,6 +351,7 @@ final class BalloonPractice
 
 	public function resume(array $events): void
 	{
+		$this->beachBalls->restore($events['beachBalls'] ?? []);
 		$r=$events['range'] ?? null;
 		if(!$r) return;
 		$this->elapsed=$r['elapsed']; $this->ground=$r['ground']; $this->hits=(int)($r['hits'] ?? 0);
@@ -361,7 +375,7 @@ final class BalloonPractice
 
 	public function status(): array
 	{
-		return ['selected'=>$this->selected,'visible'=>$this->visible,'locked'=>$this->dwell >= self::LOCK_SECONDS,
+		return ['selected'=>$this->selected,'beachBall'=>$this->selected!==null && $this->beachBalls->has($this->selected),'visible'=>$this->visible,'locked'=>$this->dwell >= self::LOCK_SECONDS,
 			'lockProgress'=>$this->dwell/self::LOCK_SECONDS,'hits'=>$this->hits,
 			'hit'=>$this->elapsed < $this->hitUntil,'elapsed'=>$this->elapsed,'practice'=>$this->practice,
 			'ready'=>count($this->readySlots()),

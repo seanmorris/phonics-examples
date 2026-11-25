@@ -585,6 +585,10 @@ export function activate({module, canvas, session, services})
 				journeyProgress.textContent = 'Preparing the route before the drive…';
 				push({type, west: value('west'), destinations, span: Number(value('span')), ...network});
 			}
+			else if(type === 'journey-drive' || type === 'journey-fork') {
+				const selection = planner.driveSelection(type === 'journey-fork');
+				if(selection) push({type, ...selection});
+			}
 			else if(type === 'load') frame.querySelector('[data-file]').click();
 			else if(type === 'demo-file') frame.querySelector('[data-demo-file]').click();
 			else if(type === 'menu' && latest?.screenshotView) push('menu-back');
@@ -1124,11 +1128,13 @@ export function activate({module, canvas, session, services})
 			if(activeNetwork && state.journeySquare && (networkChanged || loaded)) {
 				if(loaded || networkField.value!==activeNetwork.plan) planner.adopt(state.journeySquare,loaded);
 				networkField.value = activeNetwork.plan;
+				journeyField('span').value = String(state.recipe.join?.span ?? state.recipe.worldSize);
 				junction.value = 'network';
 				showRoute(activeNetwork);
 				updateJunction();
 			}
 			const demo = state.demo, playing = demo.playhead !== null;
+			button('beach-ball-spawn').disabled = playing;
 			button('demo-record').hidden = playing || demo.recording;
 			button('demo-stop').hidden = !playing && !demo.recording;
 			button('demo-stop').textContent = playing ? 'Stop playback' : 'Stop recording';
@@ -1259,7 +1265,7 @@ export function activate({module, canvas, session, services})
 				}
 				else if(state.journeyBranch) text = here + ' → ' + name(state.journeyBranch);
 				else if(right) text = here + ' — Left to ' + name(left) + ' / Right to ' + name(right);
-				else text = here + ' → ' + name(left);
+				else text = left ? here + ' → ' + name(left) : here + ' · End of route';
 				if(sign.textContent !== text) sign.textContent = text;
 			}
 
@@ -1315,11 +1321,6 @@ export function activate({module, canvas, session, services})
 			if(journeyProgress.textContent !== progress) journeyProgress.textContent = progress;
 			button('journey-build').textContent = journeyRequest ? 'Building journey…' : 'Build and drive';
 			button('journey-build').disabled = !editable || Boolean(journeyRequest) || (junction.value === 'network' && !preview?.nodes);
-			for(const key of ['journey-drive','journey-fork'])
-			{
-				button(key).hidden = !state.recipe.join || (key === 'journey-fork' && !state.journeyHasFork);
-				button(key).disabled = Boolean(journeyRequest) || state.preparing || state.picking;
-			}
 			button('circuit-cancel').hidden = !circuit.searching && !circuit.preview;
 			button('circuit-cancel').disabled = state.preparing;
 			button('circuit-dry').disabled = !editable || !circuit.points;
@@ -3018,6 +3019,7 @@ function markup(journeyMarkup)
 	<button data-action="demo-hold" hidden>Hold frame</button><button data-action="demo-take-control" hidden>Take control &amp; record</button></div></div></fieldset>
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button><button data-action="delivery">Package run</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
+	<div class="terrain-row"><button data-action="beach-ball-spawn">Spawn beach ball</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
 	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>
 	<p class="terrain-note">The F5's launch, Vulcan, balloon and view buttons show at the top left of the view for the controller or keyboard you are using.</p></div>
@@ -3029,8 +3031,8 @@ function markup(journeyMarkup)
 	<label class="terrain-field terrain-wide">Music volume<input type="range" min="0" max="100" step="1" data-music-level></label>
 	<details><summary>Driving and flight controls</summary><p class="terrain-note">Press M or click the left stick to show or hide the car or F5 minimap. Press N or tap D-pad ↓ to change its zoom.</p>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: fast flight · Shift / LB: car nitrous · Space: handbrake · L: headlights · R: reset the race · H: hide controls · Esc: pause menu. P freezes waves and physics and leaves editing available.</p>
-	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Hold Back and tap L1/LB for the previous track or R1/RB for the next. Click the right stick to return to the road during a race or landscape journey. Start opens the pause menu.</p>
-	</details><details><summary>Credits</summary><p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p></details>
+	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles targets. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Hold Back and tap L1/LB for the previous track or R1/RB for the next. Click the right stick to return to the road during a race or landscape journey. Start opens the pause menu.</p>
+	</details><details><summary>Credits</summary><p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Adapted from <a href="https://sketchfab.com/3d-models/beach-ball-low-poly-609035202d29492bba35e1103ba27580" target="_blank" rel="noopener">Beach Ball Low-poly by MaX3Dd</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p></details>
 	</section>
 	</div></div></details><p class="terrain-menu-live" data-menu-live aria-live="polite"></p><output class="terrain-demo-status" data-demo-status aria-live="off" hidden></output><div class="terrain-hud"><p data-journey-sign hidden></p><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

@@ -26,7 +26,7 @@ final class DemoEvents
 			'race'=>$race,'target'=>$s->navigationTarget($vehicle),
 			'sites'=>$s->delivery?->beacons($s->time) ?? [],
 			'delivery'=>$s->delivery ? ['delivered'=>$s->delivery->delivered,'carrying'=>$s->delivery->carrying,'target'=>$s->delivery->target()] : null,
-			'balloons'=>$s->balloons->targets(),'slots'=>$s->balloons->readySlots(),'shots'=>$shots,'range'=>$range,
+			'beachBalls'=>$s->balloons->beachBalls->states(),'balloons'=>$s->balloons->targets(),'slots'=>$s->balloons->readySlots(),'shots'=>$shots,'range'=>$range,
 			'contacts'=>$s->mode === 'car' ? $s->car->dustContacts : []];
 		$delta = [];
 		foreach($state as $key=>$value) if(!array_key_exists($key,$this->last) || $this->last[$key] !== $value) $delta[$key]=$value;
@@ -105,6 +105,7 @@ final class DemoEvents
 			foreach(unpack('g*',$bytes) as $value) if(!is_finite($value) || abs($value)>1e9) return false;
 			return true;
 		}
+		if($key==='beachBalls') return BeachBalls::valid($v);
 		if($key==='rangeTimers') return $v===null || self::vector($v,7);
 		if($key==='raceDistance') return self::vector([$v],1);
 		if(in_array($key,['contacts','shots','balloons','slots','sites'],true)) {

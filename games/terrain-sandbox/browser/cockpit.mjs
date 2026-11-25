@@ -371,7 +371,7 @@ export function activate({module, canvas})
 				line(x, y+side*10, x, y+side*19, c);
 			}
 
-			text('BAL', x+21, y-8, 14, c, 'left');
+			text(range.beachBall ? 'BALL' : 'BAL', x+21, y-8, 14, c, 'left');
 			text(rangeYards(distance), x+21, y+9, 14, c, 'left');
 		}
 

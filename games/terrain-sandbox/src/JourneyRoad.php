@@ -265,9 +265,9 @@ final class JourneyRoad
 	}
 
 	/** Resolve the start and first fork from the edited network. World coordinates can change when a knot is moved. */
-	public static function entrances(Landscape $land): array
+	public static function entrances(Landscape $land,bool $journeyStage=false): array
 	{
-		if(!isset($land->recipe()['join'])) return [];
+		if(!$journeyStage && !isset($land->recipe()['join'])) return [];
 		$roads = $land->roads();
 		$west = $incoming = null;
 		foreach($roads as $road) {

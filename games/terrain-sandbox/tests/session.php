@@ -2497,8 +2497,8 @@ expect(in_array('L Lights', $keys, true) && in_array('⓿ Handbrake', $keys, tru
 	&& in_array('❼ Accelerate', $pad, true) && $pad === TerrainSandbox\ControlHints::entries('car', 'xbox'),
 	'The car uses L and the X button for lights; every pad shares one list in its own art');
 expect(in_array('❸ ❶ Speed', TerrainSandbox\ControlHints::entries('jet', 'xbox', 'expert'), true)
-	&& !in_array('↑ Next balloon', TerrainSandbox\ControlHints::entries('jet', 'xbox'), true)
-	&& in_array('↑ Next balloon', TerrainSandbox\ControlHints::entries('jet', 'xbox', 'novice', true), true),
+	&& !in_array('↑ Next target', TerrainSandbox\ControlHints::entries('jet', 'xbox'), true)
+	&& in_array('↑ Next target', TerrainSandbox\ControlHints::entries('jet', 'xbox', 'novice', true), true),
 	'Expert F5 speed is on Y and B, and balloon cycling shows only when there are balloons');
 
 // The pause menu offers what suits the mode, sends choices through the session's checks, and hands the world back.

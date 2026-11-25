@@ -16,6 +16,7 @@ use TerrainPhonics\Scene;
 use TerrainPhonics\GrassShells;
 use TerrainPhonics\AtmosphereLayers;
 use TerrainPhonics\Recipe;
+use TerrainSandbox\BeachBalls;
 use TerrainSandbox\Car;
 use TerrainSandbox\CarEngineSound;
 use TerrainSandbox\SandboxMenu;
@@ -329,6 +330,11 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		$model->draw(['x'=>$x,'y'=>$y,'z'=>$z,'yaw'=>0,'pitch'=>0,'roll'=>0],
 			$viewCamera,$session->atmosphere,$session->water,$width,$height);
 	}
+	foreach($events['beachBalls'] ?? $session->balloons->beachBalls->states() as [$x,$y,$z,,,,$pitch,$roll]) {
+		$model=$models['beach-ball'] ??= new VehicleModel(__DIR__.'/assets/beach-ball/mesh.bin.gz');
+		$model->draw(['x'=>$x,'y'=>$y,'z'=>$z,'yaw'=>0.,'pitch'=>$pitch,'roll'=>$roll],
+			$viewCamera,$session->atmosphere,$session->water,$width,$height);
+	}
 	$streaks = [];
 	foreach($events['shots'] ?? $session->balloons->shots as $shot)
 	{
@@ -504,7 +510,8 @@ $engine->start(
 			if($journeyAtlas->needsChart) $journeyAtlas->capture($scene,$session,$width,$height,$atlasResult);
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
-				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !$journeySigns->count && !($events['balloons'] ?? $session->balloons->targets()) ? null
+				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !$journeySigns->count && !($events['balloons'] ?? $session->balloons->targets())
+					&& !($events['beachBalls'] ?? $session->balloons->beachBalls->states()) ? null
 					: fn() => $drawOpaque($session,$scene,$sample ? $playback->hiddenGates : $hiddenGates,$events));
 			$trails = match($session->mode) { 'jet' => $session->flightTrails, 'car' => $session->tireDust, default => null };
 			if($trails?->active())
@@ -543,7 +550,7 @@ $engine->start(
 					'fov'=>$viewCamera->fov,'jet'=>$vehiclePose,'thrust'=>TerrainSandbox\Jet::thrustPercent($vehiclePose['power']),'cockpit'=>$session->jetView === 'cockpit',
 					'range'=>$events['range'] ?? $session->balloons->status(),'ring'=>TerrainSandbox\BalloonPractice::RING,
 					'contactRange'=>TerrainSandbox\BalloonPractice::CONTACT_RANGE,
-					'targets'=>$events['balloons'] ?? $session->balloons->targets()];
+					'targets'=>isset($events['balloons']) ? $events['balloons']+BeachBalls::positions($events['beachBalls'] ?? []) : $session->balloons->contacts()];
 			}
 			if($car || $craft) $frame['speedometer'] = ['mph'=>abs($vehiclePose['speed'])/Car::MPS_PER_MPH,
 				'maximum'=>$car ? Car::TOP_SPEED_MPH : 120,'size'=>$instrumentSize];
@@ -576,6 +583,7 @@ $engine->start(
 				$status['race'] = ($events['race'] ?? []) + $status['race'];
 				$status['delivery'] = $events['delivery'] ?? null;
 				$status['balloons'] = ($events['range'] ?? []) + $status['balloons'];
+				$status['beachBalls'] = BeachBalls::positions($events['beachBalls'] ?? []);
 				if($vehiclePose !== null) $status[$sample['mode']] = $vehiclePose;
 			}
 			// A large route graph crosses the UI bridge only when the active plan changes.

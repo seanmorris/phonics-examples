@@ -507,6 +507,8 @@ final class Session
 	private ?string $surveyedPlan = null;
 	private ?JourneyHighways $highways = null, $driveHighways = null;
 	private ?array $journeyBuildProgress = null;
+	private ?string $boardingStage = null;
+	private bool $boardingFork = false;
 	private array $journeyEntrances = [], $journeyViews = [], $preparedViews = [];
 	private ?string $journeyBuildPhase = null;
 	private ?JourneyNetwork $network = null, $buildingNetwork = null;
@@ -538,6 +540,7 @@ final class Session
 	{
 		return $this->nextSquare===$stage ? $this->onwardReady?->roadRecords() : null;
 	}
+	public function journeyVersion(): int { return $this->driveHighways?->version ?? 2; }
 	public function journeyPlan(): ?string { return $this->network?->plan; }
 	public function journeyNodes(): array { return $this->network?->nodes ?? []; }
 	public function preparingRoad(): bool { return $this->roadWork !== null || $this->journeyReady !== null || $this->onwardWork !== null || $this->transfer; }
@@ -672,13 +675,14 @@ final class Session
 				$this->journeyBuildPhase=null; $this->journeyBuildProgress=null;
 				$previous = $this->landscape->recipe()['preset'];
 				$this->replace($next,$this->driveHighways);
-				$this->network=$network; $this->square=$network?->start;
+				$this->network=$network; $this->square=$this->boardingStage ?? $network?->start;
 				$this->journeyViews=$this->preparedViews;
 				$this->course = new Course($this->gateShapes);
 				$this->surfaceLayers = $this->materialPreset = $this->paint = null;
 				$this->switchPresetLook($previous,$next->recipe()['preset']);
 				$this->preparing = false;
-				$this->driveJourney(false);
+				$this->driveJourney($this->boardingFork);
+				$this->boardingStage=null; $this->boardingFork=false;
 			}
 			if($wasPicking) $this->advancePick($pickMs);
 			if($this->carSearch !== null) $this->advanceCarSearch();
@@ -757,7 +761,7 @@ final class Session
 		if($this->mode === 'craft')
 		{
 			$this->reserveCraft();
-			if($racing) $before = $this->craft->state();
+			if($racing || $this->balloons->beachBalls->states()) $before = $this->craft->state();
 			$this->craft->step($seconds, $this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
 				$this->blend('KeyA', 'KeyD', $this->pad['x']), $this->water, $this->landscape, $this->time);
 			$after = $this->craft->state();
@@ -801,7 +805,7 @@ final class Session
 			else
 			{
 				$after = $this->car->state();
-				if($this->network && !$racing && !$this->delivery) $this->approachSquare($after);
+				if(!empty($this->network->nodes[$this->square]['exits']) && !$this->preparing && !$racing && !$this->delivery) $this->approachSquare($after);
 				$hadDust = $this->tireDust->active();
 				$this->tireDust->step($seconds,$this->car->dustContacts,$after);
 				if($hadDust || $this->tireDust->active()) $this->dirty = true;
@@ -853,6 +857,8 @@ final class Session
 			$this->launches = max(0,$this->launches-1);
 			$this->dirty = true;
 		}
+		if($this->balloons->beachBalls->step($seconds,$this->landscape,$this->water->level(),$mode,
+			$mode===$this->mode ? ($before ?? null) : null,$after ?? null)) $this->dirty=true;
 		$this->time += $seconds;
 		$this->water->update($this->time);
 		// The application redraws for wave time whenever water shows, which covers the gates that float on it.
@@ -1391,7 +1397,7 @@ final class Session
 	 */
 	public function hint(): array
 	{
-		return ControlHints::entries($this->mode, $this->inputTheme, $this->jetControls, (bool)$this->balloons->targets(),
+		return ControlHints::entries($this->mode, $this->inputTheme, $this->jetControls, (bool)$this->balloons->contacts(),
 			$this->race->state === 'running' || isset($this->landscape->recipe()['join']));
 	}
 
@@ -1760,7 +1766,27 @@ final class Session
 				})();
 				break;
 			case 'journey-drive': case 'journey-fork':
-				if(isset($this->landscape->recipe()['join'])) $this->driveJourney($type==='journey-fork');
+				if(isset($action['generation']) && $action['generation']!==$this->generation) break;
+				$fork=$type==='journey-fork';
+				$stage=$action['stage'] ?? $this->square;
+				if($stage!==null && (!isset($this->network->nodes[$stage]) || ($fork && count($this->network->nodes[$stage]['exits'])!==2))) break;
+				if($stage===$this->square) {
+					if(isset($this->journeyEntrances[$fork?'fork':'west'])) $this->driveJourney($fork);
+					break;
+				}
+				$this->discardOnward();
+				$highways=$this->driveHighways;
+				$next=new Landscape($highways->recipe($stage));
+				$this->buildingNetwork=$this->network;
+				$this->boardingStage=$stage; $this->boardingFork=$fork;
+				$this->preparing=true;
+				$this->message="Opening stage {$stage}…";
+				$this->roadWork=(function() use($next,$highways,$stage) {
+					try {
+						$this->preparedViews=yield from $highways->build($next,$stage,from:$this->square,active:$this->landscape);
+						$this->journeyReady=$next;
+					} finally { if($this->journeyReady!==$next) $next->close(); }
+				})();
 				break;
 			case 'generate':
 				$preset=(string)($action['preset'] ?? 'coast');
@@ -1930,6 +1956,21 @@ final class Session
 				break;
 			case 'jet-target':
 				if($this->mode === 'jet') { $this->balloons->cycle(); $this->dirty = true; }
+				break;
+			case 'beach-ball-spawn':
+				$eye=$this->camera;
+				$distance=18.;
+				if($this->mode==='jet') {
+					$eye=Jet::cockpit($this->jet->state()); $distance=280.;
+				}
+				$origin=$eye->position; [$forward]=$eye->basis();
+				if(in_array($this->mode,['car','craft'],true)) {
+					$p=$this->mode==='car' ? $this->car->state() : $this->craft->state();
+					$origin=[$p['x'],$p['y']+BeachBalls::RADIUS,$p['z']];
+					$forward=[sin($p['yaw']),0.,cos($p['yaw'])];
+				}
+				$this->balloons->beachBalls->spawn($origin,$forward,$distance,$this->landscape,$this->water->level());
+				$this->dirty=true; $this->message='Beach ball spawned.';
 				break;
 			case 'balloon-practice':
 				if($this->mode === 'jet')
@@ -2309,7 +2350,9 @@ final class Session
 			if(abs($x)<= $next->recipe()['worldSize']/2 && abs($z)<=$next->recipe()['worldSize']/2 && $next->material($x,$z)==='road')
 				$views[]=[$x,$z,$relief];
 		}
+		$props=$this->balloons->beachBalls->translated($shift,$next->recipe()['worldSize']/2);
 		$this->replace($next,$this->driveHighways);
+		$this->balloons->beachBalls->restore($props);
 		$this->journeyViews=$views;
 		$this->network=$network; $this->square=$child; $this->mode='car';
 		$this->course=new Course($this->gateShapes);
@@ -2337,7 +2380,8 @@ final class Session
 		$this->lamps->reset();
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
 		$this->chase->board($this->camera,$this->car->state(),$this->landscape);
-		$this->message = $fork ? 'Choose either branch at the fork.' : 'Drive east to the landscape junction.';
+		$this->message = $fork ? 'Choose either branch at the fork.' : ($this->square===null
+			? 'Drive east to the landscape junction.' : "Driving from the west edge of {$this->square}.");
 		$this->dirty = true;
 	}
 
@@ -2564,7 +2608,7 @@ final class Session
 		$this->releasePin();
 		$this->landscape->close();
 		$this->landscape = $landscape;
-		$this->journeyEntrances = JourneyRoad::entrances($landscape);
+		$this->journeyEntrances = JourneyRoad::entrances($landscape,$this->driveHighways!==null);
 		$this->duck = null;
 		$this->balloons = new BalloonPractice;
 		$this->delivery = null;
@@ -2665,6 +2709,7 @@ final class Session
 		} catch(\Throwable $error) {
 			$this->roadWork = null;
 			$this->journeyBuildPhase = null; $this->journeyBuildProgress=null;
+			$this->boardingStage=null; $this->boardingFork=false;
 			$this->buildingNetwork = null;
 			$this->preparing = false;
 			$this->roadEditor->applyResult($error->getMessage());
@@ -2709,7 +2754,7 @@ final class Session
 			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
 		$this->landscape->close();
 		$this->landscape = $landscape;
-		$this->journeyEntrances = JourneyRoad::entrances($landscape);
+		$this->journeyEntrances = JourneyRoad::entrances($landscape,$this->driveHighways!==null);
 		$this->duck = null;
 		if($this->circuitCommit !== null)
 		{
@@ -2750,7 +2795,12 @@ final class Session
 			'balloons' => $this->balloons->export(), 'course' => $this->course->export()];
 		if($demo) $document['demoPreview'] = ['roads'=>$this->roadEditor->hiddenRoads(),'layers'=>$this->hiddenLayerIds];
 		if($this->journeyViews) $document['journeyViews']=$this->journeyViews;
-		if($this->network) $document['journeyNetwork']=['plan'=>$this->network->plan,'square'=>$this->square];
+		if($balls=$this->balloons->beachBalls->states()) $document['beachBalls']=$balls;
+		if($this->network) {
+			$document['journeyNetwork']=['plan'=>$this->network->plan,'square'=>$this->square];
+			if(!isset($this->landscape->recipe()['join']) && $this->driveHighways->version===1)
+				$document['journeyNetwork']['version']=1;
+		}
 		if($this->circuit !== null)
 			$document['circuit'] = ['route'=>$this->circuit->export(),'variant'=>$this->circuitVariant];
 		return json_encode($document, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
@@ -2907,6 +2957,7 @@ final class Session
 			throw new \InvalidArgumentException('Invalid saved control value.');
 			$balloons = BalloonPractice::load(array_key_exists('balloons',$data) ? $data['balloons'] : [],
 				$candidate,$candidate->recipe()['waterLevel']);
+			$balloons->beachBalls->restore($data['beachBalls'] ?? []);
 			$views=$data['journeyViews'] ?? [];
 			if(!is_array($views) || !array_is_list($views) || count($views)>3) throw new \InvalidArgumentException('Invalid saved overlooks.');
 			foreach($views as $view) {
@@ -2919,9 +2970,9 @@ final class Session
 				$network=new JourneyNetwork($data['journeyNetwork']['plan'] ?? '');
 				$square=$data['journeyNetwork']['square'] ?? '';
 				$r=$candidate->recipe();
-				if(!isset($r['join'],$network->nodes[$square]) || !$network->nodes[$square]['exits']
-					|| $network->recipe($square,$r['join']['span'])['preset']!==$r['preset']
-					|| array_column($r['join']['destinations'],'preset')!==array_column($network->recipe($square,$r['join']['span'])['join']['destinations'],'preset'))
+				$node=$network->nodes[$square] ?? null;
+				if(!$node || !in_array($data['journeyNetwork']['version'] ?? 2,[1,2],true) || (bool)$node['exits']!==isset($r['join']) || $node['preset']!==$r['preset']
+					|| array_column($r['join']['destinations'] ?? [],'preset')!==array_map(fn($id)=>$network->nodes[$id]['preset'],$node['exits']))
 					throw new \InvalidArgumentException('Saved road network and active square disagree.');
 			}
 			$position = $data['camera']['position'] ?? [0,600,1200];
@@ -2933,7 +2984,7 @@ final class Session
 			throw new \InvalidArgumentException('Invalid saved camera direction.');
 		}
 		catch(\Throwable $error) { $candidate->close(); throw $error; }
-		$highways=$network ? $this->highways($network,$r['join']['span'],$r['join']['version'] ?? 1) : null;
+		$highways=$network ? $this->highways($network,(int)($r['join']['span'] ?? $r['worldSize']),$r['join']['version'] ?? (isset($r['join']) ? 1 : ($data['journeyNetwork']['version'] ?? 2))) : null;
 		$this->replace($candidate,$highways);
 		$this->network=$network; $this->square=$square; $this->journeyViews=$views;
 		$this->balloons = $balloons;
@@ -3075,7 +3126,7 @@ final class Session
 				$side = $dx*cos($heading) - $dz*sin($heading);
 				$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;
 			}
-			if($this->network) {
+			if(!empty($this->network->nodes[$this->square]['exits'])) {
 				$branch=$this->journeyBranch($car);
 				if($branch!==null && $branch===$this->nextSquare && !$this->network->nodes[$branch]['exits']) $arrival=$branch;
 			}
@@ -3093,7 +3144,7 @@ final class Session
 			'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
 			'selectionInterval' => $this->selectionInterval,
 			'selectionSliceMs' => $this->selectionSliceMs,
-			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(),
+			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(), 'beachBalls'=>BeachBalls::positions($this->balloons->beachBalls->states()),
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,'inputTheme' => $this->inputTheme,'hint' => $this->hint(),
 			'cpuDriver' => $this->driver?->phase, 'canWatchDriver' => $this->canWatchDriver(),
 			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),'lampAdaptation' => $this->lampAdaptation,

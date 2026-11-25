@@ -279,16 +279,16 @@ function mount(frame, canvas, signal, roadMap) {
 		const span=Number(extent.value), west=network()?nodes[which].preset:select('west').value;
 		const exits=network()?[...new Set(nodes[which].exits)]:layout.value==='divide'?['L','R']:['E'];
 		const destinations=network()?exits.map(e=>nodes[e].preset):[select('east').value,...(exits.length===2?[select('south').value]:[])];
-		const live=Boolean(state?.recipe.join && state.recipe.join.span===span && (network()
+		const live=Boolean(state && (state.recipe.join?.span ?? state.recipe.worldSize)===span && (network()
 			? activeNetwork?.plan===source.value && state.journeySquare===which
-			: !state.journeySquare && state.recipe.preset===west && state.recipe.join.destinations.length===destinations.length
+			: state.recipe.join && !state.journeySquare && state.recipe.preset===west && state.recipe.join.destinations.length===destinations.length
 				&& state.recipe.join.destinations.every((p,i)=>p.preset===destinations[i])));
 		const params=network()?{plan:source.value,stage:which,span}:{west,destinations,span};
 		if(live)params.generation=state.generation;
 		const version=live?[state.generation,state.revision,state.settings.waterColor,state.settings.waterLevel,
 			state.hiddenSurfaceLayers,state.surfaceLayers,state.surfaceFields,state.paintInks,roadMap()?.hidden]:null;
-		const active=network() && activeNetwork?.plan===source.value && state.recipe.join?.span===span;
-		const scope=network()?JSON.stringify([planRevision,span,active?(state.recipe.join.version ?? 1):2]):null;
+		const active=network() && activeNetwork?.plan===source.value && (state.recipe.join?.span ?? state.recipe.worldSize)===span;
+		const scope=network()?JSON.stringify([planRevision,span,active?(state.recipe.join?.version ?? (state.recipe.join?1:2)):2]):null;
 		const progress=active && !live ? (state.journeyReady===which?'ready':state.journeySurveying===which?'building':null) : null;
 		return {params,west,exits,destinations,live,scope,progress,signature:JSON.stringify([span,network()?which:null,west,exits,destinations,version,scope,progress])};
 	}
@@ -427,7 +427,30 @@ function mount(frame, canvas, signal, roadMap) {
 		});
 	}
 
+	function driveSelection(fork) {
+		if(!state || busy || state.preparing || state.picking) return null;
+		const span=Number(extent.value);
+		if(network()) {
+			if(!valid || activeNetwork?.plan!==source.value || !state.journeySquare
+				|| (state.recipe.join?.span ?? state.recipe.worldSize)!==span || !valid[stage]
+				|| (fork && valid[stage].exits.length!==2)) return null;
+			return {stage, generation:state.generation};
+		}
+		const join=state.recipe.join;
+		if(!join || state.journeySquare || join.span!==span || state.recipe.preset!==select('west').value
+			|| join.destinations[0].preset!==select('east').value || (layout.value==='divide')!==(join.destinations.length===2)
+			|| (join.destinations.length===2 && join.destinations[1].preset!==select('south').value)
+			|| (fork && !state.journeyHasFork)) return null;
+		return {generation:state.generation};
+	}
+	function driveButtons() {
+		for(const [key,fork] of [['journey-drive',false],['journey-fork',true]]) {
+			const button=el('[data-action='+key+']');
+			button.hidden=!driveSelection(fork);
+		}
+	}
 	function refresh() {
+		driveButtons();
 		const enabled=panel.open && !tab.hidden && !document.hidden;
 		const next=enabled && !busy?spec():null;
 		if(enabled===visible && (next?.signature ?? '')===key)return;
@@ -498,6 +521,7 @@ function mount(frame, canvas, signal, roadMap) {
 		if(previous?.mode!==next.mode)el('[data-edit-flight]').hidden=next.mode==='fly';
 		if(previous?.generation!==next.generation || previous?.journeyArrival!==next.journeyArrival || oldPlan!==plan)renderNetwork();
 		lastRoadMap=roads;
+		if(!tab.hidden && (wasBusy!==busy || previous?.preparing!==next.preparing || previous?.picking!==next.picking)) driveButtons();
 		if(!tab.hidden && (shared || roadsChanged || wasBusy!==busy || previous?.generation!==next.generation || previous?.revision!==next.revision
 			|| previous?.journeyReady!==next.journeyReady || previous?.journeySurveying!==next.journeySurveying
 			|| previous?.settings.waterLevel!==next.settings.waterLevel || previous?.settings.waterColor!==next.settings.waterColor
@@ -506,7 +530,7 @@ function mount(frame, canvas, signal, roadMap) {
 			if(shared || (roadsChanged && request?.live)) {draw();describe();queueThumbnails();}
 		}
 	}
-	return {validated,layoutChanged,sync,receive,adopt(id,loaded){history.length=0;stage=id;lastGraphicPlan=null;if(loaded)planRevision++;},takeRequest(){const item=pending;pending=null;return item;},hasRequest:()=>pending!==null};
+	return {validated,layoutChanged,sync,receive,driveSelection,adopt(id,loaded){history.length=0;stage=id;lastGraphicPlan=null;if(loaded)planRevision++;},takeRequest(){const item=pending;pending=null;return item;},hasRequest:()=>pending!==null};
 }
 
 export function activate({module}) {

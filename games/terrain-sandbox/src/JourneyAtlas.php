@@ -42,8 +42,8 @@ final class JourneyAtlas
 					$id=$request['stage'];
 					if(!isset($network->nodes[$id])) throw new \InvalidArgumentException('Choose a stage in this route.');
 					$this->departure=$id===$network->start;
-					$active=$session->journeyPlan()===$this->plan && ($session->landscape->recipe()['join']['span'] ?? null)===$span;
-					$version=$active ? ($session->landscape->recipe()['join']['version'] ?? 1) : 2;
+					$active=$session->journeyPlan()===$this->plan && (int)($session->landscape->recipe()['join']['span'] ?? $session->landscape->recipe()['worldSize'])===$span;
+					$version=$active ? $session->journeyVersion() : 2;
 					$highways=$session->highways($network,$span,$version);
 					$recipe=$highways->recipe($id);
 					$from=$active ? $session->journeySquare() : null;

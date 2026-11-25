@@ -71,7 +71,7 @@ final class ControlHints
 		};
 		$actions = $pad ? ['⓿ Launch', '❷ Vulcan'] : ['⓿ Launch', 'G Vulcan'];
 
-		if($balloons) $actions[] = $pad ? '↑ Next balloon' : 'T Next balloon';
+		if($balloons) $actions[] = $pad ? '↑ Next target' : 'T Next target';
 
 		$actions[] = $pad ? '⓫ View' : 'V View';
 		$actions[] = $pad ? '❽ ↓ Fly' : 'F Fly';
