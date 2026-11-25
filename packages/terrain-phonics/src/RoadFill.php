@@ -25,6 +25,7 @@ final class RoadFill
 				$start=$road['radius']; $h=$height($x+$nx*$start,$z+$nz*$start);
 				$gap=$edge-self::CROSS_FALL*$shoulder-$h;
 				if($gap<1.5 || $h<=$water || $gap>$reach) continue;
+				$initialGap=$gap;
 				for($offset=$step;$offset<=$reach;$offset+=$step) {
 					$d=$start+$offset;
 					$h=$height($x+$nx*$d,$z+$nz*$d);
@@ -33,6 +34,9 @@ final class RoadFill
 					if($remaining>0.) { $gap=$remaining; continue; }
 					// Interpolate the first intersection of the sloped shoulder and the bank.
 					$end=$d-$step+$step*$gap/($gap-$remaining);
+					// The bank must close at least half the gap. A sloping shoulder also
+					// intersects flat ground eventually, even when there is no hillside.
+					if(self::CROSS_FALL*($end-$start) > .5*$initialGap) break;
 					$apron=$spacing+8.; $pad=$apron*1.5;
 					$ax=$x+$nx*$half; $az=$z+$nz*$half;
 					$bx=$x+$nx*($end+$apron); $bz=$z+$nz*($end+$apron);

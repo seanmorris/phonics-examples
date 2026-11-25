@@ -21,7 +21,7 @@ foreach([-1.,1.] as $side) {
 	$group=(int)$floats[4*$leaves+($zTile%8)*8+$xTile%8];
 	$addresses=array_slice($floats,4*($group+1),(int)$floats[4*$group+1]);
 	checkWindow(min($addresses)<0.,'The GPU tile over the pocket references its fill strips.');
-	foreach([static fn()=>2.,static fn($x,$z)=>$field($x,$z)-10.] as $open) {
+	foreach([static fn()=>2.,static fn()=>10.,static fn($x,$z)=>$field($x,$z)-10.] as $open) {
 		$job=RoadFill::prepare($road['_road'],$open,0.); iterator_count($job);
 		checkWindow(!isset($job->getReturn()['fills']),'Raised roads over open terrain and water retain their own shoulders.');
 	}
