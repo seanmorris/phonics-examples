@@ -9,9 +9,10 @@ final class RoadWarnings
 {
 	public const CURVE=2, HAIRPIN=3, SWERVE=4, KINK=5, MERGE=6, HILL=7, DIP=8;
 	public const LEAD=400*DisplayUnits::FOOT;
+	private const POLE_SPACING=100*DisplayUnits::FOOT;
 	private const PAIR_DISTANCE=200*DisplayUnits::FOOT;
 	private const STEP=6.; // Survey interval in meters; vertical grades use a two-interval wheel path on either side.
-	private array $sections=[], $starts=[], $features=[], $posts=[], $occupied=[];
+	private array $sections=[], $starts=[], $features=[], $posts=[];
 	private float $length=0.;
 	private bool $closed=false;
 	private string $entrance;
@@ -117,8 +118,13 @@ final class RoadWarnings
 		foreach($paths as $path) foreach($path->features as $travel=>$families) foreach($families as $family=>$features)
 			foreach($features as $i=>[$start,,$symbol]) yield from $path->schedule($start,$travel,$family,$i,$symbol,$incoming);
 		foreach($paths as $path) {
-			usort($path->posts,static fn($a,$b)=>$a[0]<=>$b[0]);
-			foreach($path->posts as [,$at,$travel,$symbol,$minimum]) yield $path->post($at,$travel,$symbol,$minimum,$roads);
+			$approaches=[];
+			foreach($path->posts as [$hazard,$at,$travel,$symbol,$minimum]) {
+				$placed=$path->post($at,$travel,$symbol,$minimum,$hazard,$roads);
+				if($placed!==null) $approaches[$travel][]=$placed;
+				yield null;
+			}
+			foreach($approaches as $approach) yield from $path->sharedPoles($approach);
 		}
 	}
 
@@ -284,26 +290,58 @@ final class RoadWarnings
 		return true;
 	}
 
+	/** Combine actual shoulder sites on one approach. Distances and sign order follow the pavement. */
+	private function sharedPoles(array $sites): \Generator
+	{
+		usort($sites,static fn($a,$b)=>$a['at']<=>$b['at']);
+		if($this->closed && count($sites)>1) {
+			// Cut the circular list at its widest gap so a lap line cannot separate a pair.
+			$cut=0; $widest=$sites[0]['at']+$this->length-end($sites)['at'];
+			foreach($sites as $i=>$site) if($i && $site['at']-$sites[$i-1]['at']>$widest) {
+				$cut=$i; $widest=$site['at']-$sites[$i-1]['at'];
+			}
+			$wrapped=array_slice($sites,0,$cut);
+			foreach($wrapped as &$site) $site['at']+=$this->length;
+			unset($site);
+			$sites=[...array_slice($sites,$cut),...$wrapped];
+		}
+
+		$symbols=[];
+		foreach($sites as $i=>$site) {
+			if(($i&31)===0) yield null;
+			$at=$site['at'];
+			$earliest=$at-$site['slack']; // Earliest legal position after a preceding, conflicting turn.
+			if($symbols && ($at-$first>self::POLE_SPACING+1.e-6 || ($earliest>$anchor['at'] && $at>=min($symbols)))) {
+				asort($symbols,SORT_NUMERIC);
+				yield [...$anchor['pose'],...array_keys($symbols)];
+				$symbols=[];
+			}
+			if(!$symbols) { $first=$at; $anchor=$site; }
+			elseif($earliest>$anchor['at']) $anchor=$site;
+			$symbol=$site['symbol'];
+			$symbols[$symbol]=min($symbols[$symbol] ?? INF,$at+$site['lead']);
+		}
+		if($symbols) {
+			asort($symbols,SORT_NUMERIC);
+			yield [...$anchor['pose'],...array_keys($symbols)];
+		}
+	}
+
 	/** Put a driver-facing diamond on the right shoulder. Try the other shoulder if the intersection covers it. */
-	private function post(float $station,int $travel,int $symbol,float $minimum,array $roads): ?array
+	private function post(float $station,int $travel,int $symbol,float $minimum,float $hazard,array $roads): ?array
 	{
 		foreach([0.,-5.,5.,-10.,10.] as $shift) {
-			$at=$station+$shift;
-			if($at<$minimum) continue;
-			if($travel<0) $at=$this->length-$at;
-			if(!$this->closed && ($at<-.01 || $at>$this->length+.01)) continue;
-			// Reserve the full cross-section. Moving a duplicate to the other shoulder still shows two warnings.
-			if($this->closed) $at=fmod(fmod($at,$this->length)+$this->length,$this->length);
-			$bin=(int)floor($at/self::STEP);
-			for($i=$bin-1;$i<=$bin+1;$i++) foreach($this->occupied[$travel][$i] ?? [] as $used)
-				if(abs($used-$at)<=self::STEP) return null;
+			$along=$station+$shift;
+			if($along<$minimum) continue;
+			if(!$this->closed && ($along<-.01 || $along>$this->length+.01)) continue;
+			$at=$travel<0 ? $this->length-$along : $along;
 			$p=$this->pose($at); [$x,,$z]=$p['position']; [$tx,$tz]=$p['heading']; $tx*=$travel; $tz*=$travel;
 			foreach([1,-1] as $shoulder) {
 				$offset=$shoulder*($p['width']/2.+2.5); $sx=$x-$tz*$offset; $sz=$z+$tx*$offset;
 				if(Edits::onRoad($sx,$sz,$roads)) continue;
-				$copies=$this->closed ? [$at-$this->length,$at,$at+$this->length] : [$at];
-				foreach($copies as $s) $this->occupied[$travel][(int)floor($s/self::STEP)][]=$s;
-				return [$sx,$sz,$tx,$tz,$symbol];
+				$wrapped=$this->closed ? fmod(fmod($along,$this->length)+$this->length,$this->length) : $along;
+				return ['at'=>$wrapped,'lead'=>$hazard-$along,'slack'=>$along-$minimum,
+					'pose'=>[$sx,$sz,$tx,$tz],'symbol'=>$symbol];
 			}
 		}
 		return null;

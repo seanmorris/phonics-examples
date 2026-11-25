@@ -3,6 +3,7 @@ precision highp float;
 layout(location=0) in vec2 q;
 layout(location=1) in vec3 foot;
 layout(location=2) in vec3 heading; // horizontal tangent and signed artwork number
+layout(location=3) in vec2 mount; // panel lift, one for the instance that draws the pole
 uniform mat4 vp;
 uniform vec3 eye;
 uniform vec3 sun;
@@ -19,10 +20,15 @@ void main() {
 	int kind = int(abs(heading.z)+.5)-1;
 	bool back = dot(eye.xz-foot.xz,tangent)>0.;
 	panel = gl_VertexID < 6 ? (back ? 2 : 1) : 0;
-	float bottom = kind==0 ? 1.35 : 1.60;
+	float bottom = (kind==0 ? 1.35 : 1.60) + mount.x;
 	vec2 size = kind==0 ? vec2(3.84,4.80) : vec2(5.30);
 	vec2 offset = (gl_VertexID < 12 ? right : tangent) * (q.x-.5) * (panel != 0 ? size.x : .13);
 	float h = panel != 0 ? bottom+size.y*q.y : mix(-.3,bottom,q.y);
+	if(panel == 0) {
+		// Keep the single shaft behind every face. Extra panels emit no pole triangles.
+		if(mount.x > 0.) offset += .08*tangent;
+		if(mount.y < .5) { offset=vec2(0.); h=-.3; }
+	}
 	vec3 world = foot + vec3(offset.x,h,offset.y);
 	relative = world-eye;
 	gl_Position = vp*vec4(relative,1.);

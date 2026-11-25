@@ -12,6 +12,8 @@ use TerrainPhonics\SpotLights;
 final class CurveSignModel
 {
 	private const CELL = 256.;
+	private const TIER_HEIGHT = 5.65; // 5.30 m diamond and a 0.35 m gap.
+	private const SITE_BYTES = 28; // XZ, heading XZ, signed artwork, panel lift, pole flag.
 	private const MAX_HEIGHT = 6.90; // Diamond bottom (1.60 m) plus its 5.30 m face.
 	private const RANGE = 1000.;
 	private const ASSETS = __DIR__.'/../assets/roads/';
@@ -44,7 +46,7 @@ final class CurveSignModel
 		}
 		$this->cells = $this->build->getReturn();
 		$this->build = null;
-		foreach($this->cells as $cell) $this->count += intdiv(strlen($cell['bytes']),20);
+		foreach($this->cells as $cell) $this->count += intdiv(strlen($cell['bytes']),self::SITE_BYTES);
 		return $changed || $this->count > 0;
 	}
 
@@ -54,11 +56,17 @@ final class CurveSignModel
 		$half=$land->recipe()['worldSize']/2;
 		foreach([CurveSigns::sites($land), RoadWarnings::sites($land)] as $signs) foreach($signs as $site) {
 			if($site !== null && max(abs($site[0]),abs($site[1]))<=$half) {
-				[$x,$z] = $site;
+				[$x,$z,$tx,$tz] = $site;
 				$col = (int)floor($x/self::CELL); $row = (int)floor($z/self::CELL);
 				$key = "$col,$row";
-				$cells[$key] ??= ['box'=>['x'=>$col*self::CELL-2.65,'z'=>$row*self::CELL-2.65,'size'=>self::CELL+5.30],'bytes'=>''];
-				$cells[$key]['bytes'] .= pack('g*',...$site);
+				$cells[$key] ??= ['box'=>['x'=>$col*self::CELL-2.65,'z'=>$row*self::CELL-2.65,'size'=>self::CELL+5.30],'bytes'=>'','lift'=>0.];
+				$last=array_key_last($site);
+				for($face=4;$face<=$last;$face++) {
+					// The first hazard is the top panel. That instance supplies the entire shared pole.
+					$lift=($last-$face)*self::TIER_HEIGHT;
+					$cells[$key]['bytes'] .= pack('g*',$x,$z,$tx,$tz,$site[$face],$lift,(float)($face===4));
+				}
+				$cells[$key]['lift']=max($cells[$key]['lift'],($last-4)*self::TIER_HEIGHT);
 			}
 			yield;
 		}
@@ -93,10 +101,10 @@ final class CurveSignModel
 		glEnableVertexAttribArray(0); glVertexAttribPointer(0,2,GL_FLOAT,false,8,0);
 		glGenBuffers(1,$vbo); glBindBuffer(GL_ARRAY_BUFFER,$vbo[0]);
 		glBufferData(GL_ARRAY_BUFFER,strlen($bytes),$bytes,GL_STATIC_DRAW);
-		for($i=0; $i<2; $i++) {
-			glEnableVertexAttribArray($i+1);
-			glVertexAttribPointer($i+1,3,GL_FLOAT,false,24,12*$i);
-			glVertexAttribDivisor($i+1,1);
+		foreach([[1,3,0],[2,3,12],[3,2,24]] as [$attribute,$size,$offset]) {
+			glEnableVertexAttribArray($attribute);
+			glVertexAttribPointer($attribute,$size,GL_FLOAT,false,32,$offset);
+			glVertexAttribDivisor($attribute,1);
 		}
 		return [$vao,$vbo];
 	}
@@ -105,11 +113,11 @@ final class CurveSignModel
 	private function fit(string $bytes): \Generator
 	{
 		$fitted = ''; $low = INF; $high = -INF;
-		for($i = 0, $end = strlen($bytes); $i < $end; $i += 20) {
-			$site = unpack('gx/gz',$bytes,$i);
+		for($i = 0, $end = strlen($bytes); $i < $end; $i += self::SITE_BYTES) {
+			$site = unpack('gx/gz/x12/glift',$bytes,$i);
 			$y = $this->land->height($site['x'],$site['z']);
-			$fitted .= substr($bytes,$i,4).pack('g',$y).substr($bytes,$i+4,16);
-			$low = min($low,$y-.3); $high = max($high,$y+self::MAX_HEIGHT);
+			$fitted .= substr($bytes,$i,4).pack('g',$y).substr($bytes,$i+4,self::SITE_BYTES-4);
+			$low = min($low,$y-.3); $high = max($high,$y+self::MAX_HEIGHT+$site['lift']);
 			yield;
 		}
 		return [$fitted,$low,$high];
@@ -127,7 +135,7 @@ final class CurveSignModel
 		foreach($this->cells as $key=>$cell) {
 			$fitted = isset($this->meshes[$key]);
 			$low = $fitted ? $cell['low'] : $bounds['minY']-.3;
-			$high = $fitted ? $cell['high'] : $bounds['maxY']+self::MAX_HEIGHT;
+			$high = $fitted ? $cell['high'] : $bounds['maxY']+self::MAX_HEIGHT+$cell['lift'];
 			if($high < $water) continue;
 			$box = $cell['box'];
 			$dx = max(0.,$box['x']-$eye[0],$eye[0]-$box['x']-$box['size']);
@@ -163,7 +171,7 @@ final class CurveSignModel
 			}
 			[$vao] = $this->meshes[$key];
 			glBindVertexArray($vao[0]);
-			$count = intdiv(strlen($cell['bytes']),20);
+			$count = intdiv(strlen($cell['bytes']),self::SITE_BYTES);
 			glDrawArraysInstanced(GL_TRIANGLES,0,18,$count);
 			$this->drawn += $count;
 		}

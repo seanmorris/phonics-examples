@@ -60,8 +60,12 @@ $land->close();
 
 function warnings(Landscape $land, int $kind): array
 {
-	return array_values(array_filter(iterator_to_array(RoadWarnings::sites($land),false),
-		static fn($s)=>$s!==null && abs($s[4])===$kind));
+	$faces=[];
+	foreach(RoadWarnings::sites($land) as $pole) if($pole!==null) {
+		foreach(array_slice($pole,4) as $symbol) if(abs($symbol)===$kind)
+			$faces[]=[...array_slice($pole,0,4),$symbol];
+	}
+	return $faces;
 }
 function pavement(array $a,array $b): array
 {
@@ -144,6 +148,60 @@ check(count($forwardWarnings)===2,'A nearby bend beyond a merge warns both forwa
 foreach($forwardWarnings as [$x,$z,$tx,$tz]) check($tz>0. && abs(100.-($x*$tx+$z*$tz)-400.*.3048)<7.,
 	'The approach includes the distance driven beyond the merge in its 400 ft lead.');
 $afterMerge->close();
+// The same bend just 18 m beyond the merge needs two distinct warnings on each incoming approach.
+$stacked=$merge->fork();
+$curve=bend(45.,1);
+foreach($curve['points'] as &$point) $point[2]+=18.;
+unset($point);
+$stacked->queue(['replaceAt'=>2]+pavement([0.,0.,0.],[0.,0.,18.]));
+$stacked->queue($curve); $stacked->commit();
+$poles=array_values(array_filter(iterator_to_array(RoadWarnings::sites($stacked),false)));
+check(count($poles)===2,'Each incoming road keeps its own shared warning pole.');
+foreach($poles as $pole) {
+	check(count($pole)===6 && abs($pole[4])===RoadWarnings::MERGE && $pole[5]===RoadWarnings::CURVE,
+		'The driver sees the merge above the bend, with both symbols visible.');
+	check(($pole[0]<0.)===($pole[4]<0) && !\TerrainPhonics\Edits::onRoad($pole[0],$pole[1],$stacked->roads()),
+		'The shared pole keeps the correct shoulder, facing and mirrored merge artwork.');
+}
+$model=new CurveSignModel;
+for($i=0;$i<1000 && !$model->count;$i++) $model->update($stacked);
+$cells=(fn()=>$this->cells)->call($model);
+$panels=$supports=0;
+foreach($cells as $cell) {
+	$fit=(fn()=>$this->fit($cell['bytes']))->call($model);
+	iterator_count($fit);
+	[$bytes,,$high]=$fit->getReturn();
+	foreach(str_split($bytes,32) as $instance) {
+		[$x,$y,$z,$tx,$tz,$symbol,$lift,$support]=array_values(unpack('g*',$instance));
+		if(abs($symbol)<2.) continue;
+		$panels++; $supports+=(int)$support;
+		check(($lift>5.30)===($support===1.) && ($lift>0.)===(abs($symbol)===floatval(RoadWarnings::MERGE)),
+			'Only the higher panel supplies the shaft, with clearance between the two diamonds.');
+		check($high>=$y+$lift+6.89 && $cell['lift']>=$lift-.001,'Culling bounds include the top point of each diamond.');
+	}
+}
+check($panels===4 && $supports===2,'Four diamonds on the two approaches render on exactly two poles.');
+$model->close(); $stacked->close();
+
+// Exact driving distances also cover coincident sites, a three-sign chain and the timing-line seam.
+$group=function(array $placements,bool $closed=false) {
+	$path=new RoadWarnings;
+	$sites=[];
+	foreach($placements as [$at,$symbol]) $sites[]=['at'=>$at,'slack'=>INF,'lead'=>120.,'symbol'=>$symbol,'pose'=>[$at,0.,1.,0.]];
+	$job=(function() use($sites,$closed) {
+		$this->closed=$closed; $this->length=500.;
+		return $this->sharedPoles($sites);
+	})->call($path);
+	return array_values(array_filter(iterator_to_array($job,false)));
+};
+$hundred=100*\TerrainSandbox\DisplayUnits::FOOT;
+$poles=$group([[0.,2],[0.,2],[$hundred,-3],[2*$hundred,7]]);
+check(count($poles)===2 && array_slice($poles[0],4)===[2,-3] && $poles[1][4]===7,
+	'Include exactly 100 feet, omit duplicate artwork and keep a distant third sign at its own site.');
+check(count($group([[0.,2],[$hundred+.001,7]]))===2,'Just beyond 100 feet gets two poles.');
+$poles=$group([[5.,7],[475.,-2]],true);
+check(count($poles)===1 && $poles[0][0]===475. && array_slice($poles[0],4)===[-2,7],
+	'Across a lap seam the first hazard stays on top at the upstream pole.');
 // Only one incoming road has a turn before the merge. Delay its next turn warning on that arm alone.
 $junction=new Landscape(['worldSize'=>2048]);
 $exit=[-125.,0.,45.]; $join=[-100.,0.,45.];
