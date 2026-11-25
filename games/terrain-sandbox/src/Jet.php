@@ -107,6 +107,15 @@ final class Jet
 	public function step(float $dt, float $throttle, float $bank, float $climb, Camera $camera, Landscape $land,
 		float $water, float $rudder = 0.0): bool
 	{
+		if(!$this->fly($dt,$throttle,$bank,$climb,$land,$water,$rudder)) return false;
+		$this->follow($dt,$camera,$land,$water);
+		return true;
+	}
+
+	/** Advance the airframe and control surfaces one tick, independent of who is piloting or watching it. */
+	public function fly(float $dt, float $throttle, float $bank, float $climb, Landscape $land,
+		float $water, float $rudder = 0.): bool
+	{
 		$this->survey($land);
 		$this->previous = $this->pose;
 		$p = &$this->pose;
@@ -162,7 +171,6 @@ final class Jet
 			$p['vy'] = ($p['y'] - $this->previous['y']) / $dt;
 			$p['vz'] = ($z - $this->previous['z']) / $dt;
 		}
-		$this->follow($dt,$camera,$land,$water);
 		return true;
 	}
 
@@ -509,6 +517,13 @@ final class Jet
 	public function resume(array $p,array $motion,Camera $camera,Landscape $land,float $water): void
 	{
 		$this->survey($land);
+		$this->resumeFlight($p,$motion);
+		$this->follow(0.,$camera,$land,$water);
+	}
+
+	/** Restore the airframe without moving a camera. */
+	public function resumeFlight(array $p, array $motion = []): void
+	{
 		$this->previous=[];
 		$this->pose=array_intersect_key($p,array_flip(['x','y','z','yaw','pitch','roll','speed','power','vx','vy','vz','aileron','stabilator','rudder']));
 		$this->expert=(bool)($motion[0] ?? $this->expert);
@@ -516,7 +531,6 @@ final class Jet
 		$speed=max(.001,sqrt($p['vx']**2+$p['vy']**2+$p['vz']**2));
 		$this->flightDirection=$motion ? array_slice($motion,4,3) : [$p['vx']/$speed,$p['vy']/$speed,$p['vz']/$speed];
 		$this->chase=$motion ? array_slice($motion,7,3) : $this->flightDirection;
-		$this->follow(0.,$camera,$land,$water);
 	}
 
 	public function state(): array { return $this->pose; }

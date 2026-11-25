@@ -5,20 +5,28 @@ namespace TerrainSandbox;
 use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 
-/** A fly-by choreographed around the car, independent of the player's jet and the race. */
+/** A pilot for the same F5 airframe the player flies. The car provides a course and a formation station. */
 final class AirPatrol
 {
-	private const ARRIVAL = 3.4;
-	private const AXES = ['x','y','z','yaw','pitch','roll'];
 	private string $phase = 'idle';
-	private float $elapsed = 0., $slow = 0., $heading = 0., $side = 1., $from = 0., $lane = 0.;
-	private float $probeIn = 0., $aheadFloor = 0., $exitSpeed = 0.;
-	private ?array $pose = null, $previous = null;
+	private float $elapsed = 0., $slow = 0., $side = 1., $circleRemaining = 0.;
+	private float $probeIn = 0., $aheadFloor = 0.;
+	private ?Jet $jet = null;
+	private ?SpeedSeeker $seeker = null;
+	private ?array $previous = null;
 
 	private static function angle(float $v): float { return atan2(sin($v),cos($v)); }
-	private static function smooth(float $v): float {
-		$v = max(0., min(1., $v));
-		return $v*$v*(3.-2.*$v);
+
+	private function launch(array $pose, float $speed): void
+	{
+		$this->jet = new Jet;
+		$this->seeker = new SpeedSeeker;
+		$horizontal = $speed*cos($pose['pitch']);
+		$power = $speed<=Jet::CRUISE ? Jet::CRUISE_POWER*($speed-Jet::SLOWEST)/(Jet::CRUISE-Jet::SLOWEST)
+			: Jet::CRUISE_POWER+(1.-Jet::CRUISE_POWER)*($speed-Jet::CRUISE)/(Jet::FASTEST-Jet::CRUISE);
+		$this->jet->resumeFlight($pose+['speed'=>$speed,'power'=>$power,'vx'=>$horizontal*sin($pose['yaw']),
+			'vy'=>$speed*sin($pose['pitch']),'vz'=>$horizontal*cos($pose['yaw']),'aileron'=>0.,'stabilator'=>0.,'rudder'=>0.]);
+		$this->previous=$this->jet->state();
 	}
 
 	/** Sample a nearby terrain lattice node. Air clearance is deliberately wider than a tire's. */
@@ -37,8 +45,8 @@ final class AirPatrol
 
 	private function arrive(array $car, Camera $eye, float $aspect, Landscape $land, float $water): bool
 	{
-		$this->heading = $car['yaw']-$car['drift'];
-		$f = sin($this->heading); $g = cos($this->heading);
+		$heading = $car['yaw']-$car['drift'];
+		$f = sin($heading); $g = cos($heading);
 		$left = self::floor($land,$water,$car['x']+32*$f-21*$g,$car['z']+32*$g+21*$f);
 		$right = self::floor($land,$water,$car['x']+32*$f+21*$g,$car['z']+32*$g-21*$f);
 		if(min($left,$right)>$car['y']+18.) return false;
@@ -48,10 +56,11 @@ final class AirPatrol
 			$x = $car['x']+$along*$f+64*$side*$g; $z = $car['z']+$along*$g-64*$side*$f;
 			$floor = self::floor($land,$water,$x,$z);
 			if($floor>$car['y']+30.) continue;
-			$p = ['x'=>$x,'y'=>max($car['y']+22.,$floor+10.),'z'=>$z,'yaw'=>$this->heading,'pitch'=>0.,'roll'=>0.];
+			$p = ['x'=>$x,'y'=>max($car['y']+22.,$floor+10.),'z'=>$z,'yaw'=>$heading,'pitch'=>0.,'roll'=>0.];
 			if(self::visible($p,$eye,$aspect)) continue;
 			$this->phase='arrival'; $this->elapsed=$this->slow=$this->probeIn=0.;
-			$this->from=$along; $this->side=$side; $this->lane=1.; $this->pose=$this->previous=$p;
+			$this->side=$side; $this->circleRemaining=0.;
+			$this->launch($p,min(Jet::FASTEST,$car['speed']+75.));
 			return true;
 		}
 		return false;
@@ -68,98 +77,124 @@ final class AirPatrol
 			return false;
 		}
 		$this->elapsed += $dt;
-		$this->previous = $this->pose;
-		$p = $this->pose;
-		if($this->phase==='departure') {
-			$p['pitch'] += (.68-$p['pitch'])*(1.-exp(-2.*$dt));
-			$p['roll'] += (.70*$this->side-$p['roll'])*(1.-exp(-2.*$dt));
-			$p['yaw'] += $this->side*.25*$dt;
-			$this->exitSpeed = min(180.,$this->exitSpeed+30.*$dt);
-			$run = $this->exitSpeed*$dt*cos($p['pitch']);
-			$p['x'] += $run*sin($p['yaw']); $p['z'] += $run*cos($p['yaw']);
-			$p['y'] = max($p['y']+$this->exitSpeed*$dt*sin($p['pitch']), self::floor($land,$water,$p['x'],$p['z'])+9.);
-			$this->pose=$p;
-			if($this->elapsed>2. && (!self::visible($p,$eye(),$aspect) || $p['y']>$car['y']+4000.)) {
-				$this->phase='idle'; $this->elapsed=12.; $this->pose=$this->previous=null;
-			}
-			return true;
-		}
-
-		$turn = self::angle($car['yaw']-$car['drift']-$this->heading);
-		$this->heading += max(-1.,min(1.,$turn*2.))*$dt;
-		$f = sin($this->heading); $g = cos($this->heading);
-		// Fly further to the side on straight stretches, then tuck overhead as the car turns.
-		$choice = self::smooth((cos(.42*max(0.,$this->elapsed-self::ARRIVAL))+.35)/.95)
-			*(1.-min(1.,abs($turn)*2.8));
-		$this->lane += ($choice-$this->lane)*(1.-exp(-1.2*$dt));
-		$u = min(1.,$this->elapsed/self::ARRIVAL);
-		$along = 34.+($this->from-34.)*(1.-$u)**2;
-		$across = $this->side*(64.+(14.*$this->lane-64.)*self::smooth(($u-.30)/.70));
-		$x = $car['x']+$along*$f+$across*$g; $z = $car['z']+$along*$g-$across*$f;
-		$floor = self::floor($land,$water,$x,$z);
-		$this->probeIn -= $dt;
-		if($this->probeIn<=0.) {
-			$this->probeIn=.16;
-			$look = 12.+.45*max(0.,$car['speed']);
-			$this->aheadFloor=self::floor($land,$water,$x+$look*$f,$z+$look*$g);
-		}
+		$p = $this->previous = $this->jet->state();
+		$course = $car['yaw']-$car['drift'];
+		$f = sin($course); $g = cos($course);
+		$dx = $p['x']-$car['x']; $dz = $p['z']-$car['z'];
+		$along = $dx*$f+$dz*$g;
+		$across = $dx*$g-$dz*$f;
 		$this->slow = $car['speed']<55.*Car::MPS_PER_MPH ? $this->slow+$dt : 0.;
-		if(max($floor,$this->aheadFloor)>$car['y']+23. || $this->slow>=2.5) {
-			$this->phase='departure'; $this->elapsed=0.;
-			$this->exitSpeed=max(70.,$car['speed']+16.);
-			// Climb toward the lower shoulder of the pass when one side is boxed in.
-			$heights=[];
-			foreach([-1,1] as $side) {
-				$yaw=$p['yaw']+$side*.65;
-				$heights[$side]=self::floor($land,$water,$p['x']+75.*sin($yaw),$p['z']+75.*cos($yaw));
+		if($this->phase!=='departure') {
+			$this->probeIn -= $dt;
+			if($this->probeIn<=0.) {
+				$this->probeIn=.18;
+				// Look down the aircraft's actual flight path, including the turn its bank is starting.
+				$this->aheadFloor=$water;
+				$track=atan2($p['vx'],$p['vz']);
+				foreach([.45,.95,1.6] as $seconds) {
+					$yaw=$track+.5*$seconds*.68*sin($p['roll']);
+					$range=$seconds*$p['speed'];
+					$this->aheadFloor=max($this->aheadFloor,self::floor($land,$water,
+						$p['x']+$range*sin($yaw),$p['z']+$range*cos($yaw)));
+				}
 			}
-			if(abs($heights[-1]-$heights[1])>4.) $this->side=$heights[-1]<$heights[1] ? -1. : 1.;
-			return true;
+			if($this->aheadFloor>max($car['y']+23.,$p['y']+8.) || $this->slow>=45.-1e-9) {
+				$this->phase='departure'; $this->elapsed=0.;
+				$heights=[];
+				foreach([-1,1] as $side) {
+					$yaw=$p['yaw']+$side*.65;
+					$heights[$side]=self::floor($land,$water,$p['x']+$p['speed']*sin($yaw),$p['z']+$p['speed']*cos($yaw));
+				}
+				if(abs($heights[-1]-$heights[1])>4.) $this->side=$heights[-1]<$heights[1] ? -1. : 1.;
+			}
 		}
-		if($u>=1.) $this->phase='escort';
-		$height = $car['y']+12.+4.*(1.-$this->lane)+10.*(1.-$u);
-		$height = max($height,$this->aheadFloor+10.);
-		$y = max($floor+9.,$p['y']+($height-$p['y'])*(1.-exp(-3.*$dt)));
-		$dx=$x-$p['x']; $dz=$z-$p['z']; $run=hypot($dx,$dz);
-		$yaw = $run>.01 ? atan2($dx,$dz) : $this->heading;
-		$pitch = max(-.45,min(.55,atan2($y-$p['y'],max(.01,$run))));
-		// Roll into the sweep while the wingtip comes into frame, then unwind onto the car's course.
-		$bank = -.98*$this->side*sin(M_PI*self::smooth(($u-.32)/.68)) + max(-.65,min(.65,1.8*$turn));
-		$blend = 1.-exp(-6.*$dt);
-		$this->pose=['x'=>$x,'y'=>$y,'z'=>$z,'yaw'=>$p['yaw']+self::angle($yaw-$p['yaw'])*$blend,
-			'pitch'=>$p['pitch']+($pitch-$p['pitch'])*$blend,'roll'=>$p['roll']+($bank-$p['roll'])*$blend];
+		if($this->phase==='departure') {
+			$bank=-.72*$this->side; $climb=.95; $throttle=.65;
+		} else {
+			// Use a forward sight point on the desired course to intercept the shoulder and then fly parallel.
+			// The pilot can change the engine and control surfaces only. It cannot place the airframe.
+			$headingError=self::angle($course-$p['yaw']);
+			$joining=$this->phase==='arrival';
+			$station=$joining ? 72. : 42.;
+			$lane=$this->side*(13.+13.*cos(.43*$this->elapsed))*max(0.,1.-1.6*abs($headingError));
+			if($joining && $along<18.) $lane=64.*$this->side;
+			$look=$joining ? 32. : max(42.,.82*$p['speed']);
+			$desired=$course+atan2($lane-$across,$look+max(0.,$station-$along));
+			$speed=$car['speed']+.62*($station-$along);
+			// A slow car cannot be paced at the F5's minimum airspeed. Fly a banked orbit until
+			// the car moves out ahead, then intercept again. Keep the turn direction through the reversal.
+			if($this->circleRemaining<=0. && $along>100. && $car['speed']<Jet::SLOWEST+5. && abs($headingError)<.95)
+				$this->circleRemaining=2.*M_PI;
+			if($this->circleRemaining>0.) {
+				$desired=$p['yaw']+1.45*$this->side;
+				$speed=Jet::SLOWEST;
+				if($this->circleRemaining<M_PI && $along < -45.) $this->circleRemaining=0.;
+			}
+			$turn=self::angle($desired-$p['yaw']);
+			$bank=max(-1.,min(1.,-2.8*$turn));
+			if($speed>Jet::SLOWEST) $speed=Jet::SLOWEST+min(150.,$speed-Jet::SLOWEST)*max(0.,cos($turn))**2;
+			$height=max($this->aheadFloor+12.,$car['y']+16.+6.*max(0.,1.-abs($across)/20.));
+			$climb=max(-.65,min(.95,atan2($height-$p['y'],max(45.,$p['speed']*.88))/.78));
+			$throttle=max(-1.,min(1.,($speed-Jet::CRUISE)/($speed<Jet::CRUISE ?
+				Jet::CRUISE-Jet::SLOWEST : Jet::FASTEST-Jet::CRUISE)));
+			if($this->phase==='arrival' && $along>=32. && abs($across)<25.) $this->phase='escort';
+		}
+		$flying=$this->jet->fly($dt,$throttle,$bank,$climb,$land,$water);
+		$next=$this->jet->state();
+		if($flying) $this->seeker->step($dt,$car,$next,$this->phase,$land,$water);
+		if($this->circleRemaining>0.) $this->circleRemaining=max(0.,$this->circleRemaining-
+			$this->side*self::angle($next['yaw']-$p['yaw']));
+		if(!$flying || ($this->phase==='departure' && $this->elapsed>2. && !self::visible($next,$eye(),$aspect))) {
+			$this->phase='idle'; $this->elapsed=12.; $this->jet=$this->previous=$this->seeker=null;
+		}
 		return true;
 	}
 
 	public function pose(float $alpha=1.): ?array
 	{
-		$p=$this->pose;
-		if($p===null || $alpha>=1.) return $p;
-		return self::interpolate($this->previous,$p,$alpha);
+		$p=$this->jet?->state();
+		return $p===null || $alpha>=1. ? $p : self::interpolate($this->previous,$p,$alpha);
 	}
 
 	public static function interpolate(array $from, array $p, float $alpha): array
 	{
-		foreach(self::AXES as $i=>$key) {
-			$a=$from[$key]; $d=$p[$key]-$a;
-			$p[$key]=$a+$alpha*($i>=3 ? self::angle($d) : $d);
+		foreach($from as $key=>$a) {
+			if(!isset($p[$key])) continue;
+			$d=$p[$key]-$a;
+			$p[$key]=$a+$alpha*(in_array($key,['yaw','pitch','roll'],true) ? self::angle($d) : $d);
 		}
 		return $p;
 	}
 
-	/** Keep enough pilot state to resume a recorded fly-by at any point. */
+	public function seeker(float $alpha=1.): ?array { return $this->seeker?->state($alpha); }
+
 	public function snapshot(): ?array
 	{
 		if($this->phase==='idle' && $this->elapsed===0.) return null;
-		return ['phase'=>$this->phase,'flight'=>[$this->elapsed,$this->slow,$this->heading,$this->side,$this->from,
-			$this->lane,$this->probeIn,$this->aheadFloor,$this->exitSpeed],'pose'=>$this->pose];
+		return ['phase'=>$this->phase,'flight'=>[$this->elapsed,$this->slow,$this->side,$this->circleRemaining,$this->probeIn,$this->aheadFloor],
+			'direction'=>$this->jet ? array_slice($this->jet->motion(),4,3) : null,'pose'=>$this->jet?->state(),'seeker'=>$this->seeker()];
 	}
 
 	public function resume(?array $s): void
 	{
+		$this->jet=$this->previous=$this->seeker=null;
+		$this->phase='idle'; $this->elapsed=$this->slow=$this->circleRemaining=$this->probeIn=$this->aheadFloor=0.;
 		if($s===null) return;
 		$this->phase=$s['phase'];
-		[$this->elapsed,$this->slow,$this->heading,$this->side,$this->from,$this->lane,$this->probeIn,$this->aheadFloor,$this->exitSpeed]=$s['flight'];
-		$this->pose=$this->previous=$s['pose'];
+		if(count($s['flight'])===9) {
+			// Older demos have a visual pose but no velocity. Take over flying from their recorded attitude.
+			[$this->elapsed,$this->slow,,$this->side]=$s['flight'];
+			if($s['pose']!==null) $this->launch($s['pose'],Jet::CRUISE);
+			return;
+		}
+		[$this->elapsed,$this->slow,$this->side,$this->circleRemaining,$this->probeIn,$this->aheadFloor]=$s['flight'];
+		if($s['pose']!==null) {
+			$this->seeker=new SpeedSeeker;
+			if(isset($s['seeker'])) $this->seeker->resume($s['seeker']);
+			$this->jet=new Jet;
+			$d=$s['direction'];
+			$this->jet->resumeFlight($s['pose'],[0,0.,0.,0.,...$d,...$d]);
+			$this->previous=$this->jet->state();
+		}
 	}
 }
