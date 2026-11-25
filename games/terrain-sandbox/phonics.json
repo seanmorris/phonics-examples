@@ -194,7 +194,7 @@
     "src/ControlHints.php": "sha256-dmQIx5EqIHhdh5sUv0utx0eFF5vzRAbOijBIlzGNBfc=",
     "src/CorridorGraph.php": "sha256-DEmja0EFY/xDyjI9svuKOkqvTPHDW8iQnksPNChIYfA=",
     "src/Course.php": "sha256-tSgbeX2HtCcV2CyEyh6pPJAH2Gp2zML+ntz4g5yHVQs=",
-    "src/CurveSignModel.php": "sha256-+G5m/jVjS06qLHFId7SbcV6Cl2BVokPv5Cg4C22GHkw=",
+    "src/CurveSignModel.php": "sha256-8N3wg2Y3QeDAH0xNJHgCd18/DTNCOs1xyp/lxukYtZU=",
     "src/CurveSigns.php": "sha256-sNFi6Vy+LWN+X5wYdOWvlw+cF+5QAILp1J4LfRb58ho=",
     "src/DeliveryBeacon.php": "sha256-eNt25UOPn8qRC/0yvweQNjUl9lXHNXWpgBDdtfs2jp4=",
     "src/DeliveryRun.php": "sha256-grExQE/x0UsKsGnOcoYoxp7J+TtUbhWQ57I6NrNUP90=",

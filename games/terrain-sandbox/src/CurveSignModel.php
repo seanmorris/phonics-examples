@@ -121,7 +121,7 @@ final class CurveSignModel
 		$eye = $camera->position;
 		$planes = $camera->clipPlanes($w,$h);
 		$bounds = $this->land->bounds();
-		$until = hrtime(true)+1_000_000;
+		$fitBudget = 1_000_000;
 		foreach($this->cells as $key=>$cell) {
 			$fitted = isset($this->meshes[$key]);
 			$low = $fitted ? $cell['low'] : $bounds['minY']-.3;
@@ -133,13 +133,17 @@ final class CurveSignModel
 			$dy = max(0.,$low-$eye[1],$eye[1]-$high);
 			if($dx*$dx+$dz*$dz+$dy*$dy > self::RANGE**2 || !Camera::inView($planes,$eye,$box,$low,$high)) continue;
 			if(!$fitted) {
+				// Drawing resident cells must not consume the time reserved for fitting and uploading new ones.
+				if($fitBudget <= 0) { $this->fitting = true; continue; }
+				$until = hrtime(true)+$fitBudget;
 				$fit = $this->fits[$key] ??= $this->fit($cell['bytes']);
-				while(hrtime(true) < $until && $fit->valid()) $fit->next();
-				if(hrtime(true) >= $until) { $this->fitting = true; continue; }
+				while($fit->valid() && hrtime(true) < $until) $fit->next();
+				if($fit->valid()) { $fitBudget = 0; $this->fitting = true; continue; }
 				[$bytes,$this->cells[$key]['low'],$this->cells[$key]['high']] = $fit->getReturn();
 				unset($this->fits[$key]);
 				if($this->program === null) $this->loadArtwork();
 				$this->meshes[$key] = $this->mesh($bytes);
+				$fitBudget = $until-hrtime(true);
 			}
 			if($this->drawn === 0) {
 				$p = $this->program; $p->use();
