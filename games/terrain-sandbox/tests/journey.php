@@ -4,11 +4,45 @@ require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
 
 use TerrainPhonics\{JoinedTerrain,Landscape,Recipe};
-use TerrainSandbox\{Car,JourneyNetwork,JourneyRoad,JourneySurvey,Session};
+use TerrainSandbox\{Car,JourneyNetwork,JourneyRoad,JourneySigns,JourneySurvey,RoadSerpentine,Session};
 
 function expectJourney(bool $ok,string $reason): void {
 	if(!$ok) throw new RuntimeException($reason);
 }
+
+// Measure the driven path across section boundaries and preserve the actual turning points.
+$mile=JourneySigns::MILE;
+$shape=static function(array $sections,callable $allows,array $ties=[]) {
+	$job=RoadSerpentine::fit($sections,array_keys($sections),$allows,$ties);
+	iterator_count($job);
+	return $job->getReturn();
+};
+$skip=static function() { throw new RuntimeException('A short straight must not need any terrain probes.'); };
+$limit=[[[0.,0.],[$mile,0.],[3*$mile,0.]]];
+expectJourney($shape($limit,$skip)===$limit,'Exactly three miles stays straight.');
+$corner=[[[0.,0.],[2.5*$mile,0.],[2.5*$mile,2.5*$mile]]];
+expectJourney($shape($corner,$skip)===$corner,'A real turn breaks the measurement into two short straights.');
+$long=[[[0.,0.],[3*$mile+1.,0.]]];
+$open=static fn()=>true;
+[$curved]=$shape($long,$open);
+$offsets=array_column($curved,1);
+expectJourney(min($offsets)<-30. && max($offsets)>30. && $curved[0]===$long[0][0] && end($curved)===$long[0][1],
+	'One meter over the threshold adds both swings and retains the road endpoints.');
+foreach($curved as $i=>[$x,$z]) if($i) {
+	[$lastX,$lastZ]=$curved[$i-1];
+	expectJourney(abs(atan2($z-$lastZ,$x-$lastX))<deg2rad(8.),'The change of course is gentle at highway speeds.');
+}
+$split=[[[0.,0.],[$mile,0.],[2*$mile,0.]],[[2*$mile,0.],[3.5*$mile,0.]]];
+$joined=$shape($split,$open,[[1]]);
+expectJourney($joined===$shape($split,$open,[[1]]) && in_array([$mile,0.],$joined[0],true)
+	&& end($joined[0])===$joined[1][0] && max(array_column($joined[1],1))>20.,
+	'A straight spanning two shorter sections bends deterministically around shared joints and fixed overlooks.');
+$shore=static fn($x,$z,$px,$pz)=>$pz>=0.;
+[$inland]=$shape($long,$shore);
+expectJourney(min(array_column($inland,1))>=0. && max(array_column($inland,1))>30.,'A shoreline bend can swing inland.');
+expectJourney($shape($long,static fn()=>false)===$long,'Retain the surveyed road in a corridor with no room on either side.');
+$verge=static fn($x,$z)=>$z>=24. ? -8. : 2.;
+expectJourney(!RoadSerpentine::fitsGround($verge,10.,0.,0.,0.,0.,15.,0.,1.),'Reject a dry centerline with a submerged verge.');
 
 // A smooth hillside rises roughly 20% straight across. The road can gain the
 // very same elevation on longer traverses between two fixed endpoints.
@@ -28,6 +62,23 @@ $slope->close();
 
 // A nearer flooded road and two separate dry branches exercise the stick click between junctions.
 $flat = ['preset'=>'coast','spacing'=>2.,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-5.];
+$highway=new Landscape($flat+['join'=>['version'=>2,'span'=>16384,'destinations'=>[$flat]]]);
+iterator_count(JourneyRoad::build($highway));
+$drive=throughRoute($highway->roads(),$highway->recipe()['worldSize']/2,false);
+$offsets=array_column($drive,1);
+expectJourney(min($offsets)<-40. && max($offsets)>40.,'The paved highway across a flat landscape includes alternating bends.');
+$edge=$highway->recipe()['worldSize']/2;
+$straight=0.; $low=$high=$drive[0][2];
+foreach($drive as $i=>[$x,$z,$yaw]) {
+	if($x>$edge-1500.) expectJourney(abs($z)<.01,'The shared arrival stays aligned for the next stage.');
+	if(!$i) continue;
+	$low=min($low,$yaw); $high=max($high,$yaw);
+	if($high-$low>deg2rad(5.)) { $low=$high=$yaw; $straight=0.; }
+	$straight+=hypot($x-$drive[$i-1][0],$z-$drive[$i-1][1]);
+	expectJourney($straight<=3*$mile,'The finished pavement has no stretch over three straight miles, including across record boundaries.');
+}
+$highway->close();
+
 $recovery = new Session($flat + ['join'=>['version'=>2,'span'=>32768,'destinations'=>[$flat]]]);
 foreach([[[100,0,-36],[-100,0,-36]], [[-100,-12,0],[100,-12,0]], [[-100,0,80],[100,0,80]]] as $points) {
 	$recovery->landscape->queue(['type'=>'road','points'=>$points,'width'=>10,'shoulder'=>2,'material'=>'road']);

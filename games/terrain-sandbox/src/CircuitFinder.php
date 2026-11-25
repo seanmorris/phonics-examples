@@ -126,7 +126,7 @@ final class CircuitFinder
 					if(++$attempts>48) return $dryCircuit;
 					$path = yield from $this->route($start,$end,$axis,$cut,$tip,$side);
 					if(count($path)<12) continue;
-					$points = $this->smooth($path,$x,$z);
+					$points = yield from $this->smooth($path,$x,$z);
 					if(count($points)>Circuit::MAX_POINTS || !$this->roundEnough($points)) continue;
 					if($regional || $this->causewayDeck !== null)
 					{
@@ -472,7 +472,7 @@ final class CircuitFinder
 	}
 
 	/** Round the grid turns, then put the start near the requested site on a straight. */
-	private function smooth(array $path, float $x, float $z): array
+	private function smooth(array $path, float $x, float $z): \Generator
 	{
 		$points = [];
 		$count = count($path);
@@ -499,6 +499,15 @@ final class CircuitFinder
 			}
 			$points = $rounded;
 		}
+		// The original loop begins at a rounded grid corner. Shape its closing edge before selecting a lap line.
+		$height=$this->landscape->height(...);
+		$allows=function($x,$z,$px,$pz,$nx,$nz) use($height): bool {
+			$col=(int)round(($px-$this->left)/$this->step); $row=(int)round(($pz-$this->top)/$this->step);
+			if(min($col,$row)<0 || max($col,$row)>=$this->side || !$this->open[$row*$this->side+$col]) return false;
+			return RoadSerpentine::fitsGround($height,CircuitRoad::WIDTH/2,$this->dryLevel+$this->swell+.25,$x,$z,$px,$pz,$nx,$nz);
+		};
+		[$points]=yield from RoadSerpentine::fit([[...$points,$points[0]]],[0],$allows);
+		array_pop($points);
 		$near = INF; $start = 0;
 		foreach($points as $i => [$px,$pz])
 		{

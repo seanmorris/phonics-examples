@@ -1240,6 +1240,31 @@ iterator_to_array($check);
 expect($check->getReturn() === null, 'The highway crest check catches a sharp crest in a side lane across the lap line');
 $roadFixture->close();
 
+// The survey of a long rectangular feature yields two eight-kilometer straights. Shape both,
+// including the one the lap line splits, while the short ends retain their original alignment.
+$plain=new Landscape(['worldSize'=>16384,'heightScale'=>0.,'detailAmplitude'=>0.]);
+$finder=new TerrainSandbox\CircuitFinder($plain,-10.,0.);
+$loop=(function() {
+	$this->side=201; $this->left=$this->top=-5000.; $this->step=50.;
+	$this->open=array_fill(0,$this->side**2,true);
+	$path=[];
+	for($col=20;$col<180;$col++) $path[]=80*$this->side+$col;
+	for($row=80;$row<112;$row++) $path[]=$row*$this->side+180;
+	for($col=180;$col>20;$col--) $path[]=112*$this->side+$col;
+	for($row=112;$row>80;$row--) $path[]=$row*$this->side+20;
+	return $this->smooth($path,0.,-1000.);
+})->call($finder);
+iterator_count($loop);
+$points=$loop->getReturn();
+foreach([-1000.,600.] as $baseline) {
+	$shifts=[];
+	foreach($points as [$x,$z]) if(abs($x)<3800. && abs($z-$baseline)<200.) $shifts[]=$z-$baseline;
+	expect($shifts && min($shifts)<-40. && max($shifts)>40.,'Both long sides of the circuit have alternating bends.');
+}
+expect(abs($points[0][0])<96. && (fn()=>$this->roundEnough($points))->call($finder),
+	'Place the lap line on the finished curve and retain the required turn radius.');
+$plain->close();
+
 // Reusing a finished survey must preserve edited elevations, fractional lattice positions and cancellation.
 $surveyLand = new Landscape(['worldSize'=>256,'spacing'=>3.,'seed'=>'survey-test']);
 $survey = function(Landscape $land, float $left): \Generator {

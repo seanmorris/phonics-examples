@@ -53,10 +53,10 @@ final class JourneyRoad
 		[$forkX,$forkZ] = yield from $survey->junction($entry,$arrivals);
 		$first = $entry ? [$entry[0],$entry[2]] : [-$half,0.];
 		if($report) $report('Following terrain through the departure square…',1./$phases);
-		$approach = yield from $survey->route([$first,[$forkX-192.,$forkZ]],!$entry,!$entry);
+		$approach = yield from $survey->route([$first,[$forkX-192.,$forkZ]],!$entry,!$entry,view:$trunkView);
 		$approach[]=[$forkX-96.,$forkZ]; $approach[]=[$forkX,$forkZ];
 		$paths=[$approach];
-		$forks=$tails=[];
+		$forks=$tails=$armViews=[];
 		$squares=$entry ? [] : [0=>$origins[0]];
 		foreach($arrivals as $i=>[, $tail]) {
 			$side=$i===0 ? -1 : 1;
@@ -66,21 +66,23 @@ final class JourneyRoad
 				// Only the shared pavement fixes the shape. Survey a single continuous
 				// alignment from the diverging lanes all the way to each destination.
 				$x=$forkX+self::SPLIT_RUN; $z=$forkZ+$side*self::SPLIT_OFFSET;
-				$onward=yield from $survey->route([[$x,$z],[$tailX,$tailZ]],scenic:true,divider:$forkZ);
+				$onward=yield from $survey->route([[$x,$z],[$tailX,$tailZ]],scenic:true,divider:$forkZ,view:$armView);
 				$path=[[$forkX,$forkZ],[$forkX+40.,$forkZ+$side*4.],
 					[$forkX+80.,$forkZ+$side*16.],[$forkX+120.,$forkZ+$side*34.],...$onward];
 				$forks[]=count($paths);
 			} else {
-				$onward=yield from $survey->route([[$forkX+96.,$forkZ],[$tailX,$tailZ]],scenic:true);
+				$onward=yield from $survey->route([[$forkX+96.,$forkZ],[$tailX,$tailZ]],scenic:true,view:$armView);
 				$path=[[$forkX,$forkZ],...$onward];
 			}
 			$squares[count($paths)]=$origins[$i+1];
+			$armViews[]=$armView;
 			$paths[]=$path;
 			$tails[]=count($paths);
 			$paths[]=$tail;
 		}
 
 		if($report) $report('Fitting the pavement to the surveyed ground…',($phases-1)/$phases);
+		$paths=yield from self::bendStraights($land,$paths,$tails,$split,$trunkView,$armViews);
 		// Each knot has one elevation, even when several branches meet there. Cap the grade in both
 		// directions along every incident stretch; a third leg must not introduce a step at the fork.
 		$graph = $height = $routes = [];
@@ -192,6 +194,38 @@ final class JourneyRoad
 			}
 		}
 		return ['roads'=>$roads,'views'=>$views];
+	}
+
+	/** Count the full drive through each arm, including the fixed fork pavement and common arrival road. */
+	private static function bendStraights(Landscape $land,array $paths,array $tails,bool $split,?array $trunkView,array $armViews): \Generator
+	{
+		$incoming=$paths[0]; $r=$land->recipe(); $half=$r['worldSize']/2;
+		$height=$land->height(...);
+		foreach($tails as $slot=>$tail) {
+			$branch=$paths[$tail-1]; $stub=$split ? 4 : 1;
+			$sections=[array_slice($incoming,0,-2),array_slice($incoming,-3),array_slice($branch,0,$stub+1),
+				array_slice($branch,$stub),$paths[$tail]];
+			[$from]=$sections[3][0];
+			$divider=$incoming[array_key_last($incoming)][1]; $side=$slot===0 ? -1 : 1;
+			$allows=static function($x,$z,$px,$pz,$nx,$nz,$section) use($r,$height,$half,$split,$from,$divider,$side): bool {
+				if(max(abs($px),abs($pz))>max($half-self::WIDTH/2,abs($x),abs($z))) return false;
+				if($section===3 && $split) {
+					$boundary=JourneySurvey::branchLimit($px,$from,$divider,$side,$r['join']['span']);
+					// Preserve the separation already achieved by the contour survey.
+					if($side*($pz-$boundary)<min(0.,$side*($z-JourneySurvey::branchLimit($x,$from,$divider,$side,$r['join']['span'])))) return false;
+				}
+				return RoadSerpentine::fitsGround($height,self::WIDTH/2,$r['waterLevel']+6.,$x,$z,$px,$pz,$nx,$nz);
+			};
+			$ties=[];
+			foreach([0=>$trunkView,3=>$armViews[$slot]] as $section=>$view) {
+				$index=array_search($view,$sections[$section],true);
+				if($index!==false) $ties[$section][]=$index;
+			}
+			$sections=yield from RoadSerpentine::fit($sections,$slot===0 ? [0,3] : [3],$allows,$ties);
+			if($slot===0) $paths[0]=[...$sections[0],...array_slice($sections[1],1)];
+			$paths[$tail-1]=[...$sections[2],...array_slice($sections[3],1)];
+		}
+		return $paths;
 	}
 
 	/** The end of a destination's highway depends only on its own terrain. A distant stage

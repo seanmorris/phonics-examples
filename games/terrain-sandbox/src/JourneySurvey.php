@@ -564,14 +564,14 @@ final class JourneySurvey
 	}
 
 	/** Retain the scenic waypoint as a fixed tie while looking for gentler climbs. */
-	public function route(array $guide,bool $freeStart=false,bool $scenic=false,?float $divider=null): \Generator
+	public function route(array $guide,bool $freeStart=false,bool $scenic=false,?float $divider=null,?array &$view=null): \Generator
 	{
 		[$from]=$guide[0]; [$to,$endZ]=$guide[array_key_last($guide)];
-		$overlook=null;
+		$overlook=$view=null;
 		if($scenic) {
 			[$west,$east]=yield from $this->crossing($guide,$freeStart,$divider);
 			$path=yield from $this->refine($west);
-			$overlook=array_key_last($path);
+			$overlook=array_key_last($path); $view=$path[$overlook];
 			$tail=yield from $this->refine($east);
 			$path=[...$path,...array_slice($tail,1)];
 		} else $path=yield from $this->refine($guide);
