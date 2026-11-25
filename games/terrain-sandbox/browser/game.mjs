@@ -1136,6 +1136,7 @@ export function activate({module, canvas, session, services})
 			}
 			const demo = state.demo, playing = demo.playhead !== null;
 			button('beach-ball-spawn').disabled = playing;
+			controls.get('airPatrolEnabled').disabled = playing;
 			button('demo-record').hidden = playing || demo.recording;
 			button('demo-stop').hidden = !playing && !demo.recording;
 			button('demo-stop').textContent = playing ? 'Stop playback' : 'Stop recording';
@@ -3024,6 +3025,7 @@ function markup(journeyMarkup)
 	<div class="terrain-row"><button data-action="demo-back">−5 seconds</button><button data-action="demo-step-back">Previous frame</button><button data-action="demo-step-forward">Next frame</button><button data-action="demo-forward">+5 seconds</button>
 	<button data-action="demo-hold" hidden>Hold frame</button><button data-action="demo-take-control" hidden>Take control &amp; record</button></div></div></fieldset>
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button><button data-action="delivery">Package run</button></div>
+	<label class="terrain-check"><input data-value="airPatrolEnabled" type="checkbox">F5 air patrol above 60 mph</label>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div class="terrain-row"><button data-action="beach-ball-spawn">Spawn beach ball</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>

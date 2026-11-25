@@ -303,6 +303,7 @@ final class Session
 		'speed' => 200 * DisplayUnits::KNOT,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
 		'balloonAltitude' => 325 * DisplayUnits::FOOT, 'balloonTool' => 'place',
+		'airPatrolEnabled' => false,
 		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
 	] + CircuitFinder::DEFAULTS + self::SKY_DEFAULTS + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
 	/** The terrain's colors, banding and blending, which the scene draws with. Its settings are part of $settings. */
@@ -872,7 +873,7 @@ final class Session
 		if($this->mode !== 'fly' && !($this->mode === 'jet' && $this->jetView === 'cockpit'))
 			$this->duck()->step($this->nearGates($this->camera->position), $this->camera->position,
 				$this->chaseTarget($after));
-		if($this->mode==='car' && $mode==='car' && !$this->network && !isset($this->landscape->recipe()['join'])) {
+		if($this->settings['airPatrolEnabled'] && $this->mode==='car' && $mode==='car' && !$this->network && !isset($this->landscape->recipe()['join'])) {
 			if($this->airPatrol->step($seconds,$after,fn()=>$this->view(1.)[0],$this->aspect,$this->landscape,$this->water->level()))
 				$this->dirty = true;
 		}
@@ -1473,6 +1474,13 @@ final class Session
 			$value = max($min, min($max, (float)$value));
 		}
 		elseif($name === 'circuitCauseways' && !is_bool($value)) throw new \InvalidArgumentException('Expected a causeway checkbox value.');
+		elseif($name === 'airPatrolEnabled') {
+			if(!is_bool($value)) throw new \InvalidArgumentException('Expected an air patrol checkbox value.');
+			if(!$value && $this->settings[$name]) {
+				$this->airPatrol = new AirPatrol;
+				$this->dirty = true;
+			}
+		}
 		elseif($name === 'clock') $value = (bool)$value;
 		elseif($name === 'skyColor' || $name === 'hazeColor')
 		{
@@ -2997,8 +3005,9 @@ final class Session
 			}
 			if($this->prepareMaterial) ($this->prepareMaterial)($layers ?? $generated);
 			$settings = array_diff_key($settings, WaterAppearance::DEFAULTS, TerrainAppearance::DEFAULTS)
-				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'circuitCauseways'=>false] + CircuitFinder::DEFAULTS;
+				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'circuitCauseways'=>false, 'airPatrolEnabled'=>false] + CircuitFinder::DEFAULTS;
 			if(!is_bool($settings['circuitCauseways'])) throw new \InvalidArgumentException('Invalid saved causeway setting.');
+			if(!is_bool($settings['airPatrolEnabled'])) throw new \InvalidArgumentException('Invalid saved air patrol setting.');
 			$defaults = (new \ReflectionProperty(self::class, 'settings'))->getDefaultValue();
 			foreach($settings as $name => $value)
 			{
@@ -3132,7 +3141,7 @@ final class Session
 			$this->chase->board($this->camera,$this->car->state(),$this->landscape);
 			$this->camera=clone $frame['camera']; $this->camera->fov=(new Camera)->fov;
 			$this->chase->resume($this->camera,$frame['camera']->fov);
-			$this->airPatrol->resume($events['airPatrol'] ?? null);
+			if($this->settings['airPatrolEnabled']) $this->airPatrol->resume($events['airPatrol'] ?? null);
 			$this->lamps->resume($p['lamps']); $this->tireDust=new TireDust;
 			if(isset($events['delivery'])) $this->delivery=DeliveryRun::resume($events['delivery'],$events['sites']);
 		} elseif($this->mode==='jet') {

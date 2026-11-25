@@ -25,6 +25,12 @@ $drive->input(['actions'=>['car']],0.,16/9);
 for($i=0;$drive->findingCarSite() && $i<1000;$i++) $drive->input([],0.,16/9);
 expect($drive->mode==='car','The patrol fixture boards the car.');
 $drive->input(['actions'=>['demo-record'],'keys'=>['KeyW'=>1,'ShiftLeft'=>1]],0.,16/9);
+expect($drive->settings['airPatrolEnabled']===false, 'The experimental patrol starts switched off.');
+for($i=0;$i<900 && $drive->car->state()['speed']<=60.*Car::MPS_PER_MPH;$i++) {
+	$drive->step(1/60); $drive->demo->capture($drive);
+}
+expect($i<900 && $drive->airPatrol->snapshot()===null, 'Crossing the limit keeps the sky clear while the checkbox is off.');
+$drive->input(['values'=>['airPatrolEnabled'=>true],'keys'=>['KeyW'=>1,'ShiftLeft'=>1]],0.,16/9);
 $bank=$visible=0.; $minSide=INF; $maxSide=0.; $minSeparation=INF; $first=null; $entryTime=0.;
 for($i=0;$i<880;$i++) {
 	$drive->step(1/60); $drive->demo->capture($drive);
@@ -56,6 +62,10 @@ expect($copy->frame($entryTime)['events']['airPatrol']['phase']==='arrival','A r
 foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$entryTime],'demo-take-control'] as $action)
 	$drive->input(['actions'=>[$action]],0.,16/9);
 expect($drive->airPatrol->snapshot()['phase']==='arrival','Taking the wheel resumes the fly-by in progress.');
+$drive->input(['values'=>['airPatrolEnabled'=>false]],0.,16/9);
+expect($drive->airPatrol->pose()===null,'Switching off dismisses an active patrol immediately.');
+for($i=0;$i<10;$i++) $drive->step(1/60);
+expect($drive->car->state()['speed']>60.*Car::MPS_PER_MPH && $drive->airPatrol->snapshot()===null,'The patrol stays off at speed.');
 $drive->close();
 
 // Give identical pilots a straight stretch and a sustained bend at the same moment.
