@@ -71,7 +71,7 @@ function pavement(array $a,array $b): array
 function warningCourse(array $sections,bool $closed=false): Landscape
 {
 	$r=45.; $heading=0.; $p=[0.,0.,0.]; $edits=[];
-	if(!$closed) $edits[]=pavement([0.,0.,-150.],$p);
+	if(!$closed) $edits[]=pavement([0.,0.,-450.],$p);
 	foreach($sections as [$turn,$straight]) {
 		$next=$heading+deg2rad($turn); $side=$turn<=>0;
 		$q=[$p[0]+$side*$r*(cos($next)-cos($heading)),0.,$p[2]+$side*$r*(sin($next)-sin($heading))];
@@ -79,10 +79,11 @@ function warningCourse(array $sections,bool $closed=false): Landscape
 		$edits[]=pavement($p,$q)+['handles'=>[['out'=>[-$h*sin($heading),0.,$h*cos($heading)]],
 			['in'=>[$h*sin($next),0.,-$h*cos($next)]]]];
 		$p=[$q[0]-$straight*sin($next),0.,$q[2]+$straight*cos($next)];
-		$edits[]=pavement($p,$q); // A reversed edit still belongs to the same physical road.
+		$edits[]=pavement($q,$p);
 		$heading=$next;
 	}
-	$land=new Landscape(['worldSize'=>1024]);
+	$land=new Landscape(['worldSize'=>2048]);
+	if(count($edits)>4) $edits[$closed ? 1 : 2]['points']=array_reverse($edits[$closed ? 1 : 2]['points']);
 	foreach(array_reverse($edits) as $edit) $land->queue($edit);
 	$land->commit(); return $land;
 }
@@ -90,28 +91,39 @@ foreach([[RoadWarnings::CURVE,55,0],[RoadWarnings::HAIRPIN,160,0],[RoadWarnings:
 	foreach([-1,1] as $mirror) {
 		$track=warningCourse($second ? [[$mirror*$first,18.],[$mirror*$second,150.]] : [[$mirror*$first,150.]]);
 		$signs=warnings($track,$kind);
-		check(count($signs)===2,'One advance diamond faces each approach to a bend or pair of bends.');
+		check(count($signs)===1,'One forward-facing diamond warns of the approach to a bend or pair of bends.');
 		$forward=array_values(array_filter($signs,static fn($s)=>abs($s[0]+8.5)<.1 && abs($s[1]+RoadWarnings::LEAD)<6.1));
-		check(count($forward)===1 && $forward[0][4]===$mirror*$kind,'The first turn controls mirroring on the right shoulder 200 feet before the bend.');
+		check(count($forward)===1 && $forward[0][4]===$mirror*$kind,'The first turn controls mirroring on the right shoulder 1,200 feet before the bend.');
 		$track->close();
 	}
 }
-$race=warningCourse(array_fill(0,4,[90,150.]),true);
+$race=warningCourse(array_fill(0,4,[90,420.]),true);
 $diamonds=warnings($race,RoadWarnings::CURVE);
-check(count($diamonds)===8 && count(array_filter($diamonds,static fn($s)=>abs($s[0]+8.5)<.1 && abs($s[1]+RoadWarnings::LEAD)<7.))===1,
-	'A closed circuit signs every corner in both directions, including across the lap seam.');
+check(count($diamonds)===4 && count(array_filter($diamonds,static fn($s)=>abs($s[0]+8.5)<.1 && abs($s[1]+RoadWarnings::LEAD)<7.))===1,
+	'A closed circuit signs every corner in the driving direction, including across the lap seam.');
 $race->close();
 
 $merge=new Landscape(['worldSize'=>1024]);
-foreach([[[-95.,0.,-250.],[0.,0.,0.]],[[95.,0.,-250.],[0.,0.,0.]],[[0.,0.,0.],[0.,0.,250.]]] as [$a,$b])
+foreach([[[-95.,0.,-450.],[0.,0.,0.]],[[95.,0.,-450.],[0.,0.,0.]],[[0.,0.,0.],[0.,0.,450.]]] as [$a,$b])
 	$merge->queue(pavement($a,$b));
 $merge->commit(); $arms=warnings($merge,RoadWarnings::MERGE);
 check(count($arms)===2 && $arms[0][4]===-$arms[1][4],'Each merging road depicts the other arm on its actual side.');
 foreach($arms as [$x,$z,$tx,$tz,$symbol]) {
 	check(abs(-($x*$tx+$z*$tz)-RoadWarnings::LEAD)<.05 && !\TerrainPhonics\Edits::onRoad($x,$z,$merge->roads()),
-		'The merge warning stands off the pavement 200 driving feet before the shared node.');
+		'The merge warning stands off the pavement 1,200 driving feet before the shared node.');
 	check(($x<0)==($symbol<0),'The merge artwork shows which shoulder the joining road comes from.');
 }
+// A bend shortly after the two highways meet needs its advance sign on each incoming road.
+$afterMerge=$merge->fork();
+$curve=bend(45.,1); foreach($curve['points'] as &$point) $point[2]+=100.;
+unset($point);
+$afterMerge->queue(['replaceAt'=>2]+pavement([0.,0.,0.],[0.,0.,100.]));
+$afterMerge->queue($curve); $afterMerge->commit();
+$forwardWarnings=warnings($afterMerge,RoadWarnings::CURVE);
+check(count($forwardWarnings)===2,'A nearby bend beyond a merge warns both forward approaches.');
+foreach($forwardWarnings as [$x,$z,$tx,$tz]) check($tz>0. && abs(100.-($x*$tx+$z*$tz)-1200.*.3048)<7.,
+	'The approach includes the distance driven beyond the merge in its 1,200 ft lead.');
+$afterMerge->close();
 $hidden=$merge->previewWithoutRoads([0]);
 check(!warnings($hidden,RoadWarnings::MERGE),'Hiding an arm removes the merge warnings.');
 $reversed=new Landscape(['worldSize'=>1024]);
@@ -124,28 +136,34 @@ sort($arms); sort($reverseArms);
 check(count($reverseArms)===2,'Both merge warnings survive edits to road direction.');
 foreach($arms as $i=>$arm) foreach($arm as $j=>$value)
 	check(abs($value-$reverseArms[$i][$j])<1.e-8,'Reversing and reordering editable roads preserves each merge sign.');
+$fork=new Landscape(['worldSize'=>1024]);
+foreach($merge->roadRecords() as $record) {
+	$record['points']=array_reverse($record['points']); $fork->queue($record);
+}
+$fork->commit(); check(!warnings($fork,RoadWarnings::MERGE),'A forward fork has no merge signs for wrong-way traffic.');
+$fork->close();
 $reversed->close();
 $hidden->close(); $merge->close();
 
 foreach([['crest',24.,24.],['drop',0.,24.],['constant grade',24.,-24.],['gentle',.4,.4]] as [$shape,$rise,$fall]) {
 	$profile=new Landscape(['worldSize'=>1024]);
-	$profile->queue(pavement([0.,-$rise,-180.],[0.,0.,0.]));
-	$profile->queue(pavement([0.,0.,0.],[0.,-$fall,180.])); $profile->commit();
+	$profile->queue(pavement([0.,-$rise*2.5,-450.],[0.,0.,0.]));
+	$profile->queue(pavement([0.,0.,0.],[0.,-$fall*2.5,450.])); $profile->commit();
 	$hills=warnings($profile,RoadWarnings::HILL); $dips=warnings($profile,RoadWarnings::DIP);
-	if($shape==='crest') check(count($hills)===2 && !$dips,'A launchable hill is signed uphill in both directions.');
-	elseif($shape==='drop') check(count($hills)===1 && count($dips)===1 && $dips[0][3]>0. && abs($dips[0][1]+RoadWarnings::LEAD)<7.,
-		'A level approach to a drop gets a dip, and its uphill return gets a hill.');
+	if($shape==='crest') check(count($hills)===1 && !$dips,'A launchable hill is signed uphill in the driving direction.');
+	elseif($shape==='drop') check(!$hills && count($dips)===1 && $dips[0][3]>0. && abs($dips[0][1]+RoadWarnings::LEAD)<7.,
+		'A level approach to a drop gets a dip, without a reverse hill sign.');
 	else check(!$hills && !$dips,'A constant grade or gentle roller cannot unload the suspension.');
 	$profile->close();
 }
 foreach([650.,2500.] as $radius) {
 	// A long parabolic hill tests gradual unloading at high speed, without a sharp change of pitch.
-	$profile=new Landscape(['worldSize'=>1024]); $grade=180./$radius; $y=-90.*$grade;
+	$profile=new Landscape(['worldSize'=>2048]); $grade=180./$radius; $y=-90.*$grade;
 	$a=[0.,$y,-180.]; $b=[0.,$y,180.];
-	$profile->queue(pavement([0.,$y-150.*$grade,-330.],$a));
+	$profile->queue(pavement([0.,$y-500.*$grade,-680.],$a));
 	$profile->queue(pavement($a,$b)+['handles'=>[['out'=>[0.,120.*$grade,120.]],['in'=>[0.,120.*$grade,-120.]]]]);
-	$profile->queue(pavement($b,[0.,$y-150.*$grade,330.])); $profile->commit();
-	check(count(warnings($profile,RoadWarnings::HILL))===($radius===650. ? 2 : 0) && !warnings($profile,RoadWarnings::DIP),
+	$profile->queue(pavement($b,[0.,$y-500.*$grade,680.])); $profile->commit();
+	check(count(warnings($profile,RoadWarnings::HILL))===($radius===650. ? 1 : 0) && !warnings($profile,RoadWarnings::DIP),
 		'Broad convex hills warn from each uphill approach only when the suspension can unload at a playable speed.');
 	$profile->close();
 }

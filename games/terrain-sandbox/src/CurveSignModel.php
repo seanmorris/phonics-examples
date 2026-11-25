@@ -12,6 +12,7 @@ use TerrainPhonics\SpotLights;
 final class CurveSignModel
 {
 	private const CELL = 256.;
+	private const MAX_HEIGHT = 6.90; // Diamond bottom (1.60 m) plus its 5.30 m face.
 	private const RANGE = 1000.;
 	private const ASSETS = __DIR__.'/../assets/roads/';
 	private ?Landscape $land = null;
@@ -50,12 +51,13 @@ final class CurveSignModel
 	private function collect(Landscape $land): \Generator
 	{
 		$cells = [];
+		$half=$land->recipe()['worldSize']/2;
 		foreach([CurveSigns::sites($land), RoadWarnings::sites($land)] as $signs) foreach($signs as $site) {
-			if($site !== null) {
+			if($site !== null && max(abs($site[0]),abs($site[1]))<=$half) {
 				[$x,$z] = $site;
 				$col = (int)floor($x/self::CELL); $row = (int)floor($z/self::CELL);
 				$key = "$col,$row";
-				$cells[$key] ??= ['box'=>['x'=>$col*self::CELL-2.,'z'=>$row*self::CELL-2.,'size'=>self::CELL+4.],'bytes'=>''];
+				$cells[$key] ??= ['box'=>['x'=>$col*self::CELL-2.65,'z'=>$row*self::CELL-2.65,'size'=>self::CELL+5.30],'bytes'=>''];
 				$cells[$key]['bytes'] .= pack('g*',...$site);
 			}
 			yield;
@@ -107,7 +109,7 @@ final class CurveSignModel
 			$site = unpack('gx/gz',$bytes,$i);
 			$y = $this->land->height($site['x'],$site['z']);
 			$fitted .= substr($bytes,$i,4).pack('g',$y).substr($bytes,$i+4,16);
-			$low = min($low,$y-.3); $high = max($high,$y+6.15);
+			$low = min($low,$y-.3); $high = max($high,$y+self::MAX_HEIGHT);
 			yield;
 		}
 		return [$fitted,$low,$high];
@@ -125,7 +127,7 @@ final class CurveSignModel
 		foreach($this->cells as $key=>$cell) {
 			$fitted = isset($this->meshes[$key]);
 			$low = $fitted ? $cell['low'] : $bounds['minY']-.3;
-			$high = $fitted ? $cell['high'] : $bounds['maxY']+6.15;
+			$high = $fitted ? $cell['high'] : $bounds['maxY']+self::MAX_HEIGHT;
 			if($high < $water) continue;
 			$box = $cell['box'];
 			$dx = max(0.,$box['x']-$eye[0],$eye[0]-$box['x']-$box['size']);

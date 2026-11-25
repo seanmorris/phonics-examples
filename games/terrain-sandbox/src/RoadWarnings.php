@@ -8,11 +8,13 @@ use TerrainPhonics\{Edits,Landscape};
 final class RoadWarnings
 {
 	public const CURVE=2, HAIRPIN=3, SWERVE=4, KINK=5, MERGE=6, HILL=7, DIP=8;
-	public const LEAD=200*DisplayUnits::FOOT;
+	public const LEAD=1200*DisplayUnits::FOOT;
+	private const PAIR_DISTANCE=200*DisplayUnits::FOOT;
 	private const STEP=6.; // Survey interval in meters; vertical grades use a two-interval wheel path on either side.
 	private array $sections=[], $starts=[], $occupied=[];
 	private float $length=0.;
 	private bool $closed=false;
+	private string $entrance;
 
 	private function append(array $road,int $direction): void
 	{
@@ -39,7 +41,7 @@ final class RoadWarnings
 	public static function sites(Landscape $land): \Generator
 	{
 		$roads=array_filter($land->roads(),static fn($r)=>$r['material']==='road');
-		$nodes=$ends=$seen=$approaches=[]; $roots=[];
+		$nodes=$ends=$seen=$approaches=$incoming=$paths=[]; $roots=[];
 		foreach($roads as $id=>$road) {
 			$p=$road['points'];
 			$a=JourneySigns::node($p[0]); $b=JourneySigns::node($p[array_key_last($p)]);
@@ -50,32 +52,41 @@ final class RoadWarnings
 		foreach($roads as $id=>$_) $roots[]=[$id,1]; // Remaining components have no endpoints.
 		foreach($roots as [$id,$dir]) {
 			if(isset($seen[$id])) continue;
-			$path=new self;
+			$sections=[]; $votes=0;
 			$first=$ends[$id][-$dir];
 			// Walk through degree-two joins. A fork, a merge or a road end terminates this approach.
 			do {
-				$seen[$id]=true; $path->append($roads[$id],$dir);
+				$seen[$id]=true; $sections[]=[$id,$dir]; $votes+=$dir;
 				$last=$ends[$id][$dir]; $links=$nodes[$last];
 				if(count($links)!==2) break;
 				[$id,$dir]=$links[$links[0][0]===$id ? 1 : 0];
 				yield null;
 			} while(!isset($seen[$id]));
+			// Generated highways and circuit chunks are authored in driving order. The
+			// topology walk may have started at the far end or met a reversed edit.
+			$forward=$votes<=>0 ?: $sections[0][1];
+			if($forward<0) { $sections=array_reverse($sections); [$first,$last]=[$last,$first]; }
+			$path=new self;
+			foreach($sections as [$roadId,$orientation]) $path->append($roads[$roadId],$orientation*$forward);
 			if($path->length<.01) continue;
+			$path->entrance=$first;
 			$path->closed=$last===$first && count($nodes[$first])===2;
 			if(!$path->closed) {
 				$approaches[$first][]=[$path,-1];
 				$approaches[$last][]=[$path,1];
+				$incoming[$last][]=$path;
 			}
-			yield from $path->survey($roads);
+			$paths[]=$path;
 		}
+		foreach($paths as $path) yield from $path->survey($roads,$incoming);
 
-		// In either travel direction the two arms of a Y merge into its trunk. A crossing has no such pair.
+		// Two incoming arms join a departing trunk. A fork has an arriving trunk and needs no merge warning.
 		foreach($approaches as $arms) {
 			if(count($arms)!==3) continue;
 			$poses=$headings=[]; $pair=[]; $best=.15;
 			foreach($arms as [$path,$travel]) {
 				$end=$travel>0 ? $path->length : 0.;
-				$p=$path->pose($end-$travel*self::LEAD); $poses[]=$p;
+				$p=$path->pose($end-$travel*self::PAIR_DISTANCE); $poses[]=$p;
 				$join=$path->pose($end)['position'];
 				$dx=$join[0]-$p['position'][0]; $dz=$join[2]-$p['position'][2]; $length=max(.001,hypot($dx,$dz));
 				// The two converging arms approach from the same side, even if an editor reversed one spline.
@@ -85,12 +96,15 @@ final class RoadWarnings
 				}
 				$headings[]=[$dx/$length,$dz/$length];
 			}
+			if(!$pair) continue;
+			[$trunk]=array_values(array_diff(array_keys($arms),$pair));
+			if($arms[$trunk][1]!==-1) continue;
 			foreach($pair as $k=>$index) {
 				[$path,$travel]=$arms[$index]; $end=$travel>0 ? $path->length : 0.;
 				$p=$poses[$index]; $q=$poses[$pair[1-$k]];
 				[$tx,$tz]=$p['heading'];
 				$side=$travel*(-$tz*($q['position'][0]-$p['position'][0])+$tx*($q['position'][2]-$p['position'][2]));
-				if(abs($side)>.1) yield $path->post($end,$travel,self::MERGE,$side>0 ? 1 : -1,$roads);
+				if(abs($side)>.1) yield from $path->warn($end,$travel,self::MERGE,$side>0 ? 1 : -1,$roads,$incoming);
 			}
 		}
 	}
@@ -106,7 +120,7 @@ final class RoadWarnings
 	}
 
 	/** Detect lateral turns and downward changes of vertical grade in the same, time-sliced sampling pass. */
-	private function survey(array $roads): \Generator
+	private function survey(array $roads,array $incoming): \Generator
 	{
 		$n=max(1,(int)ceil($this->length/self::STEP)); $step=$this->length/$n;
 		$bends=$crests=$window=[]; $bend=null; $crest=null;
@@ -152,41 +166,56 @@ final class RoadWarnings
 				array_shift($bends);
 			}
 		}
-		yield from $this->turns(array_values(array_filter($bends,static fn($b)=>$b['angle']>=CurveSigns::MIN_TURN)),$roads);
+		yield from $this->turns(array_values(array_filter($bends,static fn($b)=>$b['angle']>=CurveSigns::MIN_TURN)),$roads,$incoming);
 		if($this->closed && count($crests)>1 && $crests[0]['start']+$this->length-end($crests)['end']<2.5*self::STEP) {
 			$last=array_pop($crests);
 			$crests[0]['start']=$last['start']-$this->length;
 		}
-		foreach($crests as $c) foreach([1,-1] as $travel) {
-			$at=$c['end']-$c['start']<4*self::STEP ? .5*($c['start']+$c['end']) : ($travel>0 ? $c['start'] : $c['end']);
+		foreach($crests as $c) {
+			$at=$c['end']-$c['start']<4*self::STEP ? .5*($c['start']+$c['end']) : $c['start'];
 			$here=$this->pose($at)['position'];
-			$before=$this->pose($at-$travel*24.)['position'];
+			$before=$this->pose($at-24.)['position'];
 			$rise=$here[1]-$before[1];
 			$kind=$rise>.015*hypot($here[0]-$before[0],$here[2]-$before[2]) ? self::HILL : self::DIP;
-			yield $this->post($at,$travel,$kind,1,$roads);
+			yield from $this->warn($at,1,$kind,1,$roads,$incoming);
 		}
 	}
 
 	private static function compound(array $a,array $b): bool
 	{
-		return $a['side']!==$b['side'] && $b['start']-$a['end']<=self::LEAD
+		return $a['side']!==$b['side'] && $b['start']-$a['end']<=self::PAIR_DISTANCE
 			&& max($a['angle'],$b['angle'])<3*M_PI/4;
 	}
 
-	private function turns(array $bends,array $roads): \Generator
+	private function turns(array $bends,array $roads,array $incoming): \Generator
 	{
 		if($this->closed && count($bends)>1) {
 			$first=$bends[0]; $first['start']+=$this->length; $first['end']+=$this->length;
 			if(self::compound(end($bends),$first)) { array_shift($bends); $bends[]=$first; }
 		}
 		for($i=0;$i<count($bends);$i++) {
-			$a=$b=$bends[$i]; $kind=$a['angle']>=3*M_PI/4 ? self::HAIRPIN : self::CURVE;
+			$a=$bends[$i]; $kind=$a['angle']>=3*M_PI/4 ? self::HAIRPIN : self::CURVE;
 			if(isset($bends[$i+1]) && self::compound($a,$bends[$i+1])) {
 				$b=$bends[++$i];
 				$kind=min($a['angle'],$b['angle'])>=deg2rad(65.) ? self::KINK : self::SWERVE;
 			}
-			yield $this->post($a['start'],1,$kind,$a['side'],$roads);
-			yield $this->post($b['end'],-1,$kind,-$b['side'],$roads);
+			yield from $this->warn($a['start'],1,$kind,$a['side'],$roads,$incoming);
+		}
+	}
+
+	/** Measure through a junction if the hazard lies less than one warning distance beyond it. */
+	private function warn(float $station,int $travel,int $kind,int $side,array $roads,array $incoming): \Generator
+	{
+		$pending=[[$this,$station]]; $seen=[];
+		while($pending) {
+			[$path,$at]=array_pop($pending);
+			$id=spl_object_id($path);
+			if(isset($seen[$id])) continue;
+			$seen[$id]=true;
+			if($travel>0 && !$path->closed && $at<self::LEAD && isset($incoming[$path->entrance])) {
+				foreach($incoming[$path->entrance] as $parent) $pending[]=[$parent,$parent->length+$at];
+				yield null;
+			} else yield $path->post($at,$travel,$kind,$side,$roads);
 		}
 	}
 

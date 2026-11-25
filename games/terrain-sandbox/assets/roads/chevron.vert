@@ -17,10 +17,10 @@ flat out int panel;
 void main() {
 	vec2 tangent = heading.xy, right = vec2(-tangent.y,tangent.x);
 	int kind = int(abs(heading.z)+.5)-1;
-	bool back = kind>0 && dot(eye.xz-foot.xz,tangent)>0.;
+	bool back = dot(eye.xz-foot.xz,tangent)>0.;
 	panel = gl_VertexID < 6 ? (back ? 2 : 1) : 0;
 	float bottom = kind==0 ? 1.35 : 1.60;
-	vec2 size = kind==0 ? vec2(3.84,4.80) : vec2(2.65);
+	vec2 size = kind==0 ? vec2(3.84,4.80) : vec2(5.30);
 	vec2 offset = (gl_VertexID < 12 ? right : tangent) * (q.x-.5) * (panel != 0 ? size.x : .13);
 	float h = panel != 0 ? bottom+size.y*q.y : mix(-.3,bottom,q.y);
 	vec3 world = foot + vec3(offset.x,h,offset.y);
