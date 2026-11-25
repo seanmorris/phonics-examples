@@ -131,7 +131,7 @@ $copy->restorePatrolSmoke($rewound,$hitTime+.6,$afterHit);
 expect($rewound->smoke?->active()===true && !$rewound->smoke->showsLodgedSeeker(),'The fast car has left its shell in the fading burst, including on a demo seek.');
 
 // Try the handbrake during the fly-out, the swing down, and from both sides of the rear chase.
-foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,true],[2.65,'KeyD',true,true],[3.,'KeyD',true,false],[3.,'KeyA',true,true]] as [$delay,$steer,$shakes,$wins]) {
+foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,true],[2.65,'KeyD',true,false],[3.25,'KeyD',true,true],[3.,'KeyA',true,true]] as [$delay,$steer,$shakes,$wins]) {
 	$game=new Session($flat);
 	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$releaseTime+$delay],'demo-take-control'] as $action)
 		$game->input(['actions'=>[$action]],0.,16/9);
@@ -178,9 +178,10 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 	expect($missed===$shakes,'A slide that ends before the bumper chase cannot shake the lock later.');
 	expect(($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'Only a drift that brings the loose seeker back near the F5 wins.');
 	if($wins) {
-		expect(abs($returnSpeeds[1]-1.)<.08 && $returnSpeeds[6]>$returnSpeeds[1] && $returnSpeeds[6]<1.8 &&
-			$returnSpeeds[12]>max(1.85,$returnSpeeds[6]),'The first frame carries the drift speed smoothly into a visible 200 ms burst.');
-		expect($glancedOnReturn && abs($wonAt-$lockedAt-.55)<.04,'The camera follows the departing seeker through the short return.');
+		expect(abs($returnSpeeds[1]-1.)<.08 && $returnSpeeds[6]<1.25 && $returnSpeeds[12]>$returnSpeeds[6] &&
+			$returnSpeeds[20]>$returnSpeeds[12] && $returnSpeeds[27]>max(1.4,$returnSpeeds[20]),
+			'The loose seeker carries its drift speed into the switch and visibly builds speed over the next 440 ms.');
+		expect($glancedOnReturn && abs($wonAt-$lockedAt-.79)<.04,'The camera follows the departing seeker through the longer return.');
 		$won=$game->airPatrol->snapshot();
 		$away=new AirPatrol; $away->resume($won);
 		$fast=$game->car->state(); $fast['speed']=70.;
@@ -194,7 +195,7 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 		expect($result->frame($wonAt+.1)['events']['airPatrol']['repelled'],'The recorded win survives export and a seek.');
 		foreach([['type'=>'demo-open','json'=>$recording],['type'=>'demo-seek','seconds'=>$lockedAt+.25],'demo-take-control'] as $action)
 			$game->input(['actions'=>[$action]],0.,16/9);
-		for($tick=0;$tick<35;$tick++) $game->step(1/60);
+		for($tick=0;$tick<42;$tick++) $game->step(1/60);
 		expect($game->airPatrol->snapshot()['repelled'] ?? false,'Taking control halfway through a recorded return completes the encounter.');
 	}
 	$game->close();
@@ -234,6 +235,33 @@ foreach([0.,100.] as $speed) {
 	expect(!$effects->showsLodgedSeeker() && $effects->active() && ($speed===0. ? abs($age-.87)<.02 : abs($age-.16)<.02),
 		'The shell clears while the burst is still visible, including when the car outruns it.');
 }
+// Measure the aircraft the player sees, across several passes and in the car's own travel direction.
+foreach([[28.,M_PI/2],[72.,0.],[106.,M_PI]] as [$speed,$heading]) {
+	$pilot=new AirPatrol; $eye=new Camera; $eye->yaw=M_PI-$heading; $eye->fov=1.36;
+	$f=sin($heading); $g=cos($heading);
+	$car=['x'=>-18.*$speed*$f,'y'=>0.,'z'=>-18.*$speed*$g,'yaw'=>$heading,'drift'=>0.,'speed'=>$speed];
+	$left=180.; $right=-180.; $lead=INF; $crossings=[]; $side=0; $released=false;
+	for($tick=0;$tick<36*60;$tick++) {
+		$car['x']+=$speed*$f/60.; $car['z']+=$speed*$g/60.;
+		$eye->position=[$car['x']-7.*$f,3.,$car['z']-7.*$g];
+		$pilot->step(1/60,$car,fn()=>$eye,16/9,$land,-10.);
+		$released=$released || ($pilot->seeker()['phase'] ?? null)==='drop';
+		if($tick<15*60) continue;
+		$p=$pilot->pose();
+		if($p===null) throw new RuntimeException('The patrol left the flat-road crossing fixture.');
+		$x=$p['x']-$car['x']; $z=$p['z']-$car['z'];
+		$along=$x*$f+$z*$g; $across=$x*$g-$z*$f; $bearing=rad2deg(atan2($across,$along));
+		$left=min($left,$bearing); $right=max($right,$bearing); $lead=min($lead,$along);
+		$newSide=$across<=>0.; if($side!==0 && $newSide!==$side) $crossings[]=$tick/60.;
+		$side=$newSide;
+	}
+	expect($released && $lead>20. && $left<-55. && $left>-68. && $right>55. && $right<68.,
+		"The F5 stays ahead and reaches both 10 and 2 o'clock at $speed m/s.");
+	expect(count($crossings)>=3,'The pilot keeps alternating shoulders.');
+	for($i=1;$i<count($crossings);$i++) expect(abs(($crossings[$i]-$crossings[$i-1])-5.24)<.4,
+		'Each crossing gives the driver another predictable drift opportunity.');
+}
+
 // A sudden move of the formation station can command a turn but cannot relocate the airframe.
 $driver=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>0.,'drift'=>0.,'speed'=>72.];
 $eye=new Camera; $eye->yaw=M_PI; $eye->pitch=.1;
@@ -309,7 +337,7 @@ foreach(['hairpin','stop'] as $maneuver) {
 		expect($p!==null && $p['speed']>=Jet::SLOWEST && abs($p['speed']-$before['speed'])<=Jet::ACCELERATION/60.+.05,
 			'Even when shaken, the pilot keeps flying with the F5 engine limits.');
 		$x=$p['x']-$car['x']; $z=$p['z']-$car['z']; $range=hypot($x,$z); $wide=max($wide,$range);
-		if($wide>140. && abs($x*$g-$z*$f)<25. && $x*$f+$z*$g>25. && $range<62. && cos($p['yaw']-$car['yaw'])>.95) $rejoined=true;
+		if($wide>140. && abs($x*$g-$z*$f)<25. && $x*$f+$z*$g>25. && $range<62. && cos($p['yaw']-$car['yaw'])>.75) $rejoined=true;
 	}
 	expect($rejoined,"The same pilot loses formation on a $maneuver and recovers the chase.");
 }

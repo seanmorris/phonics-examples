@@ -118,22 +118,30 @@ final class AirPatrol
 				if(abs($heights[-1]-$heights[1])>4.) $this->side=$heights[-1]<$heights[1] ? -1. : 1.;
 			}
 		}
+		$idleSpeed=Jet::SLOWEST;
 		if($this->phase==='departure') {
 			$bank=-.72*$this->side; $climb=.95; $throttle=.65;
 		} else {
-			// Use a forward sight point on the desired course to intercept the shoulder and then fly parallel.
-			// The pilot can change the engine and control surfaces only. It cannot place the airframe.
+			// Join from the shoulder, then bank across the road ahead of the driver.
 			$headingError=self::angle($course-$p['yaw']);
 			$joining=$this->phase==='arrival';
-			$station=$joining ? 72. : 42.;
-			$lane=$this->side*(13.+13.*cos(.43*$this->elapsed))*max(0.,1.-1.6*abs($headingError));
-			if($joining && $along<18.) $lane=64.*$this->side;
+			$station=$joining ? 72. : 36.;
 			$look=$joining ? 32. : max(42.,.82*$p['speed']);
+			if($joining) {
+				$lane=$this->side*($along<18. ? 64. : (13.+13.*cos(.43*$this->elapsed))*max(0.,1.-1.6*abs($headingError)));
+			} else {
+				// Let the arcade escort pace a driver just over the limit between crossings.
+				if($this->circleRemaining<=0. && $car['speed']>=55.*Car::MPS_PER_MPH)
+					$idleSpeed=min(Jet::SLOWEST,$car['speed']-8.);
+				// Continue the entry bank toward the opposite side. tan(60°) places the outer marks at 10 and 2.
+				$lane=-$this->side*$station*sqrt(3.)*sin(.60*$this->elapsed);
+			}
 			$desired=$course+atan2($lane-$across,$look+max(0.,$station-$along));
 			$speed=$car['speed']+.62*($station-$along);
+			if(!$joining) $speed/=max(.6,cos($headingError));
 			// A slow car cannot be paced at the F5's minimum airspeed. Fly a banked orbit until
 			// the car moves out ahead, then intercept again. Keep the turn direction through the reversal.
-			if($this->circleRemaining<=0. && $along>100. && $car['speed']<Jet::SLOWEST+5. && abs($headingError)<.95)
+			if($this->circleRemaining<=0. && $along>100. && $car['speed']<$idleSpeed+5. && abs($headingError)<.95)
 				$this->circleRemaining=2.*M_PI;
 			if($this->circleRemaining>0.) {
 				$desired=$p['yaw']+1.45*$this->side;
@@ -142,14 +150,16 @@ final class AirPatrol
 			}
 			$turn=self::angle($desired-$p['yaw']);
 			$bank=max(-1.,min(1.,-2.8*$turn));
-			if($speed>Jet::SLOWEST) $speed=Jet::SLOWEST+min(150.,$speed-Jet::SLOWEST)*max(0.,cos($turn))**2;
+			if($speed>$idleSpeed) $speed=$idleSpeed+min(150.,$speed-$idleSpeed)*max(0.,cos($turn))**2;
 			$height=max($this->aheadFloor+12.,$car['y']+16.+6.*max(0.,1.-abs($across)/20.));
 			$climb=max(-.65,min(.95,atan2($height-$p['y'],max(45.,$p['speed']*.88))/.78));
 			$throttle=max(-1.,min(1.,($speed-Jet::CRUISE)/($speed<Jet::CRUISE ?
-				Jet::CRUISE-Jet::SLOWEST : Jet::FASTEST-Jet::CRUISE)));
-			if($this->phase==='arrival' && $along>=32. && abs($across)<25.) $this->phase='escort';
+				Jet::CRUISE-$idleSpeed : Jet::FASTEST-Jet::CRUISE)));
+			if($this->phase==='arrival' && $along>=32. && abs($across)<25.) {
+				$this->phase='escort'; $this->elapsed=0.;
+			}
 		}
-		$flying=$this->jet->fly($dt,$throttle,$bank,$climb,$land,$water);
+		$flying=$this->jet->fly($dt,$throttle,$bank,$climb,$land,$water,idleSpeed:$idleSpeed);
 		$next=$this->jet->state();
 		$this->advanceSeeker($dt,$car,$next,$flying ? $this->phase : 'departure',$land,$water,$beforeCar,$eye,$aspect);
 		if($this->circleRemaining>0.) $this->circleRemaining=max(0.,$this->circleRemaining-

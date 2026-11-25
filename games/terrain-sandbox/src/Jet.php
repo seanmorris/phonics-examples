@@ -114,7 +114,7 @@ final class Jet
 
 	/** Advance the airframe and control surfaces one tick, independent of who is piloting or watching it. */
 	public function fly(float $dt, float $throttle, float $bank, float $climb, Landscape $land,
-		float $water, float $rudder = 0.): bool
+		float $water, float $rudder = 0., float $idleSpeed = self::SLOWEST): bool
 	{
 		$this->survey($land);
 		$this->previous = $this->pose;
@@ -126,7 +126,7 @@ final class Jet
 		if(abs($command - $p['power']) < .0005) $p['power'] = $command;
 
 		$target = $p['power'] < self::CRUISE_POWER
-			? self::SLOWEST + (self::CRUISE - self::SLOWEST) * ($p['power'] / self::CRUISE_POWER)
+			? $idleSpeed + (self::CRUISE - $idleSpeed) * ($p['power'] / self::CRUISE_POWER)
 			: self::CRUISE + (self::FASTEST - self::CRUISE) * (($p['power'] - self::CRUISE_POWER) / (1 - self::CRUISE_POWER));
 		$gap = $target - $p['speed'];
 		$change = min(self::ACCELERATION * $dt, abs($gap) * (1 - exp(-$dt / self::SPEED_LAG)));

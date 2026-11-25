@@ -10,8 +10,7 @@ final class SpeedSeeker
 {
 	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 12.;
 	private const LOOM_ABOVE_ROOF = 2.12;
-	// The F5 normally escorts about 42 m ahead and above the car.
-	private const RETURN_RADIUS = 50., RETURN_SECONDS = .55, BOOST_RAMP = .20;
+	private const RETURN_RADIUS = 50., BOOST_RAMP = .44, BOOST_CRUISE = .35;
 	/** An eligible coast tracks this gap; its last value marks the boosted return in recorded takes. */
 	private ?float $rearPassGap=null;
 	private string $phase = 'mounted';
@@ -75,7 +74,7 @@ final class SpeedSeeker
 					$this->phase='return'; $this->clock=0.;
 					$this->start=[$this->pose['x']-$plane['x'],$this->pose['y']-$plane['y'],$this->pose['z']-$plane['z'],
 						$this->pose['yaw'],$this->pose['pitch'],$this->pose['roll'],
-						$this->velocity[0]-$plane['vx'],$this->velocity[1]-$plane['vy'],$this->velocity[2]-$plane['vz']];
+						$this->velocity[0]-$plane['vx'],$this->velocity[1]-$plane['vy'],$this->velocity[2]-$plane['vz'],self::BOOST_RAMP];
 				}
 				$this->rearPassGap=$gap;
 			}
@@ -149,16 +148,18 @@ final class SpeedSeeker
 	private function returnToPlane(float $dt,array $plane,array $beforeCar,array $car,Landscape $land,float $water): ?array
 	{
 		$carry=0.;
-		$eased=count($this->start)===9;
+		$eased=count($this->start)>=9;
 		if($eased) {
-			$t=min(1.,($this->clock+1e-9)/self::RETURN_SECONDS);
+			$ramp=$this->start[9] ?? .20; // Earlier recorded returns built speed in 200 ms.
+			$duration=$ramp+self::BOOST_CRUISE;
+			$t=min(1.,($this->clock+1e-9)/$duration);
 			// Integrate a smoothstep speed ramp, then keep the gained speed through the end of the animation.
-			$time=$t*self::RETURN_SECONDS;
-			$u=min(1.,$time/self::BOOST_RAMP);
-			$distance=self::BOOST_RAMP*$u**3*(1.-.5*$u)+max(0.,$time-self::BOOST_RAMP);
-			$blend=$distance/(self::RETURN_SECONDS-.5*self::BOOST_RAMP);
+			$time=$t*$duration;
+			$u=min(1.,$time/$ramp);
+			$distance=$ramp*$u**3*(1.-.5*$u)+max(0.,$time-$ramp);
+			$blend=$distance/($duration-.5*$ramp);
 			// Carry the closing drift into the first frame. Its contribution fades to zero at the endpoint.
-			$carry=$time-self::RETURN_SECONDS*$blend;
+			$carry=$time-$duration*$blend;
 		} elseif($this->rearPassGap===null) {
 			// A take branched during an older return keeps the animation it was already playing.
 			$t=min(1.,$this->clock/.60);
