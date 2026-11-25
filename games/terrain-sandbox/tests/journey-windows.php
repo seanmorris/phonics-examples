@@ -124,3 +124,5 @@ checkWindow($routes->completedRoads('C','A',$a)===null,'Changing the incoming ro
 foreach([$a,$b,$c,$f,$driven] as $land) $land->close();
 $session->close();
 echo "C matched across $hits road samples. Both incoming windows agreed on F and an edited approach carried through.\n";
+
+require __DIR__.'/support/alaska-roads.php';

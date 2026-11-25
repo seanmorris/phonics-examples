@@ -60,7 +60,10 @@ final class JourneyHighways
 		}
 		$land=$target ?? new Landscape($this->recipe($id));
 		try {
-			$data=yield from JourneyRoad::survey($land,$report,$edited ? $actualEntry : $entry);
+			$sharedSlots=[];
+			foreach($this->network->nodes[$id]['exits'] as $slot=>$child)
+				if(count($this->network->parents[$child])>1) $sharedSlots[$slot]=true;
+			$data=yield from JourneyRoad::survey($land,$report,$edited ? $actualEntry : $entry,$sharedSlots);
 			if(!$edited) {
 				$this->surveys[$id]=$data;
 				if(count($this->surveys)>6) unset($this->surveys[array_key_first($this->surveys)]);
@@ -91,7 +94,7 @@ final class JourneyHighways
 				: (yield from $this->approach($parent,$stage,$report));
 			foreach($group as $road) $roads[JourneyPavement::key($road)]=$road;
 		}
-		$result=yield from JourneyMerge::apply(array_values($roads));
+		$result=yield from JourneyMerge::apply(array_values($roads),$custom ? null : new JourneyPass($this->recipe($stage),$this->span));
 		if(!$custom) {
 			$this->merges[$stage]=$result;
 			if(count($this->merges)>6) unset($this->merges[array_key_first($this->merges)]);

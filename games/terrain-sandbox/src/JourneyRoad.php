@@ -35,7 +35,7 @@ final class JourneyRoad
 	}
 
 	/** Fit portable road records before a network reconciles approaches and grades the final pavement. */
-	public static function survey(Landscape $land,?callable $report,?array $entry): \Generator
+	public static function survey(Landscape $land,?callable $report,?array $entry,array $sharedSlots=[]): \Generator
 	{
 		$r = $land->recipe();
 		$half = $r['worldSize']/2;
@@ -66,12 +66,12 @@ final class JourneyRoad
 				// Only the shared pavement fixes the shape. Survey a single continuous
 				// alignment from the diverging lanes all the way to each destination.
 				$x=$forkX+self::SPLIT_RUN; $z=$forkZ+$side*self::SPLIT_OFFSET;
-				$onward=yield from $survey->route([[$x,$z],[$tailX,$tailZ]],scenic:true,divider:$forkZ,view:$armView);
+				$onward=yield from $survey->route([[$x,$z],[$tailX,$tailZ]],scenic:true,divider:$forkZ,view:$armView,sharedApproach:isset($sharedSlots[$i]));
 				$path=[[$forkX,$forkZ],[$forkX+40.,$forkZ+$side*4.],
 					[$forkX+80.,$forkZ+$side*16.],[$forkX+120.,$forkZ+$side*34.],...$onward];
 				$forks[]=count($paths);
 			} else {
-				$onward=yield from $survey->route([[$forkX+96.,$forkZ],[$tailX,$tailZ]],scenic:true,view:$armView);
+				$onward=yield from $survey->route([[$forkX+96.,$forkZ],[$tailX,$tailZ]],scenic:true,view:$armView,sharedApproach:isset($sharedSlots[$i]));
 				$path=[[$forkX,$forkZ],...$onward];
 			}
 			$squares[count($paths)]=$origins[$i+1];
@@ -123,11 +123,26 @@ final class JourneyRoad
 		// should not force a trench for miles, and a sharp summit should not force a high fill.
 		// Anchor the last mile of each square solely to its own natural ground. Arriving
 		// through a different parent must give the same merge pavement and departure height.
-		$anchors=[];
+		$anchors=$entranceGround=[];
 		foreach($tails as $leg) {
 			$keys=$routes[$leg];
 			$raw=array_map(static fn($key)=>$height[$key],$keys);
 			$anchors+=array_combine($keys,self::landingProfile($paths[$leg],$raw));
+		}
+		// Tie each incoming ramp to the destination's natural elevation at the map boundary.
+		// Otherwise distant mountains can move the road far above a low valley entrance.
+		foreach($tails as $slot=>$leg) {
+			if(!isset($sharedSlots[$slot])) continue;
+			[$cx,$cz]=$squares[$leg-1];
+			$inside=false;
+			foreach($paths[$leg-1] as $i=>[$x,$z]) {
+				$now=max(abs($x-$cx),abs($z-$cz))<=$span/2;
+				if($now && !$inside) {
+					$key=$routes[$leg-1][$i];
+					$entranceGround[$key]=$height[$key];
+				}
+				$inside=$now;
+			}
 		}
 		if($entry!==null) $anchors[$routes[0][0]]=$entry[1];
 		// Share excess grade locally before enforcing the final grade bound. This minimizes
@@ -163,6 +178,7 @@ final class JourneyRoad
 		}
 		$low=self::envelope($graph,$height); $high=self::envelope($graph,array_map(static fn($h)=>-$h,$height));
 		foreach($height as $key=>$_) $height[$key]=.5*($low[$key]-$high[$key]);
+		foreach($entranceGround as $key=>$natural) if(abs($height[$key]-$natural)>32.) $anchors[$key]=$natural;
 		$upper=self::envelope($graph,$anchors);
 		$lower=self::envelope($graph,array_map(static fn($h)=>-$h,$anchors));
 		foreach($height as $key=>$h) $height[$key]=max(-$lower[$key],min($upper[$key],$h));
@@ -170,7 +186,8 @@ final class JourneyRoad
 		$views=$roads=[];
 		foreach($paths as $leg=>$path) {
 			$points = [];
-			foreach($path as $i=>[$x,$z]) $points[] = [$x,$height[$routes[$leg][$i]],$z];
+			// Match level tangents across sea-level translations of the same shared landing.
+			foreach($path as $i=>[$x,$z]) $points[] = [$x,round($height[$routes[$leg][$i]],6),$z];
 			if(isset($squares[$leg])) {
 				$site=yield from $survey->roadsideView($points,$squares[$leg]);
 				if($site!==null) $views[]=$site;
@@ -264,7 +281,7 @@ final class JourneyRoad
 		return array_map(static fn($a,$b)=>.5*($a+$b),$low,$high);
 	}
 
-	private static function envelope(array $graph,array $values): array
+	public static function envelope(array $graph,array $values): array
 	{
 		$queue = new \SplPriorityQueue;
 		foreach($values as $key=>$value) $queue->insert($key,-$value);

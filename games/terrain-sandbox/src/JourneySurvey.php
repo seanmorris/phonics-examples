@@ -15,6 +15,7 @@ final class JourneySurvey
 	private float $sea;
 	private int $span;
 	private array $cache = [];
+	private bool $mountainPass=false;
 
 	public function __construct(array $recipe)
 	{
@@ -292,7 +293,7 @@ final class JourneySurvey
 	}
 
 	/** Flood in eight directions so a valley can double back around the end of a wall. */
-	private function crossing(array $guide,bool $freeStart,?float $divider): \Generator
+	private function crossing(array $guide,bool $freeStart,?float $divider,bool $sharedApproach,bool $mountain=false): \Generator
 	{
 		[$from,$z0]=$guide[0]; [$to,$z1]=$guide[array_key_last($guide)];
 		// A low-relief square needs fewer probes; keep the broad search for cliffs and ridges.
@@ -303,10 +304,12 @@ final class JourneySurvey
 			$relief=max($relief,abs($this->height($x+160.,$z)-$h),abs($this->height($x,$z+160.)-$h));
 		}
 		$gentle=$relief<24.;
-		$spacing=$gentle ? 352. : 224.;
+		$spacing=$mountain ? 144. : ($gentle ? 352. : 224.);
 		$n=(int)ceil(($to-$from)/$spacing); $dx=($to-$from)/$n;
-		$radius=$gentle ? 18 : 60; $width=2*$radius+1; $edges=$nodes=[];
+		$radius=$mountain ? 84 : ($gentle ? 18 : 60); $width=2*$radius+1; $edges=$nodes=[];
 		$starts=[];
+		$neighbors=[[-1,0],[0,-1],[-1,-1],[-1,1]];
+		if($mountain) array_push($neighbors,[-1,-2],[-1,2],[-2,-1],[-2,1]);
 		for($i=0;$i<=$n;$i++) {
 			$x=$i===$n ? $to : $from+$i*$dx;
 			$c=$z0+($z1-$z0)*$i/$n;
@@ -322,11 +325,11 @@ final class JourneySurvey
 				$h=$this->height($x,$z);
 				$nodes[$id]=[$x,$z,$h];
 				if($i===0 && ($freeStart || $k===$radius)) $starts[$id]=.1*abs($z-$z0);
-				foreach([[-1,0],[0,-1],[-1,-1],[-1,1]] as [$di,$dk]) {
+				foreach($neighbors as [$di,$dk]) {
 					if($i+$di<0 || $k+$dk<0 || $k+$dk>=$width) continue;
 					// The first and last stations must cross the map edge, rather than running along it.
 					if(($i===0 || $i===$n) && $di===0) continue;
-					if(($i===1 || $i===$n) && $di!==0 && $dk!==0) continue;
+					if(($i+$di===0 || $i===$n) && $di!==0 && $dk!==0) continue;
 					$j=$id+$di*$width+$dk; if(!isset($nodes[$j])) continue;
 					[$a,$b,$old]=$nodes[$j];
 					$run=hypot($x-$a,$z-$b);
@@ -340,9 +343,14 @@ final class JourneySurvey
 			}
 		}
 		$end=$n*$width+$radius;
-		[$forward,$back]=yield from self::flood($edges,$starts);
+		[$forward,$back,$up]=yield from $this->flood($edges,$starts,$mountain ? $nodes : []);
 		if(!isset($forward[$end])) throw new \RuntimeException('No connected highway corridor reaches the selected landing.');
-		[$reverse,$onward]=yield from self::flood($edges,[$end=>0.]);
+		if($sharedApproach && !$mountain && $this->excessiveEarthworks($nodes,$back,$end)) {
+			unset($edges,$nodes,$forward,$back);
+			$this->mountainPass=true;
+			return yield from $this->crossing($guide,$freeStart,$divider,true,true);
+		}
+		[$reverse,$onward,$down]=yield from $this->flood($edges,[$end=>0.],$mountain ? $nodes : []);
 		$best=INF; $view=null;
 		$originZ=($divider===null) ? 0. : ($z1<0 ? -1 : 1)*($this->span+JoinedTerrain::GAP)*.5;
 		foreach($nodes as $id=>[$x,$z,$h]) {
@@ -351,6 +359,7 @@ final class JourneySurvey
 			if(abs($z-$originZ)>$this->span*.5-1200.) continue;
 			if($t<.32 || $t>.72 || $forward[$id]+$reverse[$id]>$forward[$end]*1.14+1200.) continue;
 			$bank=abs($this->height($x,$z+25.)-$this->height($x,$z-25.))/50.;
+			if($mountain && abs($up[$id]-$down[$id])>48.) continue;
 			$score=$forward[$id]+$reverse[$id]-min(9000.,30.*$this->outlook($x,$z,$h))+500.*$bank+150.*max(0.,$this->sea+5.-$h);
 			if($score<$best) {
 				// An overlook on a dead-end spur would force the highway to reverse along itself.
@@ -374,23 +383,51 @@ final class JourneySurvey
 		return [array_reverse($west),$east];
 	}
 
-	private static function flood(array $edges,array $cost): \Generator
+	/** Trigger the finer survey only when the coarse path would cut or fill over 120 meters. */
+	private function excessiveEarthworks(array $nodes,array $parents,int $end): bool
 	{
-		$q=new \SplPriorityQueue; $parent=[];
+		$chain=[$end];
+		for($id=$end;isset($parents[$id]);$id=$parents[$id]) $chain[]=$parents[$id];
+		$chain=array_reverse($chain);
+		[$x,$z,$h]=$nodes[$chain[0]]; $level=max($this->sea+6.,$h);
+		foreach($chain as $id) {
+			[$px,$pz,$h]=$nodes[$id];
+			$cap=.095*hypot($px-$x,$pz-$z);
+			$level=max($level-$cap,min($level+$cap,max($h,$this->sea+6.)));
+			if($h>$this->sea && abs($h-$level)>120.) return true;
+			$x=$px; $z=$pz;
+		}
+		return false;
+	}
+
+	/** On difficult ground, also price the earthworks at the elevation the approaching road can reach. */
+	private function flood(array $edges,array $cost,array $nodes): \Generator
+	{
+		$q=new \SplPriorityQueue; $parent=$levels=[];
 		$q->setExtractFlags(\SplPriorityQueue::EXTR_BOTH);
-		foreach($cost as $id=>$c) $q->insert($id,-$c);
+		foreach($cost as $id=>$c) {
+			$q->insert($id,-$c);
+			if($nodes) $levels[$id]=max($nodes[$id][2],$this->sea+6.);
+		}
 		$i=0;
 		while(!$q->isEmpty()) {
 			['data'=>$id,'priority'=>$p]=$q->extract();
 			if(-$p>$cost[$id]) continue;
 			foreach($edges[$id]??[] as $j=>$edge) {
 				$c=$edge-$p;
+				if($nodes) {
+					[$x,$z]=$nodes[$id]; [$px,$pz,$h]=$nodes[$j]; $run=hypot($px-$x,$pz-$z);
+					$cap=.095*$run;
+					$level=max($levels[$id]-$cap,min($levels[$id]+$cap,max($h,$this->sea+6.)));
+					$c+=.15*$run*($level-$h)**2;
+				}
 				if($c>=($cost[$j]??INF)) continue;
+				if($nodes) $levels[$j]=$level;
 				$parent[$j]=$id; $cost[$j]=$c; $q->insert($j,-$c);
 			}
 			if((++$i&31)===0) yield;
 		}
-		return [$cost,$parent];
+		return [$cost,$parent,$levels];
 	}
 
 	/** Refine transversely to the corridor, including north/south runs and westbound bends. */
@@ -563,19 +600,72 @@ final class JourneySurvey
 		return $path;
 	}
 
-	/** Retain the scenic waypoint as a fixed tie while looking for gentler climbs. */
-	public function route(array $guide,bool $freeStart=false,bool $scenic=false,?float $divider=null,?array &$view=null): \Generator
+	/** Remove a fold where offset contour stations double back into the pavement they just left.
+	 * Then round the remaining bends within half a road width of their surveyed stations. */
+	private static function roundPass(array $path): \Generator
 	{
+		$width=JourneyRoad::WIDTH;
+		for($i=0;$i<count($path)-2;$i++) {
+			$length=0.; $fold=null;
+			for($j=$i+1;$j<count($path);$j++) {
+				$length+=hypot($path[$j][0]-$path[$j-1][0],$path[$j][1]-$path[$j-1][1]);
+				if($length>18.*$width) break;
+				$d=hypot($path[$j][0]-$path[$i][0],$path[$j][1]-$path[$i][1]);
+				if($d<2.5*$width && $length>3.*$d+2.*$width) $fold=$j;
+			}
+			if($fold!==null) array_splice($path,$i+1,$fold-$i-1);
+			if(($i&31)===0) yield;
+		}
+		// Fit at even distances. A spline through alternating long and short survey steps
+		// overshoots on the short side of a bend, sometimes folding back into a tire track.
+		$stations=[0.];
+		for($i=1;$i<count($path);$i++) $stations[]=$stations[$i-1]+hypot(
+			$path[$i][0]-$path[$i-1][0],$path[$i][1]-$path[$i-1][1]);
+		$total=end($stations); $count=max(1,(int)ceil($total/$width)); $segment=1;
+		$knots=[$path[0]];
+		for($i=1;$i<$count;$i++) {
+			$d=$total*$i/$count;
+			while($stations[$segment]<$d) $segment++;
+			$f=($d-$stations[$segment-1])/($stations[$segment]-$stations[$segment-1]);
+			[$x,$z]=$path[$segment-1]; [$u,$v]=$path[$segment];
+			$knots[]=[$x+($u-$x)*$f,$z+($v-$z)*$f];
+			if(($i&63)===0) yield;
+		}
+		$knots[]=end($path);
+		for($pass=0;$pass<2;$pass++) {
+			$rounded=$knots;
+			for($i=1;$i<$count;$i++) foreach([0,1] as $axis)
+				$rounded[$i][$axis]=.25*($knots[$i-1][$axis]+2.*$knots[$i][$axis]+$knots[$i+1][$axis]);
+			$knots=$rounded;
+		}
+		return $knots;
+	}
+
+	/** Retain the scenic waypoint as a fixed tie while looking for gentler climbs. */
+	public function route(array $guide,bool $freeStart=false,bool $scenic=false,?float $divider=null,?array &$view=null,bool $sharedApproach=false): \Generator
+	{
+		$this->mountainPass=false;
 		[$from]=$guide[0]; [$to,$endZ]=$guide[array_key_last($guide)];
 		$overlook=$view=null;
 		if($scenic) {
-			[$west,$east]=yield from $this->crossing($guide,$freeStart,$divider);
+			[$west,$east]=yield from $this->crossing($guide,$freeStart,$divider,$sharedApproach);
 			$path=yield from $this->refine($west);
 			$overlook=array_key_last($path); $view=$path[$overlook];
 			$tail=yield from $this->refine($east);
 			$path=[...$path,...array_slice($tail,1)];
 		} else $path=yield from $this->refine($guide);
 		$path=yield from $this->detours($path,$from,$to,$divider,$endZ<0 ? -1 : 1,$overlook);
+		if($this->mountainPass) {
+			$path=yield from self::roundPass($path);
+			if($view!==null) {
+				$nearest=INF;
+				foreach($path as $p) {
+					$d=hypot($p[0]-$view[0],$p[1]-$view[1]);
+					if($d<$nearest) { $nearest=$d; $overlook=$p; }
+				}
+				$view=$overlook;
+			}
+		}
 		$this->cache=[];
 		return $path;
 	}

@@ -89,7 +89,7 @@ final class JourneyMerge
 	}
 
 	/** Find the first forward, at-grade encounter on the joining arm. A spatial grid avoids comparing every pair of samples. */
-	private static function meeting(array $through,array $joining,float $width,array $roads): \Generator
+	private static function meeting(array $through,array $joining,float $width,array $roads,bool $generated): \Generator
 	{
 		if(!$through || !$joining) return null;
 		$cell=$width; $radius=.8*$width; $lead=3.*$width;
@@ -111,13 +111,19 @@ final class JourneyMerge
 					$other=$through[$k]; [$ox,$oy,$oz]=$other['p'];
 					$alignment=$other['dir'][0]*$sample['dir'][0]+$other['dir'][2]*$sample['dir'][2];
 					if($alignment<0. || $other['s']<$width || $end-$other['s']<5.*$width ||
-						hypot($ox-$x,$oz-$z)>$radius || abs($oy-$y)>3.) continue;
+						hypot($ox-$x,$oz-$z)>$radius || (!$generated && abs($oy-$y)>3.)) continue;
 					$after=$k;
 					$runout=$width*(3.-2.*min(1.,$alignment));
 					while($through[$after]['s']<$other['s']+$runout) $after++;
 					$from=$joining[$before]; $to=$through[$after];
 					$link=self::connector($from,$to,$roads[$from['id']]);
-					if($link!==null) return [$from,$to,$link];
+					if($link!==null) return [$from,$to,$link,false];
+					if($generated && abs($oy-$y)>3.) {
+						$flatFrom=$from; $flatTo=$to;
+						$flatFrom['p'][1]=$flatTo['p'][1]=$flatFrom['dir'][1]=$flatTo['dir'][1]=0.;
+						$link=self::connector($flatFrom,$flatTo,$roads[$from['id']]);
+						if($link!==null) return [$from,$to,$link,true];
+					}
 				}
 			}
 		}
@@ -150,7 +156,7 @@ final class JourneyMerge
 	}
 
 	/** Return null when the existing planned junction is already the first usable meeting. */
-	public static function apply(array $roads): \Generator
+	public static function apply(array $roads,?JourneyPass $pass=null): \Generator
 	{
 		$changed=false; $newJunctions=[];
 		do {
@@ -169,9 +175,11 @@ final class JourneyMerge
 					$width=min($roads[$first]['width'],$roads[$second]['width']);
 					$a=yield from self::samples($roads,$through,$width*.4);
 					$b=yield from self::samples($roads,$joining,$width*.4);
-					$meeting=yield from self::meeting($a,$b,$width,$roads);
+					$meeting=yield from self::meeting($a,$b,$width,$roads,$pass!==null);
 					if(!$meeting) continue;
-					[$from,$to,$link]=$meeting;
+					[$from,$to,$link,$grade]=$meeting;
+					$before=$roads;
+					$incident=array_flip([...$through,...$joining]);
 					[$prefix]=self::cut($roads[$from['id']],$from);
 					[$left,$right]=self::cut($roads[$to['id']],$to);
 					foreach(array_slice($joining,array_search($from['id'],$joining,true)) as $id) unset($roads[$id]);
@@ -180,8 +188,15 @@ final class JourneyMerge
 					if(isset($prefix['banks']) || isset($left['banks'])) {
 						$link['banks']=[isset($prefix['banks']) ? end($prefix['banks']) : 0.,isset($left['banks']) ? end($left['banks']) : 0.];
 					}
-					foreach([$left,$right,$prefix,$link] as $part) if(count($part['points'])>=2) $roads[]=$part;
-					$newJunctions[JourneySigns::node($link['points'][1])]=true;
+					foreach([$left,$right,$prefix,$link] as $part) if(count($part['points'])>=2) {
+						$roads[]=$part; $incident[array_key_last($roads)]=true;
+					}
+					if($grade) {
+						$graded=yield from $pass->grade(array_intersect_key($roads,$incident),$to['p']);
+						if($graded===null) { $roads=$before; continue; }
+						$roads=array_replace($roads,$graded);
+					}
+					$newJunctions[JourneySigns::node(end($roads[array_key_last($roads)]['points']))]=true;
 					$moved=$changed=true;
 					break 3;
 				}
