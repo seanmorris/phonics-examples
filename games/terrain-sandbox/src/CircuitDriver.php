@@ -29,6 +29,8 @@ final class CircuitDriver
 	private const SLIDE_SHARE = .9;
 	/** Bottle spent on each radian of a slide, with a margin. */
 	private const BURN_PER_RADIAN = .36;
+	/** Corners of the fitted line tighter than this many meters are rounded where the pavement has room. */
+	private const TIGHTEST = 16.;
 	private array $line, $speedLimit = [], $sight = [];
 	private array $curve = [], $reserve = [], $aloft = [], $room = [], $press = [];
 	private int $count, $segment;
@@ -49,7 +51,8 @@ final class CircuitDriver
 		$hasPavement = $landscape !== null && $landscape->roads();
 		$heights = [];
 		if($hasPavement) {
-			$path = new Circuit(RacingLine::fit($this->line,$this->spacing,$landscape,$course),$circuit->dryLevel,null);
+			$fitted = RacingLine::fit($this->line,$this->spacing,$landscape,$course);
+			$path = new Circuit($this->roundCorners($fitted,$landscape,$course),$circuit->dryLevel,null);
 			// The inside line changes the distance around the lap. Braking and lookahead both use driven meters.
 			$this->spacing = $path->length / $this->count;
 			$this->line = $path->stations(array_map(fn($i) => $i*$this->spacing, range(0,$this->count-1)));
@@ -76,9 +79,10 @@ final class CircuitDriver
 			$grip = min(9.2,7.2+.65*$margin);
 			// A slide wanders more than a gripping car, so a narrow road gets less of it.
 			$share = self::SLIDE_SHARE*($hasPavement ? max(.5,min(1.,.5 + ($halfWidth-4.5)/9.)) : 1.);
-			$slide = self::slideSpeed($k,$share);
+			// A very tight bend is over before the tail has swung out, so the slide gains less there.
+			$slide = self::slideSpeed($k,$share*max(0.,min(1.,(1./$k - 6.)/16.)));
 			// Below 14 m/s a locked rear axle swings the tail less, so the tires alone corner there.
-			$this->speedLimit[] = min(self::TOP_SPEED, max(sqrt($grip/$k), $slide >= 14. ? $slide : 0.));
+			$this->speedLimit[] = min(self::TOP_SPEED, max(min(sqrt($grip/$k),self::lockSpeed($k)), $slide >= 14. ? $slide : 0.));
 			// The brakes and the road's resistance slow the car, and the grade adds to that or takes from it.
 			// Plan on a little less than all of it, and less again on a narrow entry.
 			$grade = $heights ? ($heights[$this->wrap($i + 1)] - $heights[$i])/$this->spacing : 0.;
@@ -150,6 +154,68 @@ final class CircuitDriver
 			$reserve = max(0.,min(.9,$reserve + $burn*$this->spacing));
 			$this->reserve[$j] = $reserve;
 		}
+	}
+
+	/**
+	 * Round the corners the fitted line left too sharp to drive at more than a crawl. The fit moves each point only
+	 * across the road, so it cannot cut a corner by more than the corner's own radius. Here a point near such a
+	 * corner moves toward the middle of its neighbors for as long as it keeps the fit's clearance from the pavement
+	 * edge. Points beside a gate stay where the fit put them, between its posts.
+	 */
+	private function roundCorners(array $points, Landscape $land, Course $course): array
+	{
+		$count = count($points);
+		$clear = Car::BODY_HALF_WIDTH + 1.8;
+		$held = $edge = [];
+		foreach($course->gates(false) as $gate) {
+			if($gate['kind'] !== 'road') continue;
+			foreach($points as $i => [$x, $z]) if(hypot($x-$gate['x'],$z-$gate['z']) < 14.) $held[$i] = true;
+		}
+		for($pass = 0; $pass < 60; $pass++) {
+			$sharp = [];
+			foreach($points as $i => [$x, $z]) {
+				[$ax, $az] = $points[($i + $count - 2) % $count];
+				[$bx, $bz] = $points[($i + 2) % $count];
+				$bend = abs(($x-$ax)*($bz-$z) - ($z-$az)*($bx-$x));
+				$radius = hypot($x-$ax,$z-$az)*hypot($bx-$x,$bz-$z)*hypot($bx-$ax,$bz-$az)/max(1e-9,2.*$bend);
+				if($radius >= self::TIGHTEST) continue;
+				for($n = -3; $n <= 3; $n++) $sharp[($i + $n + $count) % $count] = true;
+			}
+			$moved = false;
+			foreach($sharp as $i => $_) {
+				if(isset($held[$i])) continue;
+				[$x, $z] = $points[$i];
+				[$ax, $az] = $points[($i + $count - 1) % $count];
+				[$bx, $bz] = $points[($i + 1) % $count];
+				$nx = .5*$x + .25*($ax+$bx);
+				$nz = .5*$z + .25*($az+$bz);
+				if(abs($nx-$x) + abs($nz-$z) < .005) continue;
+				$edge[$i] ??= RacingLine::edgeDistance($land,$x,$z);
+				$room = RacingLine::edgeDistance($land,$nx,$nz);
+				if($room < min($clear,$edge[$i])) continue;
+				$points[$i] = [$nx,$nz];
+				$edge[$i] = $room;
+				$moved = true;
+			}
+			if(!$moved) break;
+		}
+		return $points;
+	}
+
+	/**
+	 * The fastest speed at which full steering lock still turns the car as tightly as this curvature. The lock
+	 * opens up as the car slows, so a very sharp corner has to be taken at a crawl.
+	 */
+	private static function lockSpeed(float $k): float
+	{
+		if(tan(Car::steeringLimit(self::TOP_SPEED)) >= Car::WHEELBASE*$k) return self::TOP_SPEED;
+		$slow = 2.5;
+		$fast = self::TOP_SPEED;
+		for($pass = 0; $pass < 12; $pass++) {
+			$try = .5*($slow+$fast);
+			if(tan(Car::steeringLimit($try)) >= Car::WHEELBASE*$k) $slow = $try; else $fast = $try;
+		}
+		return $slow;
 	}
 
 	/** The speed at which a slide still turns the car as tightly as this curvature, using a share of its turn rate. */
@@ -433,6 +499,8 @@ final class CircuitDriver
 		$dz = $az + $t*($bz - $az) - $car['z'];
 		// Pure pursuit from the travel direction, which can differ from the nose during a slide.
 		[$steer,,$error] = self::pursuit($car,$dx,$dz);
+		// Pursuit steers less and less once the point is behind the car. Turn hard toward it instead.
+		if(abs($error) > 1.5) $steer = $error > 0. ? -1. : 1.;
 		$limit = $this->limitAt($at);
 		$charge = $car['nitrous'];
 		$drift = $car['drift'];
@@ -448,6 +516,10 @@ final class CircuitDriver
 		[$bx, $bz] = $this->pointAt($preview + .5);
 		$heading = atan2($bx-$ax,$bz-$az) - atan2($aside,max(25.,.8*$speed));
 		$noseError = self::angle($heading - $car['yaw']);
+		// A car pointing well away from where it should go has left its line. The slower it drives, the
+		// tighter it turns back, where at speed it would only circle.
+		$astray = max(abs($noseError),abs($error));
+		if($astray > .6) $limit = min($limit,max(4.,7./$astray));
 		// A gentle bend keeps turning while the path swings round to the nose, so carry the nose a little past
 		// its heading and one slide lasts longer. In a tight bend the slide is held throughout and needs no lead.
 		$turn = $speed*$this->curveAt($at + .15*$speed/$this->spacing);
@@ -457,7 +529,7 @@ final class CircuitDriver
 		// Radians a second the front tires can turn the car on their own. Leave them the small corrections.
 		$tires = 8.5/max(1.,$speed);
 		// A car that leaves a crest sideways rolls over in the air, so hold no slide around a planned flight.
-		if($speed < 9. || abs($error) > .8 || $speed > $limit + 8. || $this->aloft[$this->segment]) $this->slide = 0;
+		if($speed < 9. || $astray > 1.2 || $speed > $limit + 8. || $this->aloft[$this->segment]) $this->slide = 0;
 		elseif(!$this->slide && abs($aim) > .04 + .35*$tires) $this->slide = $aim <=> 0.;
 		elseif($aim*$this->slide <= 0.) $this->slide = 0;
 		// The boost adds speed and pulls the path round faster. Spend it where the car is below its pace or
