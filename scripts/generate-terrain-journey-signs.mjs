@@ -9,7 +9,8 @@ const assets = new URL('../games/terrain-sandbox/assets/',import.meta.url);
 const source = new URL('roads/journey/',assets);
 const font = {loadSystemFonts:false,fontFiles:[fileURLToPath(new URL('HWYGOTH.TTF',source))]};
 const width=1024, height=768, atlas=Buffer.alloc(width*height*4);
-const glyphs={}, ranges={}, vertices=[], indices=[];
+const glyphs={}, ranges={}, mounts={}, vertices=[], indices=[];
+const greenScale=2, panelBottom=4.85;
 const tag={frame:1, post:2, base:3, foot:4, face:5, hardware:6, digit:16};
 
 function render(svg,fit) {
@@ -83,10 +84,12 @@ function panel(rect,mid,bottom,w,z=-.56,normalZ=-1) {
 	const left=mid+normalZ*w/2, right=mid-normalZ*w/2;
 	quad([[left,bottom,z],[right,bottom,z],[right,bottom+h,z],[left,bottom+h,z]],[0,0,normalZ],rect,tag.face);
 }
-function gantryPanel(rect,mid,w) {
-	const bottom=4.85, h=w*rect[3]/rect[2], rearHeight=.90*h;
-	panel(rect,mid,bottom,w);
-	panel(wrongWay,mid,bottom+(h-rearHeight)/2,rearHeight*wrongWay[2]/wrongWay[3],.56,1);
+function gantryPanel(rect,mid,w,fitWidth) {
+	const originalHeight=w*rect[3]/rect[2], rearHeight=.90*originalHeight;
+	const width=w*greenScale, height=originalHeight*greenScale, center=mid*greenScale;
+	panel(rect,center,panelBottom,width);
+	panel(wrongWay,center,panelBottom+(height-rearHeight)/2,rearHeight*wrongWay[2]/wrongWay[3],.56,1);
+	return {fitWidth,span:2*Math.abs(center)+width,top:panelBottom+height,lift:(height-originalHeight)/2};
 }
 function range(kind,build) {
 	const start=indices.length; build(); ranges[kind]=[start,indices.length-start];
@@ -113,7 +116,7 @@ for(let i=0;i<gate.readUInt32LE(4);i+=3) {
 
 function mileageMesh(rect) {
 	indices.push(...bracket);
-	gantryPanel(rect,0,10.5);
+	mounts.mile=gantryPanel(rect,0,10.5,10.5);
 	// One quad per printed token. The instance supplies the number and singular/plural unit.
 	for(let i=0;i<8;i++) quad([[0,0,-.575],[1,0,-.575],[1,1,-.575],[0,1,-.575]],[0,0,-1],[0,0,1,1],tag.digit+i);
 }
@@ -121,8 +124,8 @@ range('junction',()=>mileageMesh(junction));
 range('stage',()=>mileageMesh(stage));
 range('exits',()=>{
 	indices.push(...bracket);
-	gantryPanel(left,-4.08,7.8);
-	gantryPanel(right,4.08,7.8);
+	gantryPanel(left,-4.08,7.8,16);
+	mounts.exits=gantryPanel(right,4.08,7.8,16);
 });
 range('fork',()=>{
 	const r=.095,z=.04,b=-1.4,t=3.35,none=[0,0,1,1];
@@ -137,7 +140,7 @@ const header=Buffer.alloc(16), indexBytes=Buffer.alloc(2*indices.length);
 [vertices.length,indices.length,width,height].forEach((v,i)=>header.writeUInt32LE(v,i*4));
 indices.forEach((v,i)=>indexBytes.writeUInt16LE(v,2*i));
 const mesh=Buffer.concat([header,...vertices,indexBytes,atlas]);
-const meta=Buffer.from(JSON.stringify({ranges,glyphs,atlasWidth:width,glyphV:(glyphY+.5)/height,glyphHeight:(glyphHeight-1)/height})+'\n');
+const meta=Buffer.from(JSON.stringify({ranges,glyphs,mounts,greenScale,panelBottom,atlasWidth:width,glyphV:(glyphY+.5)/height,glyphHeight:(glyphHeight-1)/height})+'\n');
 const check=process.argv.includes('--check');
 for(const [name,bytes,packed] of [['journey-signs.mesh.bin.gz',mesh,true],['journey-signs.json',meta,false]]) {
 	const file=new URL('roads/'+name,assets);

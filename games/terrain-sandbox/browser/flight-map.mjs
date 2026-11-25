@@ -119,6 +119,19 @@ export function activate({module, canvas, session})
 			ctx.stroke();
 		}
 
+		for(const [x, z] of chart.mileMarkers ?? [])
+		{
+			const [dx, dy] = offset(x, z);
+			if(edgeDistance(dx, dy) > mid-5) continue;
+			ctx.beginPath();
+			ctx.arc(mid+dx, mid+dy, 3.5, 0, 2*Math.PI);
+			ctx.fillStyle = '#80edaf';
+			ctx.fill();
+			ctx.lineWidth = 1.5;
+			ctx.strokeStyle = '#153a2a';
+			ctx.stroke();
+		}
+
 		ctx.lineWidth = 1;
 		ctx.strokeStyle = '#bad5b5';
 

@@ -7,9 +7,10 @@ layout(location=4) in vec2 surface;
 uniform mat4 vp;
 uniform vec3 eye, sun, foot;
 uniform vec2 tangent, feet;
-uniform float day, widthDelta, panelScale;
+uniform float day, widthDelta;
+uniform vec2 panelFit; // Road-width scale and lift of the gantry crossbars.
 uniform vec4 textSlots[8]; // local left and width, atlas left and width
-uniform vec2 textV;
+uniform vec4 textV; // Atlas V origin and height, green face scale, bottom of the green face.
 // RETROREFLECTION
 out vec2 uv;
 out float elevation, brightness;
@@ -31,10 +32,13 @@ void main() {
 		p.x=slot.x+p.x*slot.y;
 		// 48 px em, 48 px baseline in a 64 px glyph cell. Match the two rows printed on the mileage panel.
 		p.y=7.94+(p.y*64.-16.)*.0238;
+		p.x*=textV.z;
+		p.y=textV.w+(p.y-textV.w)*textV.z;
 	}
+	if(part==1 || part==2) p.y+=panelFit.y;
 	if(part==5 || part>=16) {
-		p.x*=panelScale;
-		p.y=7.15+(p.y-7.15)*panelScale;
+		p.x*=panelFit.x;
+		p.y=7.15+(p.y-7.15)*panelFit.x;
 	}
 	vec2 right=vec2(-tangent.y,tangent.x);
 	vec2 offset=right*p.x+tangent*p.z;

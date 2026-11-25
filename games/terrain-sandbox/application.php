@@ -528,6 +528,7 @@ $engine->start(
 					$car || $waterRace ? $session->circuitChartSpan() : null, circular: $car);
 				if($span !== null)
 					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$instrumentSize,'circular'=>$car,
+						'mileMarkers'=>$journeySigns->mileMarkers(),
 						'showRoute'=>$raceGuidance, 'markers'=>($events['sites'] ?? $session->delivery?->sites()) ?: ($target === null ? [] : [$target])];
 			}
 			// The pause menu draws last, over the frozen frame and its charts.

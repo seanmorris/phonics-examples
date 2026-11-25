@@ -77,11 +77,14 @@ expectSign(!kinds(layout($visible),'fork') && !kinds(layout($visible),'exits'),'
 $cache=new JourneySignModel;
 for($i=0;$i<1000 && !$cache->count;$i++) $cache->update($land);
 expectSign($cache->count===11 && !$cache->update($land),'An idle frame reuses the completed layout.');
+$dots=array_map(static fn($sign)=>[$sign['position'][0],$sign['position'][2]],kinds($signs,'mile'));
+expectSign(count($dots)===9 && $cache->mileMarkers()===$dots,'Every mileage gantry has exactly one map dot at its real road position.');
 for($i=0;$i<1000;$i++) if($cache->update($restored) && $cache->count===11) break;
 expectSign($cache->count===11,'Opening the same saved journey again rebuilds its markers at the same revision.');
 $restored->close();
 $land->undo(); $cache->update($land);
 expectSign($cache->count===0,'Undo clears obsolete signs from the renderer before the next draw.');
+expectSign($cache->mileMarkers()===[],'Changing roads clears old map dots with the old gantries.');
 $cache->close(); $land->close(); $visible->close();
 
 // The narrow arm is on the left. Both first records end while the asphalt still overlaps.
