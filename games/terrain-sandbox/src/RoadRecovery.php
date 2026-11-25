@@ -87,7 +87,8 @@ final class RoadRecovery
 	{
 		$pose = $car->state();
 		$x = $pose['x']; $z = $pose['z'];
-		if(Car::onPavement($land,$x,$z) || $land->bounds()['maxY'] <= $water) return null;
+		$wreck = in_array($pose['motion'], ['tumbling','overturned'], true);
+		if((!$wreck && Car::onPavement($land,$x,$z)) || $land->bounds()['maxY'] <= $water) return null;
 
 		$half = $land->recipe()['worldSize']/2;
 		$roads = $land->roads();

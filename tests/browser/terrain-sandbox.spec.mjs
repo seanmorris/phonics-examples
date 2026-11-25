@@ -1134,6 +1134,37 @@ test('right-stick recovery on a landscape journey returns the car to the highway
 	expect(after.hint).toContain('⓫ Return to road');
 });
 
+test('right-stick recovery keeps rendering with the chase camera beyond the journey edge', async({page}) => {
+	await page.setViewportSize({width: 480,height: 300});
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await installCarPad(page);
+	await boot(page);
+	const doc = fixture();
+	const recipe = doc.landscape.recipe;
+	recipe.waterLevel = doc.settings.waterLevel = -30;
+	doc.settings.grass = 1;
+	recipe.join = {version: 2,span: 16384,destinations: [{...recipe}]};
+	await load(page, doc);
+	const edge = (await status(page)).recipe.worldSize / 2;
+	doc.landscape.history = [[{type:'road',points:[[edge,0,0],[edge-110,0,0]],width:12,shoulder:2,material:'road'}]];
+	doc.landscape.cursor = doc.landscape.revision = 1;
+	doc.camera = {position:[edge-4,12,24],yaw:Math.PI,pitch:-.35};
+	await load(page, doc);
+	await press(page, 'car');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await canvas(page).focus();
+	await page.evaluate(() => window.testCarButton(11, true));
+	await expect.poll(async() => (await status(page)).car.recoveries).toBe(1);
+	await page.evaluate(() => window.testCarButton(11, false));
+	const recovered = await status(page);
+	expect(recovered.camera.position[0]).toBeGreaterThan(edge);
+	expect(recovered.car.x).toBeLessThan(edge);
+	await expect.poll(async() => (await status(page)).renderer.frames).toBeGreaterThan(recovered.renderer.frames);
+	await expect.poll(async() => (await status(page)).car.roadHold).toBe(0);
+	expect(errors).toEqual([]);
+});
+
 test('tight road bends and checkpoint banners return the headlight beam at night', async({page}, testInfo) => {
 	test.setTimeout(180_000);
 	await page.setViewportSize({width: 720,height: 420});

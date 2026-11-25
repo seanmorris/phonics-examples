@@ -297,7 +297,9 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 	{
 		$steps = GrassShells::steps($grassQuality);
 		[$eyeX,$eyeY,$eyeZ] = $viewCamera->position;
-		$floor = max($session->landscape->height($eyeX,$eyeZ), $session->water->level());
+		// The chase camera can swing past the edge while the tires are still on the map.
+		$half = $session->landscape->recipe()['worldSize']/2;
+		$floor = max($session->landscape->height(max(-$half,min($half,$eyeX)),max(-$half,min($half,$eyeZ))), $session->water->level());
 		($grass ??= new GrassShells)->draw($scene, $viewCamera, $styles, $session->water->level(), $session->time,
 			$steps, $width, $height, $eyeY-$floor);
 	}

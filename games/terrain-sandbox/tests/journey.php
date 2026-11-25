@@ -51,6 +51,22 @@ foreach([[12.,-36.,-M_PI/2],[60.,80.,M_PI/2]] as [$startZ,$roadZ,$yaw]) {
 	$recovery->input(['actions'=>['pad-rs']],0,1.);
 	expectJourney($recovery->car->state() === $after,'A click on the pavement leaves the car alone.');
 }
+$edge = $recovery->landscape->recipe()['worldSize']/2;
+$recovery->landscape->queue(['type'=>'road','points'=>[[$edge,0.,0.],[$edge-110.,0.,0.]],
+	'width'=>12.,'shoulder'=>2.,'material'=>'road']);
+$recovery->landscape->commit();
+$site = $recovery->car->checkedSite($recovery->landscape,-5.,$edge-4.,0.,-M_PI/2,[]);
+$recovery->car->spawn($site,$recovery->landscape,-5.);
+$nose = $recovery->car->state();
+$nose['pitch'] = -M_PI/2;
+$nose['y'] = 2.04;
+$recovery->car->resume($nose,[...$recovery->car->motion(),0.,0.,0.,0.,0.,0.],$recovery->landscape,-5.);
+expectJourney($recovery->car->state()['motion']==='tumbling','The car is balanced on its nose above the end pavement.');
+$recovery->input(['actions'=>['pad-rs']],0.,1.);
+$after = $recovery->car->state();
+expectJourney($after['motion']==='driving' && $after['recoveries']===1 && $after['wheelContacts']===4
+	&& $after['roadHold']===1.5 && abs($after['pitch'])<.01 && $recovery->camera->position[0]>$edge,
+	'Right-stick recovery plants a nose-down wreck on its tires even when its chase camera is beyond the journey edge.');
 $recovery->close();
 
 /** Follow connected asphalt from the actual west edge, choosing a branch by its surveyed centerline. */

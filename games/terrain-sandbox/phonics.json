@@ -133,7 +133,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-2NP0hQrwytbA5XK6hreBW+aa9QrveajfCDmgVd5TfBw=",
+    "application.php": "sha256-cqxylaNWLjq9v/2tRb6/FB0/KXQKc4OWoHwEmIvRCsY=",
     "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
     "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
     "assets/car-audio/flat-twelve.wav": "sha256-VL0h/8JIMUjgFFHWnxBe2KpL7nVMB44V/WWQ8brK0wI=",
@@ -226,7 +226,7 @@
     "src/RacingLine.php": "sha256-B5NSCZvUnghasK7wJSBfPjnKEZtZNGSO6aAbAkmWIr0=",
     "src/RoadEditor.php": "sha256-WHq69zBaK7qqcdB3NJAf4JzJwNAZycYjGm+V53OkTik=",
     "src/RoadGrading.php": "sha256-epFaCkRQ+TN3teNoQdAtuhO+Fq6MC2MRu+nibpIgF7A=",
-    "src/RoadRecovery.php": "sha256-+7T5CzDrsqX2iUvbSlTsa+vdMOZoKnBtu8z0BJV1bZw=",
+    "src/RoadRecovery.php": "sha256-mwdiecukrdFVsKgAMRtGiDou1MmnM/TjpocrU+hE0fo=",
     "src/RoadWarnings.php": "sha256-nmANnjIZGNrEdmebJAKeH1WJ2iwRnnKSHLx6Fal5DAg=",
     "src/SandboxMenu.php": "sha256-ozxpQpL+TVo/vlSlLTsFtXW9+iBVrGHnwu33PxFr3js=",
     "src/Session.php": "sha256-P+7cEEqEGhKEb/wp4UCawl8Mz4DsZaKX9vJLZNI2kr0=",
