@@ -537,6 +537,7 @@ final class Session
 	}
 
 	public function journeySquare(): ?string { return $this->square; }
+	public function journeyEndpoints(): ?array { return $this->network?->endpoints[$this->square] ?? null; }
 	public function preparedJourneyRoads(string $stage): ?array
 	{
 		return $this->nextSquare===$stage ? $this->onwardReady?->roadRecords() : null;

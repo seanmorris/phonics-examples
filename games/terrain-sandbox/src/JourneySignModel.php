@@ -11,7 +11,7 @@ final class JourneySignModel
 	private const ASSETS=__DIR__.'/../assets/roads/';
 	private ?Landscape $land=null;
 	private int $revision=-1;
-	private bool $stage=false;
+	private ?array $endpoints=null;
 	private ?\Generator $build=null;
 	private array $sites=[], $art=[], $mileMarkers=[];
 	private ?Program $program=null;
@@ -21,14 +21,14 @@ final class JourneySignModel
 
 	public function __construct() { $this->lamps=new SpotLights; }
 
-	public function update(Landscape $land,bool $journeyStage=false): bool
+	public function update(Landscape $land,?array $endpoints=null): bool
 	{
 		$changed=false;
-		if($land!==$this->land || $land->revision()!==$this->revision || $journeyStage!==$this->stage) {
+		if($land!==$this->land || $land->revision()!==$this->revision || $endpoints!==$this->endpoints) {
 			$changed=$this->count>0;
 			$this->sites=$this->mileMarkers=[]; $this->count=$this->drawn=0;
-			$this->land=$land; $this->revision=$land->revision(); $this->stage=$journeyStage;
-			$this->build=JourneySigns::layout($land,$journeyStage);
+			$this->land=$land; $this->revision=$land->revision(); $this->endpoints=$endpoints;
+			$this->build=JourneySigns::layout($land,$endpoints);
 		}
 		if($this->build===null) return $changed;
 		$until=hrtime(true)+800_000;
@@ -88,7 +88,7 @@ final class JourneySignModel
 				$scale=min(1.,$span/$mount['fitWidth']);
 				$span=max($span,$mount['span']*$scale);
 				$lift=$mount['lift']*$scale;
-				$r=$span*.5+2.; $top=max(8.5+$lift,7.15+($mount['top']-7.15)*$scale);
+				$r=$span*.5+($mount['overhang'] ?? 2.); $top=max(8.5+$lift,7.15+($mount['top']-7.15)*$scale);
 			}
 			if($y+$top<$water || !Camera::inView($planes ??= $camera->clipPlanes($w,$h),$eye,
 				['x'=>$x-$r,'z'=>$z-$r,'size'=>2.*$r],$y-10.,$y+$top)) continue;
@@ -118,6 +118,8 @@ final class JourneySignModel
 			glUniform2f($p->location('feet'),...$this->sites[$i]['feet']);
 			glUniform1f($p->location('widthDelta'),.5*$span-6.662);
 			glUniform2f($p->location('panelFit'),$scale,$lift);
+			if($kind==='start' || $kind==='finish')
+				glUniform1f($p->location('gatePrintOffset'),$kind==='finish' ? $this->art['finishOffset'] : 0.);
 			if($kind==='mile') {
 				$letters=$this->sites[$i]['letters'] ??= $this->lettering($site['remaining']);
 				glUniform4fv($p->location('textSlots[0]'),8,$letters);

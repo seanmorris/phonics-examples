@@ -7,6 +7,7 @@ uniform float waterLevel, day;
 // RETROREFLECTION
 in vec2 uv;
 in vec3 relative;
+in vec3 tint;
 flat in vec3 sheetNormal;
 in float elevation, brightness;
 flat in float front;
@@ -15,7 +16,11 @@ out vec4 color;
 void main() {
 	if(elevation<waterLevel) discard;
 	vec3 metal=vec3(.43,.47,.48)*brightness;
-	if(part!=5 && part<16) { color=vec4(metal,1.); return; }
+	if(part==9) {
+		color=vec4(tint,1.);
+		return;
+	}
+	if(part!=5 && part!=7 && part!=8 && part<16) { color=vec4(metal,1.); return; }
 	vec4 ink=texture(artwork,uv);
 	if(ink.a<.45 || (front<0. && part>=16)) discard;
 	if(front<0.) { color=vec4(metal,1.); return; }

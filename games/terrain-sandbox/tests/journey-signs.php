@@ -4,12 +4,12 @@ require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
 
 use TerrainPhonics\{Edits,JoinedTerrain,Landscape};
-use TerrainSandbox\{JourneySignModel,JourneySigns};
+use TerrainSandbox\{JourneyNetwork,JourneySignModel,JourneySigns};
 
 function expectSign(bool $test, string $why): void { if(!$test) throw new RuntimeException($why); }
-function layout(Landscape $land,bool $stage=false): array
+function layout(Landscape $land,?array $endpoints=null): array
 {
-	$work=JourneySigns::layout($land,$stage);
+	$work=JourneySigns::layout($land,$endpoints);
 	foreach($work as $_) {}
 	return $work->getReturn();
 }
@@ -26,6 +26,7 @@ function road(Landscape $land,array $a,array $b,float $width=28.): void
 }
 function kinds(array $signs,string $kind): array { return array_values(array_filter($signs,fn($s)=>$s['kind']===$kind)); }
 
+$leaf=['start'=>false,'finishes'=>[0]];
 $form=['preset'=>'coast','waterLevel'=>-200.,'heightScale'=>0.,'detailAmplitude'=>0.];
 $land=new Landscape($form+['join'=>['span'=>16384,'destinations'=>[$form,$form]]]);
 $edge=$land->recipe()['worldSize']/2;
@@ -46,7 +47,20 @@ road($land,$s,[$edge,110.,$south[1]]);
 $land->commit();
 $signs=layout($land);
 $standalone=kinds($signs,'wrongWay'); $total=count($signs);
-expectSign($standalone && $total===11+count($standalone),'Three traversed landscapes have nine mile markers, an exit gantry, a fork post and roadside reverse warnings.');
+expectSign($standalone && $total===14+count($standalone),'The standalone fork has three endpoint banners alongside nine mile markers, a fork post, an exit gantry and reverse warnings.');
+$starts=kinds($signs,'start'); $finishes=kinds($signs,'finish');
+expectSign(count($starts)===1 && abs(distance($start,$starts[0]['position'])-96.)<.01 && $starts[0]['heading'][0]>.99,
+	'The single start faces the driver ahead of the west-edge spawn.');
+expectSign(count($finishes)===2 && array_column(array_column($finishes,'position'),2)===[$north[1],$south[1]],
+	'Each terminal exit has its own finish.');
+foreach($finishes as $gate) expectSign(abs($gate['position'][0]-($edge-96.))<.01 && $gate['width']===28.
+	&& $gate['heading'][0]>.99,'The finish spans its own road before the CPU stopping point.');
+$routes=new JourneyNetwork("A coast -> B,C\nB coast -> D\nC coast\nD coast");
+$opening=layout($land,$routes->endpoints['A']);
+expectSign(kinds($opening,'start')===$starts && kinds($opening,'finish')===[$finishes[1]],
+	'The terminal branch finishes while the onward branch continues without a banner.');
+expectSign($routes->endpoints['B']===['start'=>false,'finishes'=>[1]] && $routes->endpoints['C']===$leaf,
+	'Previewing a later stage starts no new journey, and a terminal preview keeps its finish.');
 foreach([$west,$north,$south] as $i=>$square) {
 	$miles=array_values(array_filter(kinds($signs,'mile'),fn($site)=>$site['square']===$i));
 	expectSign(array_column($miles,'fraction')===[.25,.5,.75],'Every traversed landscape has three quarter marks.');
@@ -74,6 +88,11 @@ expectSign(distance($exits['position'],$split)<$warning-10.,'The approach follow
 $restored=Landscape::load($land->save());
 expectSign(layout($restored)===$signs,'The same saved pavement restores the same signs.');
 
+$partial=$land->previewWithoutRoads([4,7]); // Hide the western entry and the end of the southern highway.
+$partialSigns=layout($partial);
+expectSign(!kinds($partialSigns,'start') && kinds($partialSigns,'finish')===[$finishes[0]],
+	'Road visibility removes the affected banners without promoting exposed interior endpoints.');
+$partial->close();
 $visible=$land->previewWithoutRoads([0]);
 expectSign(!kinds(layout($visible),'fork') && !kinds(layout($visible),'exits'),'Hiding a diverging arm removes both fork instructions.');
 $cache=new JourneySignModel;
@@ -83,6 +102,8 @@ $dots=array_map(static fn($sign)=>[$sign['position'][0],$sign['position'][2]],ki
 expectSign(count($dots)===9 && $cache->mileMarkers()===$dots,'Every mileage gantry has exactly one map dot at its real road position.');
 for($i=0;$i<1000;$i++) if($cache->update($restored) && $cache->count===$total) break;
 expectSign($cache->count===$total,'Opening the same saved journey again rebuilds its markers at the same revision.');
+for($i=0;$i<1000;$i++) if($cache->update($restored,$routes->endpoints['A']) && $cache->count===count($opening)) break;
+expectSign($cache->count===count($opening),'Changing just the route topology refreshes the cached decorations.');
 $restored->close();
 $land->undo(); $cache->update($land);
 expectSign($cache->count===0,'Undo clears obsolete signs from the renderer before the next draw.');
@@ -100,7 +121,7 @@ road($staggered,[8.,0.,4.],$right,34.);
 // An unrelated approach ends at this short section. The original two arms still open into one median.
 road($staggered,[-150.,0.,70.],[8.,0.,4.],8.);
 $staggered->commit();
-$post=kinds(layout($staggered,true),'fork')[0];
+$post=kinds(layout($staggered,$leaf),'fork')[0];
 $p=$post['position'];
 $leftGap=lateral($p,$joint,$left)-6.; $rightGap=-lateral($p,$joint,$right)-17.;
 expectSign($p[2]<-5. && min($leftGap,$rightGap)>1.3 && abs($leftGap-$rightGap)<.12,
@@ -115,7 +136,7 @@ foreach([-2.,2.] as $side) {
 	road($short,$joint,[40.,0.,$side]); road($short,[40.,0.,$side],[80.,0.,0.]);
 }
 road($short,[80.,0.,0.],[200.,0.,0.]); $short->commit();
-$signs=layout($short,true);
+$signs=layout($short,$leaf);
 expectSign(!kinds($signs,'fork') && array_column(kinds($signs,'exits'),'position')===[[-300.,0.,0.]],
 	'Overlapping arms that rejoin without opening a median keep their overhead warning and get no post on the asphalt.');
 $short->close();
@@ -127,10 +148,11 @@ road($terminal,[-8192.,100.,1900.],$gore);
 road($terminal,$gore,$finish); $terminal->commit();
 $plain=layout($terminal);
 expectSign($plain && count(kinds($plain,'wrongWay'))===count($plain),'Long standalone roads carry periodic reverse warnings.');
-$merged=layout($terminal,true);
+$merged=layout($terminal,$leaf);
 expectSign(!kinds($merged,'fork') && !kinds($merged,'exits'),'Two origins and one destination is a rejoin, so it has no exit warning.');
 expectSign(count(kinds($merged,'mile'))===5 && count(array_filter($merged,fn($s)=>($s['caption'] ?? '')==='junction'))===4,
 	'Both incoming routes count down to the rejoin and share the single mile marker on their common tail.');
+expectSign(!kinds($merged,'start') && count(kinds($merged,'finish'))===1,'Both arrivals share the finish on the common tail.');
 $terminal->close();
 // Three-mile stations follow the pavement through a bend and across a reversed, out-of-order edit.
 $mile=JourneySigns::MILE;
@@ -180,7 +202,7 @@ $lap->close();
 
 $gantries=new Landscape($form+['worldSize'=>16384]);
 road($gantries,[-8192.,0.,0.],[0.,0.,0.]); road($gantries,[0.,0.,0.],[8192.,0.,0.]); $gantries->commit();
-$signs=layout($gantries,true);
+$signs=layout($gantries,$leaf);
 expectSign(count(kinds($signs,'mile'))===3 && !kinds($signs,'wrongWay'),'Existing gantry backs every 2.55 miles already cover this stage.');
 $gantries->close();
 

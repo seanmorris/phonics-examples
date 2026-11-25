@@ -467,7 +467,7 @@ $engine->start(
 		if(($hadVisibleSmoke || $visibleSites) && $session->time !== $lastRenderedTime) $dirty = true;
 		$signTerrain = $sample ? $playback->terrain : $displayTerrain;
 		$dirty = $curveSigns->update($signTerrain) || $dirty;
-		$dirty = $journeySigns->update($signTerrain,$session->journeySquare()!==null) || $dirty;
+		$dirty = $journeySigns->update($signTerrain,$session->journeyEndpoints()) || $dirty;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;

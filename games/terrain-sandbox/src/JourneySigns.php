@@ -8,6 +8,8 @@ use TerrainPhonics\{Edits,JoinedTerrain,Landscape};
 final class JourneySigns
 {
 	public const MILE = 1000. * DisplayUnits::KM_PER_MILE;
+	// Leave room to drive under START from the 48 m spawn and under FINISH before the CPU brakes at the boundary.
+	private const END_INSET = 96.;
 	private const FORK_STEP = 4.;      // Spacing between cross sections of the two departing roads, in meters.
 	private const FORK_CLEARANCE = 2.; // Room for the 2.65 m sign face and a margin at both ends.
 
@@ -18,12 +20,13 @@ final class JourneySigns
 	}
 
 	/** Signed panels are scenery. Yield during long road scans so rebuilding a window can share the frame budget. */
-	public static function layout(Landscape $land,bool $journeyStage=false): \Generator
+	public static function layout(Landscape $land,?array $endpoints=null): \Generator
 	{
 		$recipe=$land->recipe(); $join=$recipe['join'] ?? null;
-		if(!$join && !$journeyStage) return yield from RoadWarnings::wrongWaySigns($land);
+		if(!$join && $endpoints===null) return yield from RoadWarnings::wrongWaySigns($land);
 		$half=($join['span'] ?? $recipe['worldSize'])*.5;
 		$squares=$join ? JoinedTerrain::origins($join['span'],count($join['destinations'])) : [[0.,0.]];
+		$endpoints ??= ['start'=>true,'finishes'=>range(1,count($join['destinations']))];
 		$roads=$land->roads();
 		$starts=$ends=$incoming=$outgoing=$inside=[];
 		foreach($roads as $i=>$road) {
@@ -63,6 +66,22 @@ final class JourneySigns
 					}
 				return self::pose($roads[array_key_first($run)],0.);
 			};
+			// Only the actual outer road ends carry banners. A new run at a fork or a hidden
+			// road chunk may have no predecessor or successor in this view.
+			$inset=min(self::END_INSET,.5*$length);
+			[$startX,,$startZ]=$roads[$root]['points'][0];
+			if($endpoints['start'] && !isset($incoming[$a]) && abs($startX-($squares[0][0]-$half))<1.
+				&& abs($startZ-$squares[0][1])<=$half && $roads[$root]['material']==='road')
+				$sites['start:'.$a]=['kind'=>'start']+$at($inset,$gantries);
+			if(!$next && $roads[$id]['material']==='road' && !isset($sites['finish:'.$b])) {
+				[$endX,,$endZ]=$roads[$id]['points'][array_key_last($roads[$id]['points'])];
+				foreach($endpoints['finishes'] as $square) {
+					[$cx,$cz]=$squares[$square];
+					if(abs($endX-($cx+$half))>=1. || abs($endZ-$cz)>$half) continue;
+					$sites['finish:'.$b]=['kind'=>'finish']+$at($length-$inset,$gantries);
+					break;
+				}
+			}
 			if(count($next)>1) {
 				if(count($next)===2 && !isset($forks[$b])) {
 					$forks[$b]=true;

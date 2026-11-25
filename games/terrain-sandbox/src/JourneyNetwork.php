@@ -9,6 +9,8 @@ final class JourneyNetwork
 {
 	public readonly array $nodes, $parents, $order;
 	public readonly string $start;
+	/** Start and finish square indices in each stage's local terrain window. */
+	public readonly array $endpoints;
 
 	public function __construct(public readonly string $plan)
 	{
@@ -37,6 +39,13 @@ final class JourneyNetwork
 		$this->nodes=$nodes;
 		$this->parents=$parents;
 		$this->order=$order;
+		foreach($nodes as $id=>$node) {
+			$finishes=$node['exits'] ? [] : [0];
+			foreach($node['exits'] as $index=>$child)
+				if(!$nodes[$child]['exits']) $finishes[]=$index+1;
+			$endpoints[$id]=['start'=>$id===$this->start,'finishes'=>$finishes];
+		}
+		$this->endpoints=$endpoints;
 	}
 
 	public function recipe(string $id,int $span): array

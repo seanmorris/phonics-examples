@@ -11,7 +11,7 @@ const font = {loadSystemFonts:false,fontFiles:[fileURLToPath(new URL('HWYGOTH.TT
 const width=1024, height=768, atlas=Buffer.alloc(width*height*4);
 const glyphs={}, ranges={}, mounts={}, vertices=[], indices=[];
 const greenScale=2, panelBottom=4.85;
-const tag={frame:1, post:2, base:3, foot:4, face:5, hardware:6, digit:16};
+const tag={frame:1, post:2, base:3, foot:4, face:5, hardware:6, gateLabel:7, gateCheck:8, balloon:9, digit:16};
 
 function render(svg,fit) {
 	return new Resvg(svg,{font,fitTo:fit ? {mode:'width',value:fit} : {mode:'original'}}).render();
@@ -138,11 +138,100 @@ function roadsidePanel(rect) {
 range('fork',()=>roadsidePanel(fork));
 range('wrongWay',()=>roadsidePanel(wrongWay));
 
+// The circuit mesh already has the START and FINISH prints and their colored checker bands.
+// Store half-size copies of those atlas rows in the unused area below the mileage glyphs.
+const originalWidth=gate.readUInt32LE(8), originalHeight=gate.readUInt32LE(12);
+const pixels=oldIndices+2*gate.readUInt32LE(4), bandHeight=originalHeight/4;
+const printX=240, printY=630, finishY=698;
+for(const [sourceY,targetY] of [[0,printY],[2*bandHeight,finishY]]) {
+	for(let y=0;y<bandHeight/2;y++) for(let x=0;x<originalWidth/2;x++) {
+		const a=pixels+4*((sourceY+2*y)*originalWidth+2*x), b=4*((targetY+y)*width+printX+x);
+		for(let c=0;c<4;c++) atlas[b+c]=Math.round((gate[a+c]+gate[a+4+c]+gate[a+4*originalWidth+c]+gate[a+4*(originalWidth+1)+c])/4);
+	}
+}
+
+function raceBoard() {
+	const ids=new Map();
+	for(let i=0;i<gate.readUInt32LE(4);i+=3) {
+		const face=[0,1,2].map(j=>gate.readUInt16LE(oldIndices+2*(i+j)));
+		const p=16+28*face[0], part=gate[p+27]&63;
+		if((part!==1 && part!==3) || gate.readInt16LE(p+16)>=0) continue;
+		for(const index of face) {
+			if(!ids.has(index)) {
+				const v=16+28*index;
+				// The highway shader's local +X points to the approaching driver's right.
+				const x=-gate.readFloatLE(v), y=gate.readFloatLE(v+4)+3.2, z=gate.readFloatLE(v+8)-.055;
+				const u=gate.readUInt16LE(v+18)/65535, t=gate.readUInt16LE(v+20)/65535;
+				ids.set(index,vertex([x,y,z],[0,0,-1],
+					[(printX+u*originalWidth/2)/width,(printY+t*originalHeight/2)/height],
+					part===1 ? tag.gateLabel : tag.gateCheck));
+			}
+			indices.push(ids.get(index));
+		}
+	}
+}
+
+const balloon=gunzipSync(await fs.readFile(new URL('balloon/mesh.bin.gz',assets)));
+const balloonIndices=16+balloon.readUInt32LE(0)*28;
+function coloredVertex(position,normal,color) {
+	const id=vertex(position,normal,[0,0],tag.balloon);
+	color.forEach((c,i)=>vertices[id][22+i]=c);
+	return id;
+}
+
+// Each cord is a narrow four-sided tube from the post cap to the knot in the supplied balloon.
+function tether(anchor,knot) {
+	const radius=.038, color=[224,222,208], rings=[];
+	for(const p of [anchor,knot]) {
+		const ring=[];
+		for(let i=0;i<4;i++) {
+			const nx=Math.cos(i*Math.PI/2), nz=Math.sin(i*Math.PI/2);
+			ring.push(coloredVertex([p[0]+nx*radius,p[1],p[2]+nz*radius],[nx,0,nz],color));
+		}
+		rings.push(ring);
+	}
+	for(let i=0;i<4;i++) {
+		const j=(i+1)%4;
+		indices.push(rings[0][i],rings[0][j],rings[1][j],rings[0][i],rings[1][j],rings[1][i]);
+	}
+}
+
+function tiedBalloon(anchor,dx,dy,dz,scale,color) {
+	const knot=[anchor[0]+dx,anchor[1]+dy,anchor[2]+dz];
+	tether(anchor,knot);
+	const tilt=-.35*Math.atan2(dx,dy), cs=Math.cos(tilt), sn=Math.sin(tilt);
+	// UV seams disappear under the new solid paints. Weld only coincident positions and normals.
+	const ids=new Map();
+	for(let i=0;i<balloon.readUInt32LE(4);i++) {
+		const at=16+28*balloon.readUInt16LE(balloonIndices+2*i), key=balloon.toString('hex',at,at+18);
+		if(!ids.has(key)) {
+			const x=balloon.readFloatLE(at)*scale, y=(balloon.readFloatLE(at+4)+10)*scale;
+			const nx=balloon.readInt16LE(at+12)/32767, ny=balloon.readInt16LE(at+14)/32767;
+			ids.set(key,coloredVertex([knot[0]+cs*x-sn*y,knot[1]+sn*x+cs*y,knot[2]+balloon.readFloatLE(at+8)*scale],
+				[cs*nx-sn*ny,sn*nx+cs*ny,balloon.readInt16LE(at+16)/32767],color));
+		}
+		indices.push(ids.get(key));
+	}
+}
+
+range('start',()=>{
+	indices.push(...bracket);
+	raceBoard();
+	panel(wrongWay,0,6.46,2.2,.56,1);
+	const palette=[[244,61,75],[255,189,38],[29,193,214],[153,83,223],[53,201,117]];
+	const bunch=[[-1.48,1.80,-.10,.115],[1.40,1.95,-.28,.128],[-.75,3.45,.85,.123],[.86,3.62,.72,.117],[.04,4.85,-.48,.135]];
+	for(const side of [-1,1]) bunch.forEach(([x,y,z,s],i)=>
+		tiedBalloon([side*7.062,8.475,0],x*side,y,z,s,palette[(i+(side>0 ? 2 : 0))%palette.length]));
+});
+ranges.finish=ranges.start;
+mounts.start=mounts.finish={fitWidth:6,span:0,top:16.2,lift:0,overhang:4};
+
 const header=Buffer.alloc(16), indexBytes=Buffer.alloc(2*indices.length);
 [vertices.length,indices.length,width,height].forEach((v,i)=>header.writeUInt32LE(v,i*4));
 indices.forEach((v,i)=>indexBytes.writeUInt16LE(v,2*i));
 const mesh=Buffer.concat([header,...vertices,indexBytes,atlas]);
-const meta=Buffer.from(JSON.stringify({ranges,glyphs,mounts,greenScale,panelBottom,atlasWidth:width,glyphV:(glyphY+.5)/height,glyphHeight:(glyphHeight-1)/height})+'\n');
+if(mesh.length>4*1024*1024) throw Error('Journey signs exceed the baked mesh upload limit');
+const meta=Buffer.from(JSON.stringify({finishOffset:(finishY-printY)/height,ranges,glyphs,mounts,greenScale,panelBottom,atlasWidth:width,glyphV:(glyphY+.5)/height,glyphHeight:(glyphHeight-1)/height})+'\n');
 const check=process.argv.includes('--check');
 for(const [name,bytes,packed] of [['journey-signs.mesh.bin.gz',mesh,true],['journey-signs.json',meta,false]]) {
 	const file=new URL('roads/'+name,assets);
