@@ -52,6 +52,8 @@ final class Scene
 	private ?Program $chartProgram = null, $ribProgram = null;
 	private ?RenderTarget $ribTarget = null;
 	private ?SurfaceSampleBuffer $surfaceSamples = null;
+	/** Visible strips of each terrain grid from the last ground pass, for overlays drawn on the same triangles. */
+	private array $groundGroups = [];
 	private ?Program $surfaceProgram = null;
 	private bool $sampleMaterials = true;
 	private ?MaterialFieldCache $materialFields = null;
@@ -2442,6 +2444,7 @@ final class Scene
 				$ceiling = max($ceiling, $recipe['heightScale']);
 			}
 			$groups = $this->clipmap->visibleGroups($camera,$planes,[$floor,$ceiling]);
+			$this->groundGroups = $groups;
 			if($this->surfaceProgram) $this->drawSurfaceSamples($camera,$width,$height,$materials,$groups);
 			elseif($this->ribProgram) $this->drawRibField($camera,$width,$height,$materials,$groups);
 		}
@@ -2725,21 +2728,37 @@ final class Scene
 	 * @param Program $program Active overlay program using the vertex functions from Clipmap::gridShader().
 	 * @param Camera $camera Camera for the current terrain pass.
 	 * @param array $bounds Minimum X and Z, then maximum X and Z, in world meters.
-	 * @param int $shells Times to draw the rectangle's rows in one call, as Clipmap::drawGroundPatch() describes.
 	 * @return bool Whether the grid covered the whole rectangle and submitted a draw.
 	 */
-	public function drawGroundPatch(Program $program, Camera $camera, array $bounds, int $shells = 1): bool
+	public function drawGroundPatch(Program $program, Camera $camera, array $bounds): bool
 	{
-		return $this->clipmap?->drawGroundPatch($program, $camera, $bounds, $shells) ?? false;
+		return $this->clipmap?->drawGroundPatch($program, $camera, $bounds) ?? false;
 	}
 
 	/**
-	 * The rectangle drawGroundPatch() can cover right now.
-	 * @return array|null Minimum X and Z, then maximum X and Z, in world meters, or null without a resident grid.
+	 * The rectangle a resident terrain grid covers right now.
+	 * @param int $index Grid to report, zero for the finest, which is the one drawGroundPatch() redraws.
+	 * @return array|null Minimum X and Z, then maximum X and Z, in world meters, or null without that grid.
 	 */
-	public function groundPatchWindow(): ?array
+	public function groundPatchWindow(int $index = 0): ?array
 	{
-		return $this->clipmap?->groundPatchWindow();
+		return $this->clipmap?->groundPatchWindow($index);
+	}
+
+	/**
+	 * Draw an overlay on the visible triangles of the first terrain grids, as the last ground pass drew them.
+	 * @param Program $program Active overlay program using the vertex functions from Clipmap::gridShader().
+	 * @param Camera $camera Camera of the last ground pass.
+	 * @param int $grids How many grids to draw, counted from the finest.
+	 * @return int Draw calls submitted, zero without a resident grid.
+	 */
+	public function drawGroundRings(Program $program, Camera $camera, int $grids): int
+	{
+		$groups = [];
+
+		foreach($this->groundGroups as $index => $visible) if($index < $grids) $groups[$index] = $visible;
+
+		return $this->clipmap && $groups ? $this->clipmap->drawGroups($program, $camera, $groups) : 0;
 	}
 
 	/**

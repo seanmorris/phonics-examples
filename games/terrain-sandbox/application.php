@@ -295,10 +295,10 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 	$grassQuality = (int)round($session->settings['grass']);
 	if($grassQuality > 0 && ($style = GrassShells::style($session->grassStyle() ?? '')) !== null)
 	{
-		$shells = GrassShells::shells($style, $grassQuality);
+		$steps = GrassShells::steps($grassQuality);
 		[$eyeX,$eyeY,$eyeZ] = $viewCamera->position;
 		$floor = max($session->landscape->height($eyeX,$eyeZ), $session->water->level());
-		($grass ??= new GrassShells)->draw($scene, $viewCamera, $style, $session->water->level(), $session->time, $shells,
+		($grass ??= new GrassShells)->draw($scene, $viewCamera, $style, $session->water->level(), $session->time, $steps,
 			$width, $height, $eyeY-$floor);
 	}
 	$curveSigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);

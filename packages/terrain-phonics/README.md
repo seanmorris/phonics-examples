@@ -488,35 +488,36 @@ Natural rock relief follows the landform’s `damping` and `slopeScale`. Fine fr
 
 ### Standing grass
 
-`GrassShells` draws grass, rice and heath that stand up from the ground near the eye. It redraws the finest terrain
-grid as stacked shells through `Scene::drawGroundPatch()`, in one instanced call, after the terrain and before anything
-that stands on it:
+`GrassShells` draws grass, rice and heath that stand up from the ground around the eye. It draws the nearest terrain
+grids once more, at the height of the tallest blades, after the terrain and before anything that stands on it:
 
 ```php
 $style = GrassShells::style('rolling-prairie');
 if($style !== null) {
-	$shells = GrassShells::shells($style, 2);
-	$grass->draw($scene, $camera, $style, $waterLevel, $seconds, $shells, $width, $height, $eyeAboveGround);
+	$grass->draw($scene, $camera, $style, $waterLevel, $seconds, GrassShells::steps(2), $width, $height, $eyeAboveGround);
 }
 ```
 
-The shells do not light themselves. They multiply what the terrain pass drew: the lowest shell darkens the ground to
-the shade between the stalks, and each shell above it brightens the pixels its strands cover. The grass therefore keeps
-the terrain's sunlight, shadows, haze and tone mapping. Multiplying is order-independent, so the pass needs no
-sorting and writes no depth. A strand is a hash of its world cell. Each fragment follows the view ray through its
-shell's slab in three steps, which joins strands between shells when they are seen from the side.
+Each pixel of that surface follows its view ray down through the grass and stops at the first blade it meets. Near
+blades hide far ones, and every pixel is shaded once however tall or dense the grass is. A blade is a hash of its
+world cell: thin, flat, tapering to a point, facing one of four ways and leaning with its neighbors. The ray is split
+into 6 segments at quality 1 and 10 at quality 2, fewer beyond 12 m, and each segment tests the blade rooted under
+its middle. A different starting depth per pixel joins a blade's pieces into one stroke.
 
-`GrassShells::STYLES` lists, per surface, the strand height, density, root shade, tip brightening and where grass
-grows: a slope limit, a height above the water and an optional upper limit. Styles without an entry grow nothing.
-Grass also stays off painted ground such as roads. `shells()` picks the shell count from the strand height, using
-slabs 9 cm thick at quality 1 and 6 cm at quality 2, between 3 and 14 shells. The pass reaches as far as the finest
-grid allows, up to 56 m, tapers to nothing at that edge, and is skipped when the eye is more than 45 m above the
-ground.
+The pass does not light the grass. It multiplies what the terrain pass drew, so the grass keeps the terrain's
+sunlight, shadows, haze and tone mapping, and it writes no depth. Ground between the blades is slightly shaded, a blade
+runs from shaded at its foot to brighter than the bare ground at its tip, and the shades are balanced so a field
+averages the same light as the bare ground beside it.
 
-On software WebGL at 640×360, from the car's chase view, the pass added 6.2% to the frame time over 0.8 m prairie
-grass at quality 1 (9 shells) and 9.2% at quality 2 (14 shells). Over 0.3 m heather it added 1.5% at either quality
-(4 and 5 shells). Software rendering is the worst case for a pass that costs fill, and as below it is evidence of
-relative cost, not of the hardware target.
+`GrassShells::STYLES` lists, per surface, the blade height, density, width, lean, shades and where grass grows: a slope
+limit, a height above the water and an optional upper limit. Styles without an entry grow nothing. Grass also stays
+off painted ground such as roads. The pass covers up to four terrain grids, enough to reach 120 m, tapers to nothing
+from 60% of its reach, and is skipped when the eye is more than 60 m above the ground.
+
+Measured with GPU timer queries on an AMD Radeon RX 580 at 2560×1264, from the car's chase view over 0.8 m prairie
+grass reaching about 110 m: the frame took 6.6 ms of GPU time without grass, 7.8 ms at quality 1 and 8.4 ms at
+quality 2. An earlier design that stacked 10 to 15 blended shells cost 2.4 to 3.7 ms for a 28 m reach. Software WebGL
+had put that design at under 10% of the frame, so measure this pass on hardware.
 
 ## Verify changes
 
@@ -525,7 +526,7 @@ old shader constants, and the uniform values `bind()` uploads. The surface suite
 transaction replay, roads, residency, and picking. Water tests cover derivative parity, wakes, buoyancy,
 shoreline contacts, and fixed-step behavior. Atmosphere tests cover optical depth, boundary cases and cache
 invalidation. Renderer tests check bounded residency, complete coverage and revision publication. The grass suite
-checks every style's settings, the shell counts and the tip brightness reached through them.
+checks every style's settings, the quality steps and the radius the terrain grids allow.
 Run `npm run test:terrain:gpu` with Chromium installed to compare cached scattering against direct GLSL
 integration and to check GPU wave heights, derivatives, velocities, and normals against PHP. It also checks that every
 appearance uniform is read, that banded rock does not alias, that mountain rock has no bands, and that talus and stain

@@ -315,7 +315,7 @@ final class SandboxMenu
 				'label' => 'Grass detail'
 				, 'input' => 'select'
 				, 'options' => self::GRASS
-				, 'subtext' => 'Standing grass near you. High draws finer layers.'
+				, 'subtext' => 'Standing grass around you. High traces finer blades.'
 				, 'get' => fn(): string => self::GRASS[(int)round($session->settings['grass'])]
 				, 'set' => fn(string $value): bool => $set('grass', (float)array_search($value, self::GRASS, true))
 			]

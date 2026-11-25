@@ -955,20 +955,22 @@ final class Clipmap
 	}
 
 	/**
-	 * Report the rectangle the finest resident terrain grid can redraw. An overlay sizes itself to this before calling
-	 * drawGroundPatch().
+	 * Report the rectangle a resident terrain grid covers. An overlay sizes itself to this before calling
+	 * drawGroundPatch() on the finest grid or drawGroups() on the first few.
+	 * @param int $index Grid to report, zero for the finest. Each one after it has twice the spacing and reach.
 	 * @return array|null Minimum X and Z, then maximum X and Z, in meters, or null while that grid is not resident.
 	 */
-	public function groundPatchWindow(): ?array
+	public function groundPatchWindow(int $index = 0): ?array
 	{
-		$level = $this->levels[0] ?? null;
+		$level = $this->levels[$index] ?? null;
 
 		if(!isset($level['origin'])) return null;
 
 		$s = $level['step'];
 		$x = $level['origin'][0] + self::HALO;
 		$z = $level['origin'][1] + self::HALO;
-		[$l, $t, $r, $b] = $this->roadsideRects[0] ?? [$x, $z, $x + $this->spans[0], $z + $this->spans[0]];
+		$span = $this->spans[$index];
+		[$l, $t, $r, $b] = $this->roadsideRects[$index] ?? [$x, $z, $x + $span, $z + $span];
 		$window = [$l * $s, $t * $s, $r * $s, $b * $s];
 
 		if($this->recipe['surround'] !== 'none') return $window;
@@ -986,10 +988,8 @@ final class Clipmap
 	/**
 	 * Redraw a rectangle on the finest resident terrain grid using the active overlay program.
 	 * Bounds are [minX, minZ, maxX, maxZ] in meters. An uncovered rectangle is left to the caller.
-	 * With more than one shell, the rectangle's rows are drawn that many times in one call. The program receives the
-	 * row count in uShellRows, and finds its row as gl_InstanceID % uShellRows and its shell as their quotient.
 	 */
-	public function drawGroundPatch(Program $p, Camera $camera, array $bounds, int $shells = 1): bool
+	public function drawGroundPatch(Program $p, Camera $camera, array $bounds): bool
 	{
 		$level = $this->levels[0] ?? null;
 		if(!isset($level['origin']) || $bounds[2] <= $bounds[0] || $bounds[3] <= $bounds[1]) return false;
@@ -1011,9 +1011,7 @@ final class Clipmap
 		$this->bindGrid($p, $camera, 0, $level);
 		glBindVertexArray($this->vao[0]);
 		glUniform2i($p->location('uDrawCell'), $left, $top);
-		if($shells > 1) glUniform1i($p->location('uShellRows'), $bottom - $top);
-
-		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * ($right - $left + 1), ($bottom - $top) * max(1, $shells));
+		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * ($right - $left + 1), $bottom - $top);
 		glBindVertexArray(0);
 		glActiveTexture(GL_TEXTURE0);
 		return true;
