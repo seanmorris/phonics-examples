@@ -331,6 +331,16 @@ export function activate({module, canvas})
 			}
 		}
 
+		for(const [kind, x, z] of frame.traffic ?? []) {
+			if(kind !== 'missile') continue;
+			const dx = x-jet.x, dz = z-jet.z;
+			const factor = radius/Math.max(scale, Math.hypot(dx, dz)*1.09);
+			ctx.beginPath();
+			ctx.arc(rx+(c*dx+s*dz)*factor, ry+(-s*dx+c*dz)*factor, 3, 0, 2*Math.PI);
+			ctx.fillStyle = '#ff9354';
+			ctx.fill();
+		}
+
 		if(nearest)
 		{
 			const direction = nearest.map((n, i) => n-eye[i]);

@@ -243,10 +243,13 @@ export function activate({module, canvas, session})
 		ctx.translate(mid, mid);
 
 		ctx.beginPath();
-		ctx.moveTo(0, -7);
-		ctx.lineTo(4.5, 5);
-		ctx.lineTo(0, 3);
-		ctx.lineTo(-4.5, 5);
+		if(data.vehicle === 'car') ctx.rect(-5, -5, 10, 10);
+		else {
+			ctx.moveTo(0, -7);
+			ctx.lineTo(4.5, 5);
+			ctx.lineTo(0, 3);
+			ctx.lineTo(-4.5, 5);
+		}
 		ctx.closePath();
 		ctx.fillStyle = '#fffce4';
 		ctx.strokeStyle = '#1b2824';
@@ -255,6 +258,28 @@ export function activate({module, canvas, session})
 		ctx.fill();
 		ctx.stroke();
 		ctx.restore();
+
+		// Paint small airborne contacts last so a seeker over the bumper remains visible inside the car square.
+		for(const [kind, x, z] of data.traffic ?? []) {
+			const [dx, dy] = offset(x, z);
+			const fit = Math.min(1, (mid-7)/Math.max(1, edgeDistance(dx, dy)));
+			const px = mid+dx*fit, py = mid+dy*fit;
+			ctx.beginPath();
+			if(kind === 'plane') {
+				ctx.moveTo(px, py-6);
+				ctx.lineTo(px+5, py+4);
+				ctx.lineTo(px-5, py+4);
+				ctx.closePath();
+				ctx.fillStyle = '#82e6ff';
+			} else {
+				ctx.arc(px, py, 2.6, 0, 2*Math.PI);
+				ctx.fillStyle = '#ff9354';
+			}
+			ctx.fill();
+			ctx.lineWidth = 1.25;
+			ctx.strokeStyle = '#192326';
+			ctx.stroke();
+		}
 
 		if(circular) ctx.restore();
 	};

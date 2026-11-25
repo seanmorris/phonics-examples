@@ -291,7 +291,8 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 
 $shadow = null;
 $grass = null;
-$drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use ($gates, $curveSigns, $journeySigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites, &$grass): void {
+$traffic=[];
+$drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use (&$traffic, $gates, $curveSigns, $journeySigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites, &$grass): void {
 	// Grass multiplies the ground the terrain pass drew, so it comes first: signs, shadows and vehicles then cover it.
 	$grassQuality = (int)round($session->settings['grass']);
 	if($grassQuality > 0 && array_filter($styles = $session->grassStyles()))
@@ -323,11 +324,15 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		$patrol = $events ? ($events['airPatrol']['pose'] ?? null) : $session->airPatrol->pose($shotAlpha);
 		if($patrol !== null) {
 			$model = $models['f5'] ??= new VehicleModel(__DIR__.'/assets/f5/mesh.bin.gz');
+			$traffic[]=['plane',$patrol['x'],$patrol['z']];
 			$model->draw($patrol+['power'=>.65],$viewCamera,$session->atmosphere,$session->water,$width,$height);
 		}
 		$seeker=$events ? ($events['airPatrol']['seeker'] ?? null) : $session->airPatrol->seeker($shotAlpha);
 		if($patrol!==null && ($seeker['phase'] ?? '')==='mounted') $projectiles[]=Jet::projectileMount($patrol,0);
-		elseif(isset($seeker['pose'])) $projectiles[]=$seeker['pose'];
+		elseif(isset($seeker['pose'])) {
+			$projectiles[]=$seeker['pose'];
+			$traffic[]=['missile',$seeker['pose']['x'],$seeker['pose']['z']];
+		}
 	}
 	if($session->mode === 'jet' && $session->jetView === 'chase')
 	{
@@ -357,6 +362,7 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 			$dir = $shot['direction']; $roll = $shot['roll']; $tracer = $shot['tracer'];
 		}
 		if($tracer) { $streaks[] = [$position,$dir]; continue; }
+		$traffic[]=['missile',$position[0],$position[2]];
 		$projectiles[] = ['x'=>$position[0],'y'=>$position[1],'z'=>$position[2],'yaw'=>atan2($dir[0],$dir[2]),
 			'pitch'=>asin(max(-1,min(1,$dir[1]))),'roll'=>$roll];
 	}
@@ -376,7 +382,7 @@ $liveScene = $scene;
 $playback = null;
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$liveSession, $liveScene, &$playback, &$hiddenGates, $drawOpaque, $gates, $curveSigns, $journeySigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
+		$liveSession, $liveScene, &$playback, &$hiddenGates, $drawOpaque, &$traffic, $gates, $curveSigns, $journeySigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
 		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound,
 		$pauseMenu, &$displayTerrain, $journeyAtlas, $atlasResult
@@ -519,6 +525,7 @@ $engine->start(
 			}
 			if($journeyAtlas->needsChart) $journeyAtlas->capture($scene,$session,$width,$height,$atlasResult);
 			$engine->device->begin([.15,.25,.35,1]);
+			$traffic=[];
 			$scene->render($viewCamera, $width, $height, $session->time,
 				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !$journeySigns->count && !($events['balloons'] ?? $session->balloons->targets())
 					&& !($events['beachBalls'] ?? $session->balloons->beachBalls->states()) ? null
@@ -538,7 +545,7 @@ $engine->start(
 			$raceGuidance = $events['race']['guidance'] ?? $session->race->showGuidance($session->course);
 			$waterRace = $craft && $raceGuidance && $session->usingFloodedCircuit();
 			$instrumentSize = $car || $craft ? (int)round(min(320, $width*.36, $height*.40)) : null;
-			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height] : null;
+			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height,'vehicle'=>$session->mode,'traffic'=>$traffic] : null;
 			$wide = $jet ? $session->jetWideMap : $car && $session->carWideMap;
 			$showMap = $waterRace || $wide || ($jet ? $session->jetMap : $car && $session->carMap);
 			if($showMap)
