@@ -343,6 +343,66 @@ foreach([6,9,12,36] as $width) {
 check($apexCuts[36] > $apexCuts[6]+8., 'The wider road permits a deeper cut on the same right-hand apex.');
 echo "Width-aware racing lines and tire clearance passed.\n";
 
+// A hand-drawn road can turn sharper than the car can steer. The driver rounds what the pavement allows and slows for
+// the rest, and when it is left facing the wrong way it turns back to its line instead of circling.
+$corners = new Registry;
+$table = new Session(['worldSize'=>1024,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-12], systems: new Scheduler($corners));
+$zigzag = [[-200,-100],[-100,-60],[-150,-20],[-40,20],[-110,60],[40,100],[200,100],[200,-100]];
+$table->landscape->queue(CircuitRoad::closeLoop(['type'=>'road','material'=>'road','width'=>36.,'shoulder'=>12.,
+	'points'=>array_map(static fn($p) => [$p[0],0.,$p[1]],$zigzag)]));
+$table->landscape->commit();
+$loop = CircuitRoad::manualCircuit($table->landscape,0,-12.);
+$file = json_decode($table->save(),true);
+$file['course'] = $loop->course($table->landscape,$table->gateShapes,1,false)->export();
+$file['circuit'] = ['route'=>$loop->export(),'variant'=>'dry'];
+$table->load(json_encode($file));
+$table->input(['actions'=>['cpu-demo']],1/60,1.);
+[$driverEntity] = $corners->query(CircuitDriver::class);
+$driver = $corners->get($driverEntity,CircuitDriver::class);
+// Count full circles of the travel direction within any eight seconds. No corner here turns more than 135 degrees.
+$circling = static function(Session $table, int $steps, ?callable $each = null): int {
+	$turns = [];
+	$circles = 0;
+	$heading = null;
+	for($i = 0; $i < $steps && $table->race->state !== 'finished'; $i++) {
+		$table->step(1/60);
+		$p = $table->car->state();
+		$path = $p['yaw']-$p['drift'];
+		if($heading !== null) $turns[] = atan2(sin($path-$heading),cos($path-$heading));
+		if(count($turns) > 480) array_shift($turns);
+		if(abs(array_sum($turns)) > 2.*M_PI) { $circles++; $turns = []; }
+		$heading = $path;
+		if($each) $each($p);
+	}
+	return $circles;
+};
+[[$x,$z,$yaw]] = $loop->stations([.55*$loop->length]);
+foreach([M_PI/2,M_PI] as $away) {
+	$site = $table->car->checkedSite($table->landscape,-12.,$x,$z,$yaw+$away,[]);
+	check($site !== null, 'The mid-lap pavement takes a car facing any way.');
+	$table->car->spawn($site,$table->landscape,-12.);
+	$driver->restart($x,$z);
+	$circles = $circling($table,600);
+	$p = $table->car->state();
+	check($circles === 0 && hypot($p['x']-$x,$p['z']-$z) > 60. && $p['speed'] > 12. && $p['recoveries'] === 0,
+		'Turn a car left facing across or back down the road onto its line and drive on, without circling.');
+}
+$table->input(['actions'=>['race-reset']],1/60,1.);
+$unpaved = 0;
+$circles = $circling($table,6000,static function(array $p) use ($table,&$unpaved): void {
+	$sin = sin($p['yaw']); $cos = cos($p['yaw']);
+	foreach([[Car::WHEELBASE/2,Car::FRONT_TRACK/2],[-Car::WHEELBASE/2,Car::REAR_TRACK/2]] as [$along,$half]) {
+		foreach([-$half,$half] as $across) {
+			if(Car::onPavement($table->landscape,$p['x']+$along*$sin+$across*$cos,$p['z']+$along*$cos-$across*$sin)) return;
+		}
+	}
+	$unpaved++;
+});
+check($table->race->state === 'finished' && $circles === 0 && $unpaved === 0 && $table->car->state()['recoveries'] === 0,
+	'Lap a road of 135 degree corners with a tire on the pavement throughout and no circling.');
+$table->close();
+echo "Sharp corners and wrong-way recovery passed.\n";
+
 // On this kilometer of alternating bends a 28 m road leaves one clear line, and a 14 m road does not.
 $weave = [[0,-1150],[0,-850],[0,-640],[12,-500],[-12,-350],[12,-190],[-12,-60],[12,130],[-12,270],
 	[12,430],[0,590],[0,830],[0,1050],[60,1150],[270,1150],[330,1050],[330,600],[330,0],[330,-600],
