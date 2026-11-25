@@ -67,9 +67,13 @@ final class BeachBalls
 	public function kick(int $id,array $direction,bool $tracer): void
 	{
 		$kick=$tracer ? 12. : 38.;
-		foreach($direction as $i=>$component)
-			$this->balls[$id][3+$i]=max(-90.,min(90.,$this->balls[$id][3+$i]+$kick*$component));
-		$this->balls[$id][4]+= $tracer ? 3. : 9.;
+		foreach($direction as $i=>$component) {
+			$impulse=$kick*$component;
+			// A missile pops the prop upward even when it arrives from above.
+			if(!$tracer && $i===1) $impulse=max(16.,22.+$impulse);
+			$this->balls[$id][3+$i]=max(-90.,min(90.,$this->balls[$id][3+$i]+$impulse));
+		}
+		if($tracer) $this->balls[$id][4]+=3.;
 		unset($this->sleeping[$id]);
 	}
 
@@ -90,7 +94,7 @@ final class BeachBalls
 		return $centers;
 	}
 
-	private static function push(array &$b,array $a,array $end,float $dt): bool
+	private static function push(array &$b,array $a,array $end,float $dt,bool $car): bool
 	{
 		$r=self::RADIUS+$end[3];
 		$x=$b[0]-$a[0]; $y=$b[1]-$a[1]; $z=$b[2]-$a[2];
@@ -114,9 +118,14 @@ final class BeachBalls
 		if($kick<=0 && $depth<=.001) return false;
 		foreach([$x,$y,$z] as $i=>$normal) {
 			$b[$i]+=max(0.,$depth)*$normal;
-			$b[3+$i]+=$kick*$normal;
 		}
-		$b[4]+=min(5.,.18*$kick);
+		$b[3]+=$kick*$x;
+		$b[5]+=$kick*$z;
+		$lift=$kick*$y+min(5.,.18*$kick);
+		// The bumper meets the lower half of the ball. Give it a small hop
+		// and keep repeated bumper contacts from building up launch speed.
+		if($car) $lift=min(.16*$lift,max(0.,3.5-$b[4]));
+		$b[4]+=$lift;
 		return true;
 	}
 
@@ -128,7 +137,7 @@ final class BeachBalls
 		$end=$start ? self::hull($after,$mode) : [];
 		$changed=false;
 		foreach($this->balls as $id=>&$b) {
-			foreach($start as $i=>$a) if(self::push($b,$a,$end[$i],$dt)) {
+			foreach($start as $i=>$a) if(self::push($b,$a,$end[$i],$dt,$mode==='car')) {
 				unset($this->sleeping[$id]); break;
 			}
 			if(isset($this->sleeping[$id])) continue;

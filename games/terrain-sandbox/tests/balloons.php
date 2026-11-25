@@ -262,6 +262,7 @@ foreach([true,false] as $gun) {
 	$b=$range->beachBalls->states()[$id];
 	check($b[5]>($gun ? 10. : 30.) && !$range->shots && $range->hits===0 && $range->status()['selected']===$id,
 		'Both shot types kick the selected ball and preserve it without scoring a balloon.');
+	check($gun ? abs($b[4]-3.)<.01 : $b[4]>20., 'Level gunfire nudges the ball and a missile lofts it.');
 	$range->beachBalls->step($dt,$land,-10.,'fly',null,null);
 	check($range->contacts()[$id][2]>$b[2], 'The radar contact moves with the ball.');
 }
@@ -271,6 +272,26 @@ foreach(['car','craft','jet'] as $mode) {
 	$range->beachBalls->step($dt,$land,-10.,$mode,$pose,array_replace($pose,['z'=>19.]));
 	check($range->beachBalls->states()[$id][5]>0., "A swept $mode contact pushes the ball.");
 }
+$ground=$land->height(0.,0.);
+$restY=$ground+TerrainSandbox\BeachBalls::RADIUS;
+foreach([60.,240.] as $mph) {
+	$balls=new TerrainSandbox\BeachBalls;
+	$id=TerrainSandbox\BeachBalls::FIRST;
+	$balls->restore([$id=>[0.,$restY,0.,0.,0.,0.,0.,0.]]);
+	$car=array_replace($pose,['y'=>$ground,'z'=>-12.]);
+	$speed=$mph*TerrainSandbox\Car::MPS_PER_MPH;
+	$peak=$restY; $forward=0.;
+	for($i=0;$i<180;$i++) {
+		$after=$car; $after['z']+=$speed*$dt;
+		$balls->step($dt,$land,-10.,'car',$car,$after);
+		$car=$after;
+		$b=$balls->states()[$id]; $peak=max($peak,$b[1]); $forward=max($forward,$b[5]);
+	}
+	check($peak-$restY<2. && $forward>.7*$speed,"A $mph mph bumper hit pushes the ball forward with a low hop.");
+}
+$balls->restore([$id=>[0.,$restY,0.,0.,0.,0.,0.,0.]]);
+$balls->kick($id,[0.,-sqrt(.5),sqrt(.5)],false);
+check($balls->states()[$id][4]>=16., 'A diving missile gives a resting ball an upward impulse on impact.');
 foreach([-15.,15.] as $water) {
 	$range=new BalloonPractice;
 	$id=$range->beachBalls->spawn([0.,24.,0.],[0.,0.,1.],0.,$land,$water);
