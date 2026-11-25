@@ -16,6 +16,8 @@ function pavement(Landscape $land,array $origin,int $span): array {
 	$keys=array_map(JourneyPavement::key(...),$pieces->getReturn());sort($keys);
 	return $keys;
 }
+require __DIR__.'/support/road-shoulders.php';
+
 // A clipped banked road keeps the endpoint slopes as well as its spline.
 $line=['type'=>'road','width'=>8.,'shoulder'=>2.,'points'=>[[-100.,0.,0.],[100.,0.,0.]],
 	'handles'=>[['out'=>[200./3.,0.,0.]],['in'=>[-200./3.,0.,0.]]],'banks'=>[-.2,.2]];

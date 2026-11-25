@@ -12,15 +12,15 @@ final class Edits
 	 * @param array $operation Validated edit record, including derived road data when applicable.
 	 * @return array Validated operation with bounded derived acceleration data.
 	 */
-	public static function normalize(array $operation): array
+	public static function normalize(array $operation,Recipe|JoinedTerrain|null $terrain=null): array
 	{
-		$work = self::normalizeSteps($operation);
+		$work = self::normalizeSteps($operation,$terrain);
 		foreach($work as $_) {}
 		return $work->getReturn();
 	}
 
 	/** The same operation, with scheduling points while a long spline and its footprint are prepared. */
-	public static function normalizeSteps(array $operation): \Generator
+	public static function normalizeSteps(array $operation,Recipe|JoinedTerrain|null $terrain=null): \Generator
 	{
 		$type = $operation['type'] ?? null;
 		if($type === 'delete-road') {
@@ -35,9 +35,9 @@ final class Edits
 		if(array_key_exists('replaceAt', $operation)) {
 			if($type !== 'road' || !is_int($operation['replaceAt']) || $operation['replaceAt'] < 0)
 				throw new \InvalidArgumentException('A road replacement needs an existing edit index.');
-			return (yield from self::road($operation)) + ['replaceAt'=>$operation['replaceAt']];
+			return (yield from self::road($operation,$terrain)) + ['replaceAt'=>$operation['replaceAt']];
 		}
-		if($type === 'road') return yield from self::road($operation);
+		if($type === 'road') return yield from self::road($operation,$terrain);
 
 		$result = [
 			'type' => $type
@@ -88,7 +88,7 @@ final class Edits
 		$road = $operation['_road'];
 		$stride = max(1,(int)ceil($minimumCell/$road['gridSize']));
 		$rows = [];
-		foreach(array_keys($road['grid']) as $key)
+		foreach(array_keys($road['grid']+($road['fillGrid'] ?? [])) as $key)
 		{
 			[$x,$z] = explode(',',$key);
 			$rows[(int)floor((int)$z/$stride)][(int)floor((int)$x/$stride)] = true;
@@ -132,6 +132,7 @@ final class Edits
 
 		if($type === 'road')
 		{
+			if(isset($operation['_road']['fills'])) $height=RoadFill::height($x,$z,$height,$operation['_road']);
 			[$weight,$target] = self::roadAt($x, $z, $operation);
 
 			return $height + $weight * ($target - $height);
@@ -333,7 +334,7 @@ final class Edits
 	 * @param array $operation Validated edit record, including derived road data when applicable.
 	 * @return array Normalized road and bounded spatially indexed spline samples.
 	 */
-	private static function road(array $operation): \Generator
+	private static function road(array $operation,Recipe|JoinedTerrain|null $terrain): \Generator
 	{
 		$points = $operation['points'] ?? null;
 
@@ -494,6 +495,8 @@ final class Edits
 			$grid["$gx,$gz"][] = $index;
 		}
 
+		$geometry=compact('samples','stations','grid','gridSize','markReach','radius','half','bounds','range');
+		if($terrain!==null) $geometry=yield from RoadFill::prepare($geometry,$terrain->height(...),$terrain->values()['waterLevel']);
 		return [
 			'type' => 'road'
 			, 'points' => $points
@@ -503,7 +506,7 @@ final class Edits
 			, 'material' => self::materialName(
 				array_key_exists('material', $operation) ? $operation['material'] : 'road'
 			)
-			, '_road' => compact('samples', 'stations', 'grid', 'gridSize', 'markReach', 'radius', 'half', 'bounds', 'range')
+			, '_road' => $geometry
 		] + (isset($operation['stationSpacing']) ? ['stationSpacing'=>$spacing] : []) + ($banks === null ? [] : ['banks' => $banks]) + ($endBlend > 0 ? ['endBlend' => $endBlend] : [])
 			+ (array_filter($handles) ? ['handles'=>$handles] : []);
 	}

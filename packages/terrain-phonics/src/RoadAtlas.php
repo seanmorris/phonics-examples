@@ -31,7 +31,7 @@ final class RoadAtlas
 
 		$used = []; $rebuilt = 0;
 		foreach($roads as $op) {
-			$key = hash('sha256',serialize([Edits::serialize($op),$op['_road']['ink'] ?? null]));
+			$key = hash('sha256',serialize([Edits::serialize($op),$op['_road']['fillKey'] ?? null,$op['_road']['ink'] ?? null]));
 			if(!isset($cache[$key]) && !isset($used[$key])) {
 				$cache[$key] = ['bytes'=>self::overlay($op)];
 				$rebuilt++;
@@ -92,7 +92,7 @@ final class RoadAtlas
 		$data .= pack('g4', $inner2, $radius ** 2 - $inner2, $op['crown'], $material === false ? 0 : $material + 1);
 		// Only end samples address this table. Interior texels use the normal projection without a second search.
 		$extra = ''; $pointers = [];
-		$ends = 1 + 4*count($road['samples']);
+		$ends = 1 + 4*count($road['samples'])+3*count($road['fills'] ?? []);
 		foreach($road['ink']['ends'] ?? [] as $end=>$segments) {
 			$pointers[$end] = $ends + 1 + intdiv(strlen($extra),16);
 			$extra .= pack('g4',count($segments),0,0,0);
@@ -120,6 +120,8 @@ final class RoadAtlas
 			$data .= pack('g16', $xHigh, $zHigh, $y, $tx, $tz, $grade, $bank, $opacity,
 				$x - $xHigh, $z - $zHigh, $next[0]-$x, $next[2]-$z, fmod($station,self::MARK_CYCLE), $length, $caps, $continuation);
 		}
+		foreach($road['fills'] ?? [] as [$x,$z,$edge,$half,$nx,$nz,$end,$apron,$grade])
+			$data.=pack('g12',$x,$z,$edge,$half,$nx,$nz,$end,$apron,$grade,RoadFill::CROSS_FALL,0.,0.);
 		return $pointers ? $data.pack('g4',$pointers[0] ?? 0,$pointers[1] ?? 0,0,0).$extra : $data;
 	}
 
@@ -139,6 +141,13 @@ final class RoadAtlas
 				$tile = ($j % 8) * 8 + $col % 8;
 				$tiles[$block][$tile][] = $address;
 			}
+		}
+		// Negative relative addresses identify fill-only strips, which never contribute paint or markings.
+		$first=1+4*count($road['samples']);
+		foreach($road['fills'] ?? [] as $i=>$fill) foreach(RoadFill::cells($fill[9],$cell) as [$x,$z]) {
+			if($x<$minTile || $z<$minTile || $x>$maxTile || $z>$maxTile) continue;
+			$x-=$minTile; $z-=$minTile;
+			$tiles[intdiv($z,8)*$blocksAcross+intdiv($x,8)][($z%8)*8+$x%8][]=-($first+3*$i);
 		}
 		return $tiles;
 	}

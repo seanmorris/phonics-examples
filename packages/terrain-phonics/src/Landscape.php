@@ -312,7 +312,7 @@ final class Landscape implements TerrainSurface
 
 		if(($operation['type'] ?? null) === 'smooth') $operation['sampleStep'] ??= $this->parameters['spacing'];
 
-		$operation = yield from Edits::normalizeSteps($operation);
+		$operation = yield from Edits::normalizeSteps($operation,$this->generator);
 		$this->open();
 		if($this->version !== $revision) throw new \LogicException('The landscape changed while preparing the edit.');
 		if($operation['type'] !== 'delete-road') {
@@ -522,7 +522,7 @@ final class Landscape implements TerrainSurface
 			{
 				if(!is_array($operation)) throw new \InvalidArgumentException('Invalid terrain operation');
 
-				$normalized[] = Edits::normalize($operation);
+				$normalized[] = Edits::normalize($operation,$result->generator);
 			}
 
 			$all = self::replay($all, $normalized);
@@ -1391,7 +1391,7 @@ final class Landscape implements TerrainSurface
 		foreach(array_slice($this->history, 0, $cursor) as $batch) $result = self::replay($result,$batch);
 		foreach($result as $i=>$record) {
 			$active = $this->slots[$i] ?? null;
-			$result[$i] = $active !== null && Edits::serialize($active) === $record ? $active : Edits::normalize($record);
+			$result[$i] = $active !== null && Edits::serialize($active) === $record ? $active : Edits::normalize($record,$this->generator);
 		}
 		return $result;
 	}

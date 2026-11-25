@@ -364,6 +364,7 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 	while(group != 0) {
 		ivec4 header = ivec4(roadRecord(group));
 		vec4 params = roadRecord(header.x);
+		float filledHeight=height;
 		float sum = 0., target = 0., coverage = 0., outside = 1.;
 		float halfWidth = sqrt(params.x), radius = sqrt(params.x+params.y);
 		float markReach = max(radius,halfWidth+min(4.,.75*halfWidth));
@@ -375,6 +376,16 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 		for(int i = 0; i < header.y; i += 4) {
 			ivec4 samples = ivec4(roadRecord(group++));
 			for(int j = 0; j < 4 && i+j < header.y; j++) {
+				if(samples[j]<0) {
+					int fill=header.x-samples[j];
+					vec4 site=roadRecord(fill), strip=roadRecord(fill+1), slopes=roadRecord(fill+2);
+					vec2 d=world-site.xy;
+					float across=dot(d,strip.xy), along=dot(d,vec2(-strip.y,strip.x));
+					float t=clamp(min(min((across-site.w)/strip.w,(strip.z+strip.w-across)/strip.w),1.5-abs(along)/strip.w),0.,1.);
+					float surface=site.z+slopes.x*along-slopes.y*(across-site.w);
+					filledHeight=max(filledHeight,mix(height,surface,t*t*(3.-2.*t)));
+					continue;
+				}
 				int address = header.x+samples[j];
 				vec4 position = roadRecord(address);
 				// World positions here are exact; subtracting the sample's high part first keeps the difference exact.
@@ -404,7 +415,7 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 			}
 		}
 		float influence = sum > 0. ? (1. - outside)*(coverage/sum) : 0.;
-		if(sum > 0.) height = mix(height,target/sum,influence);
+		height = sum > 0. ? mix(filledHeight,target/sum,influence) : filledHeight;
 		bool covers = influence >= .5;
 		bool joins = covers==painted && network!=0 && network==header.w;
 		bool projected = false;
