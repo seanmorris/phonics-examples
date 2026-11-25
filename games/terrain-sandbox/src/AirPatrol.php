@@ -9,6 +9,7 @@ use TerrainPhonics\Landscape;
 final class AirPatrol
 {
 	private string $phase = 'idle';
+	private bool $repelled=false;
 	private float $elapsed = 0., $slow = 0., $side = 1., $circleRemaining = 0.;
 	private float $probeIn = 0., $aheadFloor = 0.;
 	public ?FlightTrails $smoke=null;
@@ -77,7 +78,8 @@ final class AirPatrol
 			$this->advanceSeeker($dt,$car,null,'departure',$land,$water,$beforeCar,$eye,$aspect);
 			if(!$this->smoke && !isset($this->seeker?->state()['pose'])) $this->seeker=null;
 			$this->elapsed=max(0.,$this->elapsed-$dt);
-			if($this->elapsed>0. || $car['speed']<=60.*Car::MPS_PER_MPH) return $fading;
+			if($this->repelled && $car['speed']<55.*Car::MPS_PER_MPH) $this->repelled=false;
+			if($this->repelled || $this->elapsed>0. || $car['speed']<=60.*Car::MPS_PER_MPH) return $fading;
 			if($this->arrive($car,$eye(),$aspect,$land,$water)) return true;
 			$this->elapsed=2.; // Recheck an obstructed approach after the car has moved on.
 			return $fading;
@@ -178,6 +180,9 @@ final class AirPatrol
 		$before=$this->seeker?->state();
 		$hit=$this->seeker?->step($dt,$car,$plane,$phase,$land,$water,$beforeCar,$eye,$aspect);
 		$this->stepSmoke($dt,$before,$this->seeker?->state(),$car,$beforeCar);
+		if(($hit['kind'] ?? null)==='plane') {
+			$this->repelled=true; $this->phase='departure'; $this->elapsed=0.;
+		}
 		if(($hit['kind'] ?? null)==='car') $this->carImpact=$hit['point'];
 	}
 
@@ -194,13 +199,14 @@ final class AirPatrol
 
 	public function snapshot(): ?array
 	{
-		if($this->phase==='idle' && $this->elapsed===0.) return null;
+		if($this->phase==='idle' && $this->elapsed===0. && !$this->repelled) return null;
 		return ['phase'=>$this->phase,'flight'=>[$this->elapsed,$this->slow,$this->side,$this->circleRemaining,$this->probeIn,$this->aheadFloor],
-			'direction'=>$this->jet ? array_slice($this->jet->motion(),4,3) : null,'pose'=>$this->jet?->state(),'seeker'=>$this->seeker()];
+			'direction'=>$this->jet ? array_slice($this->jet->motion(),4,3) : null,'pose'=>$this->jet?->state(),'seeker'=>$this->seeker()]+($this->repelled ? ['repelled'=>true] : []);
 	}
 
 	public function resume(?array $s): void
 	{
+		$this->repelled=$s['repelled'] ?? false;
 		$this->jet=$this->previous=$this->seeker=null;
 		$this->smoke=$this->carImpact=null;
 		$this->phase='idle'; $this->elapsed=$this->slow=$this->circleRemaining=$this->probeIn=$this->aheadFloor=0.;

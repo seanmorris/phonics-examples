@@ -13,6 +13,10 @@ final class FlightTrails
 	private float $now = 0.0, $stepStart = 0.0, $density = 0.0;
 	private int $tick = 0;
 	private const FLASH_HOLD = .080;
+	public const LODGED_LIFE = self::BURST_LIFE - .080;
+
+	public function showsLodgedSeeker(): bool { return $this->carFlash!==null; }
+
 	/** Birth tick, birth time and last seated nose position of the car flash. */
 	private ?array $carFlash = null;
 	public int $revision = 0;
@@ -73,7 +77,8 @@ final class FlightTrails
 			}
 			$this->burst($point,$dt-$age);
 		}
-		if($this->carFlash!==null && $mount!==null) $this->carryFlash(SeekerMount::point($mount,$car));
+		if($mount===null) $this->carFlash=null;
+		elseif($this->carFlash!==null) $this->carryFlash(SeekerMount::point($mount,$car));
 	}
 
 	/** Move the existing burst, then freeze its center at the release instant, even midway through a tick. */
@@ -82,12 +87,16 @@ final class FlightTrails
 		[$tick,$birth,$from]=$this->carFlash;
 		$start=max($birth,$this->stepStart);
 		$end=min($this->now,$birth+self::FLASH_HOLD);
-		if($end<=$start) return;
-		$t=($end-$start)/($this->now-$start);
-		foreach($nose as $i=>$v) $nose[$i]=$from[$i]+$t*($v-$from[$i]);
-		$this->bursts[$tick][1]=pack('g*',$from[0],$from[1],$from[2],$birth,$nose[0],$nose[1],$nose[2],$end,2.,self::BURST_LIFE,$start);
-		$this->revision++;
-		$this->carFlash=$end<$birth+self::FLASH_HOLD ? [$tick,$birth,$nose] : null;
+		$center=$from;
+		if($end>$start) {
+			$t=($end-$start)/($this->now-$start);
+			foreach($nose as $i=>$v) $center[$i]+=$t*($v-$from[$i]);
+			$this->bursts[$tick][1]=pack('g*',$from[0],$from[1],$from[2],$birth,$center[0],$center[1],$center[2],$end,2.,self::BURST_LIFE,$start);
+			$this->revision++;
+		}
+		// At speed the driver can leave the fireball well before its last puff fades.
+		$outside=($nose[0]-$center[0])**2+($nose[1]-$center[1])**2+($nose[2]-$center[2])**2>8.**2;
+		$this->carFlash=$outside || $this->now-$birth>=self::LODGED_LIFE ? null : [$tick,$birth,$center];
 	}
 
 	public function step(float $dt, array $before, array $after): void

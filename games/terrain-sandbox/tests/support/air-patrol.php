@@ -98,10 +98,50 @@ $copy->restorePatrolSmoke($rewound,0.,$copy->frame(0.));
 expect($rewound->smoke===null,'Rewinding before launch clears later smoke.');
 
 $afterHit=$copy->frame($hitTime+.6);
-expect(isset($afterHit['events']['airPatrol']['seeker']['mount']) && !isset($copy->frame($hitTime+1.6)['events']['airPatrol']['seeker']['mount']),
-	'The seated model survives a demo seek and clears after its 1.5 second hold.');
+expect(isset($afterHit['events']['airPatrol']['seeker']['mount']) && !isset($copy->frame($hitTime+.92)['events']['airPatrol']['seeker']['mount']),
+	'The seated model survives a demo seek and clears before the last explosion puffs fade.');
 $copy->restorePatrolSmoke($rewound,$hitTime+.6,$afterHit);
-expect($rewound->smoke?->active()===true,'Seeking past detachment rebuilds the fading burst.');
+expect($rewound->smoke?->active()===true && !$rewound->smoke->showsLodgedSeeker(),'The fast car has left its shell in the fading burst, including on a demo seek.');
+
+// Play three handbrake turns from the same actual launch, using only ordinary driving inputs.
+foreach([[.02,false],[.53,true],[2.,false]] as [$delay,$wins]) {
+	$game=new Session($flat);
+	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$releaseTime+$delay],'demo-take-control'] as $action)
+		$game->input(['actions'=>[$action]],0.,16/9);
+	$lockedAt=$wonAt=null; $missed=false;
+	for($tick=0;$tick<360;$tick++) {
+		if($tick===0 || $tick===24) $game->input(['keys'=>$tick===0 ? ['KeyW'=>1,'KeyD'=>1,'Space'=>1] : ['KeyW'=>1]],0.,16/9);
+		$game->step(1/60); $game->demo->capture($game);
+		$patrol=$game->airPatrol->snapshot(); $shot=$patrol['seeker'] ?? [];
+		if(($shot['phase'] ?? '')==='missed') $missed=true;
+		if(($shot['phase'] ?? '')==='return') $lockedAt ??= $game->demo->duration();
+		if(($patrol['repelled'] ?? false) && $wonAt===null) {
+			$wonAt=$game->demo->duration();
+			expect($shot['impact']===[$patrol['pose']['x'],$patrol['pose']['y'],$patrol['pose']['z']] &&
+				$patrol['phase']==='departure' && $game->airPatrol->carImpact===null,'The return bursts on the plane and sends the pilot away.');
+		}
+	}
+	expect($missed && ($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'Only a drift that brings the loose seeker back near the F5 wins.');
+	if($wins) {
+		expect($wonAt-$lockedAt>.5,'The player sees the return flight before the win.');
+		$won=$game->airPatrol->snapshot();
+		$away=new AirPatrol; $away->resume($won);
+		$fast=$game->car->state(); $fast['speed']=70.;
+		for($tick=0;$tick<1200;$tick++) $away->step(1/60,$fast,fn()=>$eye,16/9,$land,-10.);
+		expect($away->pose()===null && $away->snapshot()['repelled'],'A victorious driver can continue speeding beyond the normal respawn time.');
+		$fast['speed']=0.; $away->step(1/60,$fast,fn()=>$eye,16/9,$land,-10.);
+		$fast['speed']=70.; $away->step(1/60,$fast,fn()=>$eye,16/9,$land,-10.);
+		expect($away->snapshot()['phase']==='arrival','Slowing and crossing the limit again allows a new encounter.');
+		$game->input(['actions'=>['demo-stop']],0.,16/9);
+		$recording=$game->demo->export(); $result=DemoTape::import($recording);
+		expect($result->frame($wonAt+.1)['events']['airPatrol']['repelled'],'The recorded win survives export and a seek.');
+		foreach([['type'=>'demo-open','json'=>$recording],['type'=>'demo-seek','seconds'=>$lockedAt+.25],'demo-take-control'] as $action)
+			$game->input(['actions'=>[$action]],0.,16/9);
+		for($tick=0;$tick<35;$tick++) $game->step(1/60);
+		expect($game->airPatrol->snapshot()['repelled'] ?? false,'Taking control halfway through a recorded return completes the encounter.');
+	}
+	$game->close();
+}
 
 // Cross the 80 ms release between two ticks. Inspect the endpoints and times actually consumed by the shader.
 foreach([30,60,120] as $hz) {
@@ -114,6 +154,17 @@ foreach([30,60,120] as $hz) {
 		expect(count($b)===11 && abs($b[4]-(5.+100.*min(.080,$tick/$hz)))<.0001 &&
 			abs($b[7]-$b[3]-min(.080,$tick/$hz))<.00001,"A single flash follows the nose for precisely 80 ms at $hz Hz.");
 	}
+}
+foreach([0.,100.] as $speed) {
+	$effects=new FlightTrails; $car=$base;
+	$effects->seeker(1/60,null,null,SeekerMount::point($mount,$car),$mount,$car);
+	for($tick=1;$tick<=60 && $effects->showsLodgedSeeker();$tick++) {
+		$car['z']+=$speed/60.;
+		$effects->seeker(1/60,null,null,null,$mount,$car);
+	}
+	$age=($tick-1)/60.;
+	expect(!$effects->showsLodgedSeeker() && $effects->active() && ($speed===0. ? abs($age-.87)<.02 : abs($age-.16)<.02),
+		'The shell clears while the burst is still visible, including when the car outruns it.');
 }
 // A sudden move of the formation station can command a turn but cannot relocate the airframe.
 $driver=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>0.,'drift'=>0.,'speed'=>72.];
@@ -193,8 +244,10 @@ for($i=0;$i<60;$i++) {
 }
 expect($pilot->seeker()['pose']===$other->seeker()['pose'] && $pilot->seeker()['pose']['z']>$miss['pose']['z']+30.,
 	'Once shaken, the prop sails past on the same course whichever way the car turns.');
-for($i=0;$i<310;$i++) $pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
-expect($pilot->seeker()['phase']==='reload' && $pilot->seeker()['pose']===null,'Escaping gives the driver a breather before the next release.');
+// With the patrol peeling away, the same loose shot expires and cannot score a return.
+$escaping=new SpeedSeeker; $escaping->resume($miss);
+for($i=0;$i<370;$i++) $escaping->step(1/60,$driver,null,'departure',$land,-10.);
+expect($escaping->state()['phase']==='reload' && $escaping->state()['pose']===null,'A loose shot expires after an escape.');
 
 // A short stop or two accumulated slow periods cannot dismiss the patrol. Test both sides of 45 continuous seconds.
 $pilot->resume($checkpoint); $parked=$driver; $parked['speed']=0.;

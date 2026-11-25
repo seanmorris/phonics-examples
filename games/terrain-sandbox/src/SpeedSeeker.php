@@ -9,6 +9,9 @@ use TerrainPhonics\Landscape;
 final class SpeedSeeker
 {
 	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 12.;
+	private const RETURN_RADIUS = 26., RETURN_SECONDS = .60;
+	/** Last gap between the two game pieces during a drift-released pass. */
+	private ?float $passGap=null;
 	private string $phase = 'mounted';
 	private float $clock = 0., $passSpeed = 0.;
 	private ?array $velocity = null, $impact = null;
@@ -24,7 +27,7 @@ final class SpeedSeeker
 		$this->clock+=$dt;
 		$drifting=abs($car['drift'])>=self::SLIP && ($car['motion'] ?? 'driving')==='driving';
 		if($this->phase==='reload') {
-			if($this->clock>=1.5) $this->mount=null;
+			if($this->clock>=FlightTrails::LODGED_LIFE) $this->mount=null;
 			if($this->clock>=self::RELOAD_SECONDS) { $this->phase='mounted'; $this->clock=0.; $this->impact=null; }
 			return null;
 		}
@@ -45,21 +48,32 @@ final class SpeedSeeker
 			$this->velocity=[$plane['vx'],$plane['vy'],$plane['vz']];
 			$this->phase='drop'; $this->clock=0.;
 		}
-		if($this->phase!=='missed' && ($drifting || $patrol==='departure')) {
+		if($this->phase==='return' && $plane!==null && $patrol==='escort')
+			return $this->returnToPlane($dt,$plane,$beforeCar ?? $car,$car,$land,$water);
+		if($this->phase!=='missed' && ($drifting || $patrol==='departure' || $plane===null)) {
+			$clearedWing=$this->phase==='chase' || ($this->phase==='drop' && $this->clock>=self::FLY_AHEAD);
+			$this->passGap=$clearedWing && $plane!==null && $patrol==='escort' ? $this->planeGap($plane) : null;
 			$this->phase='missed'; $this->clock=0.; $this->carFrames=[];
-			// Only old recordings lack a measured velocity at release.
 			$this->velocity ??= self::motionAlongPose($this->pose,$car['speed']);
 			$this->passSpeed=sqrt(array_sum(array_map(static fn($v)=>$v*$v,$this->velocity)));
 		}
 		if($this->phase==='missed') {
-			// Coast with the last world-space displacement, even if the car doubles back.
 			foreach(['x','y','z'] as $i=>$axis) $this->pose[$axis]+=$this->velocity[$i]*$dt;
 			$hit=SeekerContact::first($this->previous,$this->pose,$beforeCar ?? $car,$car,true,$land,$water);
-			if($this->clock>=6. || $hit!==null) {
-				$this->impact=$hit['point'] ?? null; $this->mount=$hit['mount'] ?? null;
-				$this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[]; $this->pose=$this->velocity=null;
+			if($this->clock>=6. || $hit!==null) return $this->finish($hit);
+			if($plane!==null && $patrol==='escort') {
+				$gap=$this->planeGap($plane);
+				if($this->passGap!==null && $this->clock>=.10 && $gap<=self::RETURN_RADIUS && $gap<$this->passGap) {
+					$this->phase='return'; $this->clock=0.;
+					$this->start=[$this->pose['x']-$plane['x'],$this->pose['y']-$plane['y'],$this->pose['z']-$plane['z'],
+						$this->pose['yaw'],$this->pose['pitch'],$this->pose['roll']];
+					$this->passGap=null;
+				} elseif($this->passGap!==null || $gap>=12.) {
+					// Clear the launching wing before a later approach can count.
+					$this->passGap=$gap;
+				}
 			}
-			return $hit;
+			return null;
 		}
 		$drop=$this->phase==='drop';
 		$carFrame=$this->animatedCar($car,$dt);
@@ -105,12 +119,43 @@ final class SpeedSeeker
 				($p['z']-$this->previous['z'])/$dt];
 		}
 		if($this->previous!==null && ($hit=SeekerContact::first($this->previous,$p,$beforeCar ?? $car,$car,false,$land,$water))!==null) {
-			$this->impact=$hit['point']; $this->mount=$hit['mount'] ?? null; $this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[]; $this->pose=$this->velocity=null;
-			return $hit;
+			return $this->finish($hit);
 		}
 		$this->pose=$p;
 		if($drop && $this->clock>=self::DROP_SECONDS-1e-9) { $this->phase='chase'; $this->clock=0.; }
 		return null;
+	}
+
+	private function planeGap(array $plane): float
+	{
+		return hypot(hypot($this->pose['x']-$plane['x'],$this->pose['z']-$plane['z']),$this->pose['y']-$plane['y']);
+	}
+
+	/** Arcade return animation: curl from the pickup offset into the moving F5. */
+	private function returnToPlane(float $dt,array $plane,array $beforeCar,array $car,Landscape $land,float $water): ?array
+	{
+		$t=min(1.,$this->clock/self::RETURN_SECONDS);
+		$blend=self::smooth($t);
+		foreach(['x','y','z'] as $i=>$axis) $this->pose[$axis]=$plane[$axis]+(1.-$blend)*$this->start[$i];
+		$this->pose['y']+=3.*sin(M_PI*$t);
+		foreach(['yaw','pitch','roll'] as $i=>$axis) {
+			$d=$plane[$axis]-$this->start[3+$i];
+			$this->pose[$axis]=$this->start[3+$i]+$blend*atan2(sin($d),cos($d));
+		}
+		$this->pose['roll']+=sin(M_PI*$t);
+		if($dt>0.) foreach(['x','y','z'] as $i=>$axis) $this->velocity[$i]=($this->pose[$axis]-$this->previous[$axis])/$dt;
+		$hit=SeekerContact::first($this->previous,$this->pose,$beforeCar,$car,true,$land,$water);
+		if($hit!==null) return $this->finish($hit);
+		if($t>=1.) return $this->finish(['kind'=>'plane','point'=>[$plane['x'],$plane['y'],$plane['z']]]);
+		return null;
+	}
+
+	private function finish(?array $hit): ?array
+	{
+		$this->impact=$hit['point'] ?? null; $this->mount=$hit['mount'] ?? null;
+		$this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[];
+		$this->pose=$this->velocity=$this->passGap=null;
+		return $hit;
 	}
 
 	/** Leave space around the fuselage and the releasing wing in the actual chase camera. */
@@ -167,11 +212,12 @@ final class SpeedSeeker
 	{
 		$p=$this->pose;
 		if($alpha<1. && $this->previous!==null && $p!==null) $p=AirPatrol::interpolate($this->previous,$p,$alpha);
-		return ['phase'=>$this->phase,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
+		return ['phase'=>$this->phase,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+($this->passGap!==null ? ['passGap'=>$this->passGap] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
 	}
 
 	public function resume(array $s): void
 	{
+		$this->passGap=$s['passGap'] ?? null;
 		$this->phase=$s['phase']; $this->clock=$s['clock']; $this->start=$s['start']; $this->passSpeed=$s['passSpeed'];
 		$this->pose=$this->previous=$s['pose'];
 		$this->carFrames=$s['carFrames'] ?? [];

@@ -330,7 +330,7 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		}
 		$seeker=$events ? ($events['airPatrol']['seeker'] ?? null) : $session->airPatrol->seeker($shotAlpha);
 		if($patrol!==null && ($seeker['phase'] ?? '')==='mounted') $projectiles[]=Jet::projectileMount($patrol,0);
-		elseif(isset($seeker['mount'])) $projectiles[]=SeekerMount::model($seeker['mount'],$vehiclePose);
+		elseif(isset($seeker['mount']) && $session->airPatrol->smoke?->showsLodgedSeeker()) $projectiles[]=SeekerMount::model($seeker['mount'],$vehiclePose);
 		elseif(isset($seeker['pose'])) {
 			$projectiles[]=$seeker['pose'];
 			$traffic[]=['missile',$seeker['pose']['x'],$seeker['pose']['z']];

@@ -116,18 +116,20 @@ final class DemoEvents
 			if($v===null) return true;
 			if(!is_array($v) || !array_key_exists('pose',$v)) return false;
 			$legacy=self::vector($v['flight'] ?? null,9);
+			if(isset($v['repelled']) && (!is_bool($v['repelled']) || !in_array($v['phase'] ?? null,['departure','idle'],true))) return false;
 			if(!$legacy && !self::vector($v['flight'] ?? null,6)) return false;
 			$keys=['x','y','z','yaw','pitch','roll'];
 			if(isset($v['seeker'])) {
 				$s=$v['seeker'];
 				if($legacy || !is_array($s) || !self::vector([$s['clock'] ?? null,$s['passSpeed'] ?? null],2)
+					|| (isset($s['passGap']) && (($s['phase'] ?? null)!=='missed' || !self::vector([$s['passGap']],1) || $s['passGap']<0))
 					|| (isset($s['mount']) && (!self::vector($s['mount'],5) || !isset($s['impact']) || ($s['phase'] ?? null)!=='reload'))
 					|| (isset($s['carFrames']) && !self::vector($s['carFrames'],12))
 					|| (isset($s['impact']) && !self::vector($s['impact'],3))
 					|| (isset($s['velocity']) && !self::vector($s['velocity'],3)) || !array_key_exists('pose',$s)) return false;
 				if(in_array($s['phase'] ?? null,['mounted','reload'],true)) {
 					if($s['pose']!==null || ($s['start'] ?? null)!==[]) return false;
-				} elseif(!in_array($s['phase'] ?? null,['drop','chase','missed'],true) || !self::vector($s['start'] ?? null,6)
+				} elseif(!in_array($s['phase'] ?? null,['drop','chase','missed','return'],true) || !self::vector($s['start'] ?? null,6)
 					|| !is_array($s['pose']) || count($s['pose'])!==6 ||
 					!self::vector(array_map(fn($k)=>$s['pose'][$k] ?? null,$keys),6)) return false;
 			}
