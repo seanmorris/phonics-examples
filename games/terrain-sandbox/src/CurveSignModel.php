@@ -65,8 +65,8 @@ final class CurveSignModel
 
 	private function loadArtwork(): void
 	{
-		$vertex = str_replace('// RETROREFLECTION',file_get_contents(self::ASSETS.'retroreflection.glsl'),file_get_contents(self::ASSETS.'chevron.vert'));
-		$this->program = new Program($vertex,file_get_contents(self::ASSETS.'chevron.frag'));
+		$fragment = str_replace('// RETROREFLECTION',file_get_contents(self::ASSETS.'retroreflection.glsl'),file_get_contents(self::ASSETS.'chevron.frag'));
+		$this->program = new Program(file_get_contents(self::ASSETS.'chevron.vert'),$fragment);
 		$data = gzdecode(file_get_contents(self::ASSETS.'curve-hazard-sign.rgba.gz'));
 		[$w,$h] = array_values(unpack('Vwidth/Vheight',$data));
 		glGenTextures(1,$this->texture);

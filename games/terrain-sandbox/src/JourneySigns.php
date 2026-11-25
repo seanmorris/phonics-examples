@@ -66,7 +66,7 @@ final class JourneySigns
 					$post=yield from self::forkPost($land,$roads,$next,$ends,$outgoing,$at($length));
 					if($post!==null) $sites['fork:'.$b]=$post;
 				}
-				$pose=$at(max(0.,$length-self::MILE));
+				$pose=$at(max(0.,$length-self::MILE/2));
 				$sites['exits:'.self::node($pose['position'])]=['kind'=>'exits']+$pose;
 			}
 			foreach($visits as $square=>$ranges) {

@@ -1228,6 +1228,74 @@ test('tight road bends and checkpoint banners return the headlight beam at night
 	expect(errors).toEqual([]);
 });
 
+test('a narrow headlight beam crosses the interior and diagonal of a journey sign', async({page}) => {
+	const roads = new URL('../../games/terrain-sandbox/assets/roads/', import.meta.url);
+	const [vertex, fragment, reflection] = await Promise.all(
+		['journey-sign.vert','journey-sign.frag','retroreflection.glsl'].map(name => fs.readFile(new URL(name, roads), 'utf8'))
+	);
+	const samples = await page.evaluate(({vertex, fragment}) => {
+		const gl = new OffscreenCanvas(64, 64).getContext('webgl2', {antialias: false});
+		const program = gl.createProgram();
+		for(const [type, source] of [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragment]]) {
+			const shader = gl.createShader(type);
+			gl.shaderSource(shader, source);
+			gl.compileShader(shader);
+			if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(shader));
+			gl.attachShader(program, shader);
+		}
+		gl.linkProgram(program);
+		if(!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
+		gl.useProgram(program);
+		const loc = name => gl.getUniformLocation(program, name);
+		// A ten-meter printed face fills the viewport. Both triangles have all three vertices outside the beam.
+		gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-5,-5,0, 5,-5,0, -5,5,0, 5,5,0]), gl.STATIC_DRAW);
+		gl.enableVertexAttribArray(0);
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+		gl.vertexAttrib3f(1, 0, 0, -1);
+		gl.vertexAttrib2f(4, 0, 5/255);
+		gl.uniformMatrix4fv(loc('vp'), false, [.2,0,0,0, 0,.2,0,0, 0,0,0,0, 0,0,0,1]);
+		gl.uniform3f(loc('eye'), 0, 0, -10);
+		gl.uniform2f(loc('tangent'), 0, 1);
+		gl.uniform2f(loc('panelFit'), 1, 0);
+		gl.uniform1f(loc('waterLevel'), -100);
+		gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		const cone = 1/(Math.cos(.06)-Math.cos(.20));
+		function aim(offset) {
+			const length = Math.hypot(offset, 10);
+			gl.uniform4fv(loc('uSpotLights[0]'), [0,0,-10,.0001, offset/length,0,10/length,cone, 20,20,20,-Math.cos(.20)*cone]);
+		}
+		function draw(ink, lamps) {
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([...ink,255]));
+			gl.uniform1i(loc('uSpotLightCount'), lamps);
+			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+			const row = new Uint8Array(64*4);
+			gl.readPixels(0, 32, 64, 1, gl.RGBA, gl.UNSIGNED_BYTE, row);
+			return [12,23,31,32,44,54].map(x => Array.from(row.subarray(4*x,4*x+3)));
+		}
+		const green = [0,111,81];
+		aim(0);
+		const dark = draw(green, 0), lit = draw(green, 1);
+		const colors = [[239,20,40],[252,209,22],[249,249,249],[0,0,0]].map(ink => draw(ink, 1)[2]);
+		aim(2);
+		return {dark, lit, colors, steered: draw(green, 1)};
+	}, {vertex, fragment: fragment.replace('// RETROREFLECTION', reflection)});
+	const green = samples.lit.map(rgb => rgb[1]);
+	expect(green[0]).toBe(samples.dark[0][1]);
+	expect(green[2]).toBeGreaterThan(170);
+	expect(green[1]).toBeGreaterThan(green[0]+10);
+	expect(green[1]).toBeLessThan(green[2]-10);
+	expect(Math.abs(green[2]-green[3])).toBeLessThan(3);
+	expect(samples.steered[4][1]).toBeGreaterThan(green[4]+100);
+	expect(samples.steered[2][1]).toBeLessThan(green[2]-100);
+	const [red,yellow,white,black] = samples.colors;
+	expect(red[0]).toBeGreaterThan(red[1]+120);
+	expect(yellow[1]).toBeGreaterThan(yellow[2]+120);
+	expect(Math.min(...white)).toBeGreaterThan(240);
+	expect(black).toEqual([0,0,0]);
+});
+
 test('the local racer records checkpoint and finish splits in the packaged sandbox', async({page}) => {
 	await page.setViewportSize({width: 480, height: 300});
 

@@ -11,10 +11,11 @@ uniform float day, widthDelta;
 uniform vec2 panelFit; // Road-width scale and lift of the gantry crossbars.
 uniform vec4 textSlots[8]; // local left and width, atlas left and width
 uniform vec4 textV; // Atlas V origin and height, green face scale, bottom of the green face.
-// RETROREFLECTION
 out vec2 uv;
+out vec3 relative;
+flat out vec3 sheetNormal;
 out float elevation, brightness;
-flat out float retro, front;
+flat out float front;
 flat out int part;
 
 void main() {
@@ -42,14 +43,11 @@ void main() {
 	}
 	vec2 right=vec2(-tangent.y,tangent.x);
 	vec2 offset=right*p.x+tangent*p.z;
-	vec3 relative=(foot-eye)+vec3(offset.x,p.y,offset.y);
+	relative=(foot-eye)+vec3(offset.x,p.y,offset.y);
 	gl_Position=vp*vec4(relative,1.);
 	elevation=foot.y+p.y;
 	vec2 dir=right*normal.x+tangent*normal.z;
-	vec3 n=vec3(dir.x,normal.y,dir.y);
-	brightness=mix(.10,.71+.29*max(dot(n,sun),0.),day);
-	front=dot(n,-relative);
-	retro=0.;
-	if(part==5 || part>=16)
-		retro=retroreflection(foot+vec3(offset.x,p.y,offset.y),eye,n,sun,day);
+	sheetNormal=vec3(dir.x,normal.y,dir.y);
+	brightness=mix(.10,.71+.29*max(dot(sheetNormal,sun),0.),day);
+	front=dot(sheetNormal,-relative);
 }

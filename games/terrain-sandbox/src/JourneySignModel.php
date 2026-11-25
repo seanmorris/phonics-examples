@@ -50,8 +50,8 @@ final class JourneySignModel
 
 	private function load(): void
 	{
-		$vertex=str_replace('// RETROREFLECTION',file_get_contents(self::ASSETS.'retroreflection.glsl'),file_get_contents(self::ASSETS.'journey-sign.vert'));
-		$this->program=new Program($vertex,file_get_contents(self::ASSETS.'journey-sign.frag'));
+		$fragment=str_replace('// RETROREFLECTION',file_get_contents(self::ASSETS.'retroreflection.glsl'),file_get_contents(self::ASSETS.'journey-sign.frag'));
+		$this->program=new Program(file_get_contents(self::ASSETS.'journey-sign.vert'),$fragment);
 		$this->mesh=new BakedMesh(self::ASSETS.'journey-signs.mesh.bin.gz');
 	}
 

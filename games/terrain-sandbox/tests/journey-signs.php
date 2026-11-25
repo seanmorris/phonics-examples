@@ -32,7 +32,7 @@ $edge=$land->recipe()['worldSize']/2;
 $start=[-$edge,100.,0.]; $a=[-1880.,30.,0.]; $bend=[-1550.,70.,850.]; $split=[-950.,110.,350.];
 [$west,$north,$south]=JoinedTerrain::origins(16384,2);
 $n=[5500.,110.,$north[1]]; $s=[5500.,110.,$south[1]];
-// Deliberately submit chunks out of traversal order, including a resized section and a bend inside the warning mile.
+// Deliberately submit chunks out of traversal order, including a resized section and a bend inside the warning half-mile.
 // The northern route briefly crosses the southern square before finding its own valley.
 $detour=[3800.,110.,5000.];
 road($land,$split,$detour);
@@ -66,9 +66,10 @@ expectSign(min($fromLeft,$fromRight)>1.3 && max($fromLeft,$fromRight)<3.2 && abs
 	'The fork sign fits near the tip of the unpaved median, centered between both inside edges.');
 expectSign(!Edits::onRoad($p[0],$p[2],$land->roads()) && $p[1]===$land->height($p[0],$p[2]) && $fork['heading'][1]<0,
 	'The single post meets the ground between the branches and faces approaching traffic.');
-expectSign(abs(distance($exits['position'],$bend)+distance($bend,$split)-JourneySigns::MILE)<.05
-	&& $exits['heading'][1]>0 && $exits['width']===34.,'The warning is a driven mile upstream, with the width and heading of that section.');
-expectSign(distance($exits['position'],$split)<JourneySigns::MILE-500.,'The warning does not use a one-mile radius.');
+$warning=JourneySigns::MILE/2;
+expectSign(abs(distance($exits['position'],$bend)+distance($bend,$split)-$warning)<.05
+	&& $exits['heading'][1]>0 && $exits['width']===34.,'The warning stands half a driven mile before the fork, with the width and heading of that section.');
+expectSign(distance($exits['position'],$split)<$warning-10.,'The approach follows the bend when measuring the half mile.');
 $restored=Landscape::load($land->save());
 expectSign(layout($restored)===$signs,'The same saved pavement restores the same signs.');
 
@@ -114,7 +115,7 @@ foreach([-2.,2.] as $side) {
 }
 road($short,[80.,0.,0.],[200.,0.,0.]); $short->commit();
 $signs=layout($short,true);
-expectSign(!kinds($signs,'fork') && count(kinds($signs,'exits'))===1,
+expectSign(!kinds($signs,'fork') && array_column(kinds($signs,'exits'),'position')===[[-300.,0.,0.]],
 	'Overlapping arms that rejoin without opening a median keep their overhead warning and get no post on the asphalt.');
 $short->close();
 
