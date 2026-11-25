@@ -492,9 +492,9 @@ Natural rock relief follows the landform’s `damping` and `slopeScale`. Fine fr
 grids once more, at the height of the tallest blades, after the terrain and before anything that stands on it:
 
 ```php
-$style = GrassShells::style('rolling-prairie');
-if($style !== null) {
-	$grass->draw($scene, $camera, $style, $waterLevel, $seconds, GrassShells::steps(2), $width, $height, $eyeAboveGround);
+$styles = [GrassShells::style('rolling-prairie')];
+if(array_filter($styles)) {
+	$grass->draw($scene, $camera, $styles, $waterLevel, $seconds, GrassShells::steps(2), $width, $height, $eyeAboveGround);
 }
 ```
 
@@ -502,7 +502,9 @@ Each pixel of that surface follows its view ray down through the grass and stops
 blades hide far ones, and every pixel is shaded once however tall or dense the grass is. A blade is a hash of its
 world cell: thin, flat, tapering to a point, facing one of four ways and leaning with its neighbors. The ray is split
 into 6 segments at quality 1 and 10 at quality 2, fewer beyond 12 m, and each segment tests the blade rooted under
-its middle. A different starting depth per pixel joins a blade's pieces into one stroke.
+its middle. A different starting depth per pixel joins a blade's pieces into one stroke. The segments start at the
+height the tallest blade could reach at that pixel, not at the surface, so grass that is short for its place is
+sampled as finely as tall grass. Started at the surface, short grass came out as speckle.
 
 The pass does not light the grass. It multiplies what the terrain pass drew, so the grass keeps the terrain's
 sunlight, shadows, haze and tone mapping, and it writes no depth. Ground between the blades is slightly shaded, a blade
@@ -510,14 +512,25 @@ runs from shaded at its foot to brighter than the bare ground at its tip, and th
 averages the same light as the bare ground beside it.
 
 `GrassShells::STYLES` lists, per surface, the blade height, density, width, lean, shades and where grass grows: a slope
-limit, a height above the water and an optional upper limit. Styles without an entry grow nothing. Grass also stays
-off painted ground such as roads. The pass covers up to four terrain grids, enough to reach 120 m, tapers to nothing
-from 60% of its reach, and is skipped when the eye is more than 60 m above the ground.
+limit, a height above the water and an optional upper limit. Styles without an entry grow nothing. The pass covers up
+to four terrain grids, enough to reach 120 m, tapers to nothing from 60% of its reach, and is skipped when the eye is
+more than 60 m above the ground.
+
+Grass stays off painted ground. A road is the exception, because it marks a band about twice as wide as its pavement.
+The vertex shader reads each road cell's distance from the centerline, as the terrain shader does, with its change
+per meter. Each blade is then tested at its own foot: grass starts just past the pavement's edge and reaches its
+height a little further out. A pixel that shows pavement draws no blade, since the pass could only darken it.
+
+On a journey, pass one style per landscape in the order west, northeast, southeast, with null for a landscape that
+grows nothing. Where landscapes meet, their grasses merge by the weights the terrain blends them with. Each gives its
+height, shape and color in proportion to how much of it grows at that point, and the lattice comes from whichever
+there is more of. A destination's `top` limit must be shifted by the height the journey moved that landscape.
 
 Measured with GPU timer queries on an AMD Radeon RX 580 at 2560×1264, from the car's chase view over 0.8 m prairie
-grass reaching about 110 m: the frame took 6.6 ms of GPU time without grass, 7.8 ms at quality 1 and 8.4 ms at
-quality 2. An earlier design that stacked 10 to 15 blended shells cost 2.4 to 3.7 ms for a 28 m reach. Software WebGL
-had put that design at under 10% of the frame, so measure this pass on hardware.
+grass reaching about 110 m: the frame took 6.5 ms of GPU time without grass, 7.9 ms at quality 1 and 8.5 ms at
+quality 2. On a journey's highway, where the road fills much of the view, it took 5.2 ms without grass and 5.6 ms
+at either quality. An earlier design that stacked 10 to 15 blended shells cost 2.4 to 3.7 ms for a 28 m reach.
+Software WebGL had put that design at under 10% of the frame, so measure this pass on hardware.
 
 ## Verify changes
 

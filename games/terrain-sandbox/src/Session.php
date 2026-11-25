@@ -7,6 +7,7 @@ use Phonics\Ecs\Registry;
 use Phonics\Ecs\Scheduler;
 use TerrainPhonics\Atmosphere;
 use TerrainPhonics\Camera;
+use TerrainPhonics\GrassShells;
 use TerrainPhonics\Landscape;
 use TerrainPhonics\RayQuery;
 use TerrainPhonics\Scene;
@@ -319,14 +320,33 @@ final class Session
 		'rice-terraces','boreal-lakes'];
 
 	/**
-	 * Name the surface whose grass stands up near the eye.
-	 * @return string|null Surface preset for GrassShells::style(), or null on a journey, where the surface changes
-	 *   from region to region.
+	 * List the grass that stands up near the eye, for GrassShells::draw().
+	 * @return array One style on a single map. On a journey, one per landscape in the order west, northeast,
+	 *   southeast. A landscape that grows no grass is null.
 	 */
-	public function grassStyle(): ?string
+	public function grassStyles(): array
 	{
 		$recipe = $this->landscape->recipe();
-		return isset($recipe['join']) ? null : ($this->materialPreset ?? self::materialStyle($recipe));
+
+		if(!isset($recipe['join'])) return [GrassShells::style($this->materialPreset ?? self::materialStyle($recipe))];
+
+		$styles = [GrassShells::style(self::materialStyle($recipe))];
+
+		foreach($recipe['join']['destinations'] as $destination)
+		{
+			$style = GrassShells::style(self::materialStyle($destination));
+
+			// A destination is raised or lowered until its water meets the departure's. Its height limit moves with it.
+			if(isset($style['top']))
+			{
+				$lift = $recipe['waterLevel'] - $destination['waterLevel'];
+				$style['top'] = [$style['top'][0] + $lift, $style['top'][1] + $lift];
+			}
+
+			$styles[] = $style;
+		}
+
+		return $styles;
 	}
 
 	private static function materialStyle(array $recipe): string
