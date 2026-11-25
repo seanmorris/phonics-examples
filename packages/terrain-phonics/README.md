@@ -28,6 +28,8 @@ Catmull–Rom reconstruction. A renderer can change its mesh resolution without 
 
 A journey places a departure map west of one or two destinations. Each map is 16,384, 32,768, or 65,536 meters across. A separate 4,096-meter strip blends heights and surface colors between their edges. Each map retains its local noise coordinates, and its elevations are offset to align its own sea level with the departure map's water level.
 
+In the strip, surface colors fade from one map to the next, but only the leading map at a pixel runs its whole surface shader. The others add a plain color and finish from the height and slope bands of their layers, without noise fields, patterns or relief. A pixel in the strip then costs about what the more expensive of its maps costs alone. Within 3% of an even split the runner-up's detail fades in, so that no line shows where the lead changes hands. Measured with GPU timer queries on an AMD Radeon RX 580 at 2560×1264, a prairie-to-rice strip seen from 260 m up took 21.4 ms a frame while every map ran its whole shader and 14.8 ms now, against 11.1 ms over the prairie and 14.7 ms over the rice.
+
 ```php
 $journey = new TerrainPhonics\Landscape([
     'preset' => 'rolling-prairie',

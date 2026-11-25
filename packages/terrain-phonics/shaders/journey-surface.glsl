@@ -1,5 +1,7 @@
 // Mix linear surface properties first so the common sunlight, shadows, water and air run once.
 uniform bool uBlendProfile;
+// A landscape shows its detail from this share of the leading landscape's weight upward.
+const float JOURNEY_DETAIL = .97;
 vec3 journeySurface(vec3 world, vec3 normal, vec3 relative, float footprint, bool pavement,
 	out vec3 litNormal, out vec2 finish, out vec3 bounce)
 {
@@ -53,6 +55,11 @@ vec3 journeySurface(vec3 world, vec3 normal, vec3 relative, float footprint, boo
 	bounce+=weights.z*palettes[2].bounce.rgb;
 	#endif
 	#else
+	// Only the leading landscape at a pixel runs its whole shader, so a seam costs about what one landscape does.
+	// The others add a plain color. Near an even split the runner-up's detail fades in, so that no line shows where
+	// the lead changes hands.
+	float lead = max(weights.x,max(weights.y,weights.z));
+	vec3 detail = smoothstep(vec3(JOURNEY_DETAIL*lead),vec3(lead),weights);
 	// SAMPLE REGIONS
 	litNormal = pavement ? normal : normalize(litNormal);
 	#endif

@@ -68,26 +68,45 @@ final class MaterialShader
 				$undefines[] = "#undef $symbol";
 			}
 			$name = $prefix.'materialSurface';
-			$functions[] = implode("\n",$defines)."\n".$library."\n".self::compose($surface,$chart,$name)."\n".implode("\n",$undefines);
-			$args = 'local,normal,relative,footprint,water,macro,regionNormal';
-			if($surface->reflective && !$chart) $args .= ',regionFinish';
+			$plain = $prefix . 'materialTint';
+			$functions[] = implode("\n", $defines) . "\n" . $library . "\n" . self::compose($surface, $chart, $name)
+				. "\n" . self::tint($surface, $surface->reflective && !$chart, $plain) . "\n"
+				. implode("\n", $undefines);
+			$args = 'local,normal,relative,footprint,water,macro,detailNormal';
+			$plainArgs = 'local,normal,water';
+
+			if($surface->reflective && !$chart)
+			{
+				$args .= ',detailFinish';
+				$plainArgs .= ',regionFinish';
+			}
+
+			// Only the leading landscape at a pixel pays for its whole shader. The others add a plain color.
 			$calls[] = <<<GLSL
 				if(weights[$i] > 0.) {
 					bounce += weights[$i] * palettes[$i].bounce.rgb;
 					if(!pavement) {
 						vec4 origin = palettes[$i].originAndVariation;
 						vec3 local = world - origin.xyz;
-						#ifdef WORLD_MATERIAL_FIELDS
-						if(fieldResident) fieldSample = textureLod(uMaterialFields,vec3(fieldUV,$i.),0.);
-						float macro = (fieldResident ? {$prefix}filteredVariation(fieldSample.rgb,footprint)
-							: {$prefix}landVariation(local.xz,footprint)) * origin.w;
-						#else
-						float macro = {$prefix}landVariation(local.xz,footprint) * origin.w;
-						#endif
 						float water = uWaterLevel - origin.y;
-						vec3 regionNormal = normal;
+						vec3 pigment = vec3(0.), regionNormal = normal;
 						vec2 regionFinish = vec2(0.);
-						albedo += weights[$i] * $name($args);
+						if(detail[$i] < 1.) pigment = $plain($plainArgs);
+						if(detail[$i] > 0.) {
+							#ifdef WORLD_MATERIAL_FIELDS
+							if(fieldResident) fieldSample = textureLod(uMaterialFields,vec3(fieldUV,$i.),0.);
+							float macro = (fieldResident ? {$prefix}filteredVariation(fieldSample.rgb,footprint)
+								: {$prefix}landVariation(local.xz,footprint)) * origin.w;
+							#else
+							float macro = {$prefix}landVariation(local.xz,footprint) * origin.w;
+							#endif
+							vec3 detailNormal = normal;
+							vec2 detailFinish = vec2(0.);
+							pigment = mix(pigment,$name($args),detail[$i]);
+							regionNormal = mix(normal,detailNormal,detail[$i]);
+							regionFinish = mix(regionFinish,detailFinish,detail[$i]);
+						}
+						albedo += weights[$i] * pigment;
 						litNormal += weights[$i] * regionNormal;
 						finish += weights[$i] * regionFinish;
 					}
@@ -109,6 +128,86 @@ final class MaterialShader
 			$flags[$flag] = "#define $flag";
 		}
 		return $flags;
+	}
+
+	/**
+	 * A landscape's plain color at a point, from the height and slope bands of its layers alone. It skips noise
+	 * fields, patterns, relief and the noise on band edges, so it costs a few comparisons a layer. A journey uses
+	 * it for every landscape but the leading one at a pixel. Layers masked by a noise field are left out.
+	 * @param SurfaceLayers $stack Layers of one landscape.
+	 * @param bool $finish Whether the function also reports the layers' finish.
+	 * @param string $name GLSL function name.
+	 * @return string GLSL source of the function.
+	 */
+	private static function tint(SurfaceLayers $stack, bool $finish, string $name): string
+	{
+		$glsl = [
+			"vec3 $name(vec3 pos,vec3 normal,float water" . ($finish ? ',out vec2 finish' : '') . '){'
+			, 'float slope=1.-max(0.,normal.y), bed=pos.y-dot(pos.xz,vec2(.006,-.003)), masks[16];'
+			, 'vec3 result=vec3(.18), section=vec3(0.); float sectionSum=0.;'
+		];
+
+		if($finish) $glsl[] = 'vec2 sectionFinish=vec2(0.); finish=vec2(0.);';
+
+		foreach($stack->layers as $i => $row)
+		{
+			$section = $stack->section($i);
+			$close = '';
+
+			if($section === 2)
+			{
+				$close = 'if(sectionSum>0.) { result=mix(result,section/sectionSum,sectionCover);'
+					. ($finish ? 'finish=mix(finish,sectionFinish/sectionSum,sectionCover);' : '')
+					. '} sectionSum=0.; section=vec3(0.);' . ($finish ? 'sectionFinish=vec2(0.);' : '');
+			}
+
+			if($row['channel'] === 'relief' || $row['mask'] !== 'all')
+			{
+				$glsl[] = "masks[$i]=0.; { float sectionCover=0.; $close }";
+				continue;
+			}
+
+			$glsl[] =
+				"{ const int i=$i; vec4 effect=uLayerEffect[i]; float visible=step(0.,effect.w), edge=1., coverage=1.;";
+
+			// The bands of materialRange() without the noise on their edges. A repeating band gives its share of
+			// a period.
+			if($i > 0 && $stack->restricted($i))
+			$glsl[] = 'vec4 r=uLayerRange[i],b=uLayerBlend[i],m=uLayerMode[i];
+				float h=(m.y==2. ? bed : pos.y-(m.y==1. ? water : 0.)), sf=max(.00001,b.y), fade=max(.0001,b.x);
+				coverage=smoothstep(r.z-sf,r.z,slope)*(1.-smoothstep(r.w,r.w+sf,slope));
+				edge=m.z>0. ? clamp((r.y-r.x)/m.z,0.,1.) : smoothstep(r.x-fade,r.x,h)*(1.-smoothstep(r.y,r.y+fade,h));';
+
+			if($i > 0 && $row['parent'] >= 0) $glsl[] = 'coverage*=masks[' . $row['parent'] . '];';
+
+			$glsl[] = $i === 0
+				? 'float amount=visible; masks[i]=1.;'
+				: 'coverage*=effect.z; float amount=edge*coverage; masks[i]=amount; amount*=visible;';
+
+			// A pattern moves a layer part of the way to its second color. Half its strength stands in for it.
+			$glsl[] = $row['pattern'] === 'none'
+				? 'vec3 shade=uLayerColor[i];'
+				: 'vec3 shade=mix(uLayerColor[i],uLayerPatternColor[i],.5*uLayerPattern[i].y);';
+
+			if($i === 0)
+			{
+				$glsl[] = 'result=mix(vec3(.18),shade,visible);' . ($finish ? 'finish=uLayerFinish[i]*visible;' : '');
+			} elseif(!$section)
+			{
+				$glsl[] = 'result=mix(result,shade,amount);'
+					. ($finish ? 'finish=mix(finish,uLayerFinish[i],amount);' : '');
+			} else
+			{
+				$glsl[] = 'section+=mix(result,shade,visible)*edge; sectionSum+=edge; float sectionCover=coverage;'
+					. ($finish ? 'sectionFinish+=mix(finish,uLayerFinish[i],visible)*edge;' : '') . $close;
+			}
+
+			$glsl[] = '}';
+		}
+
+		$glsl[] = 'return result; }';
+
+		return implode("\n", $glsl);
 	}
 
 	private static function compose(SurfaceLayers $stack, bool $chart, string $name = 'materialSurface'): string
