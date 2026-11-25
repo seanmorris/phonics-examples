@@ -9,10 +9,13 @@ final class JourneyDriver
 {
 	use DriverControls;
 
-	private const CRUISE=95.*Car::MPS_PER_MPH;
+	private const TOP_SPEED=Car::TOP_SPEED_MPH*Car::MPS_PER_MPH;
+	private const PLAN_STEP=9., PLAN_CELLS=32, BRAKING=6.;
 	private const STOP_MARGIN=25.;
 	private array $roads=[], $starts=[];
-	private float $length=0., $station=0., $plannedAt=-INF, $limit=0.;
+	private float $length=0., $station=0.;
+	private array $speedSquared=[];
+	private bool $boosting=false;
 	public bool $arrived=false;
 	public int $exit=0;
 
@@ -57,22 +60,43 @@ final class JourneyDriver
 		return JourneySigns::pose($this->roads[$i],$at-$this->starts[$i]);
 	}
 
-	/** Look through the braking distance for curves and crests using the already graded tire surface. */
-	private function cruiseLimit(): float
+	/** Plan a block at a time, looking a full top-speed braking distance beyond its end. */
+	private function speedLimit(): float
 	{
-		$limit=self::CRUISE; $step=9.; $before=$this->pose($this->station);
-		for($d=$step;$d<=$limit**2/12.+2.*$step;$d+=$step) {
-			$after=$this->pose($this->station+$d);
-			[$ax,$az]=$before['heading']; [$bx,$bz]=$after['heading'];
-			$curvature=abs(atan2($ax*$bz-$az*$bx,$ax*$bx+$az*$bz))/$step;
-			$grade=($after['position'][1]-$before['position'][1])/$step;
-			$crest=isset($lastGrade) ? max(0.,$lastGrade-$grade)/$step : 0.;
-			$safe=5.8/max(.0001,$curvature+$crest);
-			$limit=min($limit,sqrt($safe+12.*max(0.,$d-2.*$step)));
-			if($this->station+$d >= $this->length) break;
-			$lastGrade=$grade; $before=$after;
+		$step=self::PLAN_STEP;
+		$cell=(int)floor($this->station/$step);
+		if(!isset($this->speedSquared[$cell+1],$this->speedSquared[$cell])) {
+			$first=intdiv($cell,self::PLAN_CELLS)*self::PLAN_CELLS;
+			$end=$first+self::PLAN_CELLS;
+			$brakingStep=2.*self::BRAKING*$step;
+			$top=self::TOP_SPEED**2;
+			$last=min((int)ceil($this->length/$step)-1,$end+(int)ceil($top/$brakingStep)+1);
+			$local=[];
+			$before=$this->pose($first*$step);
+			$lastGrade=$first>0 ? ($before['position'][1]-$this->pose(($first-1)*$step)['position'][1])/$step : null;
+			for($i=$first;$i<=$last;$i++) {
+				$after=$this->pose(($i+1)*$step);
+				$span=min($step,$this->length-$i*$step);
+				[$ax,$az]=$before['heading']; [$bx,$bz]=$after['heading'];
+				$turn=abs(atan2($ax*$bz-$az*$bx,$ax*$bx+$az*$bz))/$span;
+				$grade=($after['position'][1]-$before['position'][1])/$span;
+				$crest=$lastGrade===null ? 0. : max(0.,$lastGrade-$grade)/$step;
+				$local[$i]=min($top,5.8/max(.0001,$turn+$crest));
+				$lastGrade=$grade; $before=$after;
+			}
+			// Carry each corner's entry speed back along the approach (v² = u² + 2as).
+			// Allow one extra sample for the steering and brake response.
+			$next=$nextLocal=$top;
+			$this->speedSquared=[];
+			for($i=max($end,$last);$i>=$first;$i--) {
+				$cap=$local[$i] ?? $top;
+				$next=min($cap,$nextLocal,$next+$brakingStep);
+				if($i<=$end) $this->speedSquared[$i]=$next;
+				$nextLocal=$cap;
+			}
 		}
-		return $limit;
+		$t=$this->station/$step-$cell;
+		return sqrt($this->speedSquared[$cell]*(1.-$t)+$this->speedSquared[$cell+1]*$t);
 	}
 
 	/** @return array{float,float,bool,bool} Throttle/brake, steering, handbrake and nitrous. */
@@ -83,9 +107,9 @@ final class JourneyDriver
 		// Project locally so a nearby road on a switchback cannot steal the cursor.
 		$advance=($car['x']-$x)*$tx+($car['z']-$z)*$tz;
 		$this->station=max(0.,min($this->length,$this->station+max(-8.,min(8.,$advance))));
-		if($car['motion']!=='driving' || $car['roadHold']>0.) return [0.,0.,false,false];
-		if(abs($this->station-$this->plannedAt)>4.) {
-			$this->limit=$this->cruiseLimit(); $this->plannedAt=$this->station;
+		if($car['motion']!=='driving' || $car['roadHold']>0.) {
+			$this->boosting=false;
+			return [0.,0.,false,false];
 		}
 		$speed=$car['speed']; $remaining=$this->length-self::STOP_MARGIN-$this->station;
 		if($remaining<=1.) {
@@ -95,10 +119,14 @@ final class JourneyDriver
 		$look=max(7.,min(28.,7.+.5*max(0.,$speed)));
 		[$gx,,$gz]=$this->pose($this->station+$look)['position'];
 		[$steer,,$error]=self::pursuit($car,$gx-$car['x'],$gz-$car['z']);
-		$limit=min($this->limit,sqrt(9.*$remaining));
+		$limit=min($this->speedLimit(),sqrt(9.*$remaining));
 		// Slow right down if a takeover or a landing leaves the car looking away from the lane.
 		if(abs($error)>.5) $limit=min($limit,max(3.,10./abs($error)));
 		if(abs($error)>1.6) $steer=$error>0. ? -1. : 1.;
-		return [$this->pedal($speed,$limit),$steer,false,false];
+		// Spend charge on aligned acceleration, and release early enough to brake for a bend or the destination.
+		$this->boosting=$speed>=0. && abs($error)<.18 && abs($steer)<.45
+			&& $car['nitrous']>($this->boosting ? .012 : .075)
+			&& $limit-$speed>($this->boosting ? 2. : 6.);
+		return [$this->pedal($speed,$limit,$this->boosting),$steer,false,$this->boosting];
 	}
 }

@@ -36,6 +36,40 @@ foreach([0,1] as $exit) {
 }
 $testLand->close();
 
+// Two long straights joined by a 90-degree bend. Exercise boost, braking, and the distance-based refill.
+$highway=new Landscape($roadRecipe);
+$x=$edge-3400.; $radius=100.; $handle=4./3.*tan(M_PI/8.)*$radius;
+$pavement=['type'=>'road','width'=>28.,'shoulder'=>18.];
+$highway->queue($pavement+['points'=>[[$x,80.,-3500.],[$x,80.,0.]]]);
+$highway->queue($pavement+['points'=>[[$x,80.,0.],[$x+$radius,80.,$radius]],
+	'handles'=>[['out'=>[0.,0.,$handle]],['in'=>[-$handle,0.,0.]]]]);
+$highway->queue($pavement+['points'=>[[$x+$radius,80.,$radius],[$edge,80.,$radius]]]);
+$highway->commit();
+$car=new Car;
+$car->spawn($car->checkedSite($highway,-10.,$x,-3480.,0.,[]),$highway,-10.);
+$driver=JourneyDriver::board($highway,$car->state(),0);
+$peak=$entrySpeed=0.; $launchBoost=$braked=$exitBoost=false;
+for($i=0;$i<12000 && !$driver->arrived;$i++) {
+	$p=$car->state();
+	[$pedal,$steer,$handbrake,$boost]=$driver->controls($p);
+	networkCheck($car->step(1/60,$pedal,$steer,$highway,-10.,$handbrake,[],$boost),'Highway remains drivable.');
+	$q=$car->state();
+	$burned=$q['nitrous']<$p['nitrous'];
+	if($p['z']<0.) {
+		$peak=max($peak,$q['speed']);
+		$launchBoost=$launchBoost || $burned;
+		$braked=$braked || ($p['z']>-1200. && $pedal<0. && !$boost);
+		if($q['z']>=0.) $entrySpeed=$q['speed'];
+	}
+	if($p['x']>$x+$radius) $exitBoost=$exitBoost || $burned;
+	if($i%30===0) networkCheck(Car::onPavement($highway,$q['x'],$q['z']),'The racing line stays on the pavement.');
+}
+networkCheck($launchBoost && $peak>235.*Car::MPS_PER_MPH,'The CPU spends nitrous and approaches top speed on a clear straight.');
+networkCheck($braked && $entrySpeed>0. && $entrySpeed<35.,'The CPU releases boost and brakes before a tight bend.');
+networkCheck($exitBoost && $driver->arrived && abs($q['x']-($edge-25.))<5.,
+	'The CPU spends recharged nitrous after the bend and parks at the destination.');
+$highway->close();
+
 $plan="A rolling-prairie -> B,C\nB limestone -> E,F\nC coast -> F,G\nE mountain\nF river-valley -> H\nG canyon\nH rolling-prairie";
 $chain='';
 for($i=0;$i<200;$i++) $chain.="Map$i coast".($i<199?' -> Map'.($i+1):'')."\n";
