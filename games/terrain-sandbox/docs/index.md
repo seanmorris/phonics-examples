@@ -168,6 +168,10 @@ During a road race, click the right stick if you leave the road. Right-stick rec
 
 Yellow chevrons mark paved bends that turn at least 30° with a radius of 300 ft or less. Their faces measure about 13 by 16 ft. The signs stand about six yards apart along the outside shoulder and point into the bend from either direction. At night the faces and the printed checkpoint banners reflect the car’s headlights back toward the driver. You can drive straight through the signs and their posts.
 
+On journeys and paved circuits, reflective yellow diamonds warn you about hazards roughly 200 driving feet ahead. The arrow shows the first turn you’ll take. A single bend gets a curve or hairpin sign. Two close, opposite bends get a swerve sign, or a kink sign if both are sharp. At a highway merge, each incoming road shows which side the other road joins from.
+
+Hill and dip signs mark places where the road falls away fast enough for the car to catch air above 100 mph. A hill sign means you climb into the crest. A dip sign means the road drops away from a level or downhill approach. On closed circuits, advance warnings can appear before the start line for a hazard just beyond it.
+
 ### Drive between landscapes
 
 Open **Landscape Lab → Journey** to edit a **Multi-stage network**. For a shorter drive, **One destination** builds a single road between two landscapes. **Two destinations** splits the highway into a left and a right branch. The north-up map shows the terrain on both sides of the junction at the selected landscape width. **Preview roads** surveys the contours and overlays the proposed highway in gold. Switching stages or leaving the tab cancels an unfinished preview.

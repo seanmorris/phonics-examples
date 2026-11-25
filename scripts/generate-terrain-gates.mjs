@@ -450,19 +450,29 @@ for(const [name, kind] of Object.entries(contract.kinds))
 	}
 }
 
-// Preserve the supplied chevron's aspect, rounded corners and black ink in a mipmapped RGBA texture.
-const sign = new URL('../roads/curve-hazard-sign.svg', assets);
-const face = new Resvg(await fs.readFile(sign), {fitTo: {mode: 'width', value: 256}}).render();
+// The signed instance code picks a cell; its sign mirrors the artwork for the driver's approach.
+const signs = ['curve-hazard','curve','hairpin','swerve','kink','merge','hill','dip'];
+const roads = new URL('../roads/', assets);
+const cellWidth = 264, cellHeight = 328, atlasWidth = cellWidth*4, atlasHeight = cellHeight*2;
+const pixels = Buffer.alloc(atlasWidth*atlasHeight*4);
+for(const [i, name] of signs.entries()) {
+	const face = new Resvg(await fs.readFile(new URL(name+'-sign.svg', roads)), {fitTo: {mode: 'width', value: 256}}).render();
+	if(face.height !== (i === 0 ? 320 : 256)) throw Error('Unexpected sign proportions: '+name);
+	const rgba = Buffer.from(face.pixels);
+	const x = (i%4)*cellWidth+4, y = Math.floor(i/4)*cellHeight+4;
+	for(let row=0; row<face.height; row++)
+		rgba.copy(pixels, 4*((y+row)*atlasWidth+x), row*face.width*4, (row+1)*face.width*4);
+}
 const header = Buffer.alloc(8);
-header.writeUInt32LE(face.width);
-header.writeUInt32LE(face.height, 4);
-const texture = Buffer.concat([header, face.pixels]);
-const output = new URL('curve-hazard-sign.rgba.gz', sign);
+header.writeUInt32LE(atlasWidth);
+header.writeUInt32LE(atlasHeight, 4);
+const texture = Buffer.concat([header, pixels]);
+const output = new URL('warning-signs.rgba.gz', roads);
 const previous = await fs.readFile(output).catch(error => { if(error.code !== 'ENOENT') throw error; });
 
 if(!previous || !texture.equals(zlib.gunzipSync(previous)))
 {
-	if(check) stale.push('curve-hazard-sign.rgba.gz');
+	if(check) stale.push('warning-signs.rgba.gz');
 	else await fs.writeFile(output, zlib.gzipSync(texture, {level: 9}));
 }
 

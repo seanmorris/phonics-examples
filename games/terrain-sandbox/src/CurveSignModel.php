@@ -50,7 +50,7 @@ final class CurveSignModel
 	private function collect(Landscape $land): \Generator
 	{
 		$cells = [];
-		foreach(CurveSigns::sites($land) as $site) {
+		foreach([CurveSigns::sites($land), RoadWarnings::sites($land)] as $signs) foreach($signs as $site) {
 			if($site !== null) {
 				[$x,$z] = $site;
 				$col = (int)floor($x/self::CELL); $row = (int)floor($z/self::CELL);
@@ -67,7 +67,7 @@ final class CurveSignModel
 	{
 		$fragment = str_replace('// RETROREFLECTION',file_get_contents(self::ASSETS.'retroreflection.glsl'),file_get_contents(self::ASSETS.'chevron.frag'));
 		$this->program = new Program(file_get_contents(self::ASSETS.'chevron.vert'),$fragment);
-		$data = gzdecode(file_get_contents(self::ASSETS.'curve-hazard-sign.rgba.gz'));
+		$data = gzdecode(file_get_contents(self::ASSETS.'warning-signs.rgba.gz'));
 		[$w,$h] = array_values(unpack('Vwidth/Vheight',$data));
 		glGenTextures(1,$this->texture);
 		glActiveTexture(GL_TEXTURE0);

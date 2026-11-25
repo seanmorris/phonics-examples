@@ -20,6 +20,7 @@ void main() {
 	}
 	vec4 ink = texture(artwork,uv);
 	if(ink.a < .5) discard;
+	if(panel == 2) { color = vec4(vec3(.43,.46,.47)*brightness,1.); return; }
 	vec3 paint = ink.rgb/max(ink.a,.01);
 	float retro = retroreflection(eye+relative,eye,sheetNormal,sun,day);
 	// Only the yellow sheeting returns the beam. The black chevron retains its silhouette at full brightness.

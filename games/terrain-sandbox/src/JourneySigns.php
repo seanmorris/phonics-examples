@@ -11,7 +11,7 @@ final class JourneySigns
 	private const FORK_STEP = 4.;      // Spacing between cross sections of the two departing roads, in meters.
 	private const FORK_CLEARANCE = 2.; // Room for the 2.65 m sign face and a margin at both ends.
 
-	private static function node(array $point): string
+	public static function node(array $point): string
 	{
 		// A square handoff clips and translates the same spline in two coordinate systems.
 		return implode(',',array_map(static fn($v)=>(int)round($v*1000.),array_slice($point,0,3)));
@@ -218,7 +218,7 @@ final class JourneySigns
 	}
 
 	/** Last sample at or before an arc distance, including the endpoint. */
-	private static function atOrBefore(array $stations,float $distance,int $lo=0): int
+	public static function atOrBefore(array $stations,float $distance,int $lo=0): int
 	{
 		$hi=count($stations)-1;
 		while($lo<$hi) {
@@ -228,7 +228,7 @@ final class JourneySigns
 		return $lo;
 	}
 
-	private static function pose(array $road,float $distance): array
+	public static function pose(array $road,float $distance): array
 	{
 		$stations=$road['_road']['stations']; $samples=$road['_road']['samples'];
 		$lo=min(count($stations)-2,self::atOrBefore($stations,$distance)); $hi=$lo+1;

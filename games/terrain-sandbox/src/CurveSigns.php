@@ -7,8 +7,8 @@ use TerrainPhonics\Landscape;
 /** Rows of chevrons on the outside of sustained bends in committed asphalt splines. */
 final class CurveSigns
 {
-	private const MAX_RADIUS = 300 * DisplayUnits::FOOT;
-	private const MIN_TURN = M_PI/6;
+	public const MAX_RADIUS = 300 * DisplayUnits::FOOT;
+	public const MIN_TURN = M_PI/6;
 	public const SPACING = 18 * DisplayUnits::FOOT;
 	private const SETBACK = 2.;
 
