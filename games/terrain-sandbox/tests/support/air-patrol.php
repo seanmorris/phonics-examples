@@ -1,6 +1,6 @@
 <?php
 use TerrainPhonics\{Camera,Landscape};
-use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,Jet,Session};
+use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,FlightTrails,Jet,Session,SpeedSeeker};
 
 $flat = ['worldSize'=>4096,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-10.];
 $land = new Landscape($flat);
@@ -73,6 +73,13 @@ for($i=0;$i<10;$i++) $drive->step(1/60);
 expect($drive->car->state()['speed']>60.*Car::MPS_PER_MPH && $drive->airPatrol->snapshot()===null,'The patrol stays off at speed.');
 $drive->close();
 
+$rewound=new AirPatrol;
+$when=$copy->duration()-.5;
+$copy->restorePatrolSmoke($rewound,$when,$copy->frame($when));
+expect($rewound->smoke?->active()===true,'Seeking into a chase reconstructs the smoke already in the air.');
+$copy->restorePatrolSmoke($rewound,0.,$copy->frame(0.));
+expect($rewound->smoke===null,'Rewinding before launch clears later smoke.');
+
 // A sudden move of the formation station can command a turn but cannot relocate the airframe.
 $driver=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>0.,'drift'=>0.,'speed'=>72.];
 $eye=new Camera; $eye->yaw=M_PI;
@@ -85,7 +92,7 @@ for($i=0;$i<480;$i++) {
 $checkpoint=$pilot->snapshot();
 expect($checkpoint['phase']==='escort' && $checkpoint['seeker']['phase']==='chase','A joined escort releases a seeker which reaches the rear bumper.');
 $tail=$checkpoint['seeker']['pose'];
-expect($driver['z']-$tail['z']>2. && $driver['z']-$tail['z']<3. && abs($tail['x'])>1.5,'The seeker tails a rear quarter, clear of the car.');
+expect($driver['z']-$tail['z']>2. && $driver['z']-$tail['z']<3. && abs($tail['x'])<Car::BODY_HALF_WIDTH && $tail['y']>$driver['y']+Car::BODY_HEIGHT+1.,'The seeker floats over the rear bumper with visible clearance above the car.');
 $restart=new AirPatrol; $restart->resume($checkpoint);
 $pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
 $restart->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
@@ -132,7 +139,7 @@ for($i=0;$i<60;$i++) {
 }
 expect($pilot->seeker()['pose']===$other->seeker()['pose'] && $pilot->seeker()['pose']['z']>$miss['pose']['z']+30.,
 	'Once shaken, the prop sails past on the same course whichever way the car turns.');
-for($i=0;$i<60;$i++) $pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
+for($i=0;$i<310;$i++) $pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
 expect($pilot->seeker()['phase']==='reload' && $pilot->seeker()['pose']===null,'Escaping gives the driver a breather before the next release.');
 
 // A short stop or two accumulated slow periods cannot dismiss the patrol. Test both sides of 45 continuous seconds.
@@ -143,6 +150,56 @@ for($i=0;$i<2699;$i++) $pilot->step(1/60,$parked,$eyeAt,16/9,$land,-10.);
 expect($pilot->snapshot()['phase']==='escort' && $pilot->seeker()['phase']==='chase','The patrol and its seeker stay through 44.98 continuous seconds under speed.');
 $pilot->step(1/60,$parked,$eyeAt,16/9,$land,-10.);
 expect($pilot->snapshot()['phase']==='departure' && $pilot->seeker()['phase']==='missed','Both break off at 45 seconds below the threshold.');
+
+// The drop clears a raised ridge even with the parked driver on its low side.
+$ridge=new Landscape($flat);
+$ridge->queue(['type'=>'raise','x'=>0.,'z'=>20.,'radius'=>14.,'amount'=>18.]); $ridge->commit();
+$drop=new SpeedSeeker;
+$car=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>0.,'speed'=>72.,'drift'=>0.];
+$plane=$checkpoint['pose']; $plane['x']=0.; $plane['y']=26.; $plane['z']=44.; $plane['yaw']=$plane['pitch']=$plane['roll']=0.;
+$minGap=INF;
+for($i=0;$i<255;$i++) {
+	$drop->step(1/60,$car,$plane,'escort',$ridge,-10.);
+	$body=$drop->state()['pose']; if($body===null) continue;
+	$b=TerrainSandbox\VehicleModel::basis($body);
+	foreach([-2.,0.,2.] as $along) {
+		$ground=$ridge->height($body['x']+$along*$b[6],$body['z']+$along*$b[8]);
+		$minGap=min($minGap,$body['y']+$along*$b[7]-.22-$ground);
+	}
+}
+expect($minGap>=1.24 && $drop->state()['phase']==='chase','The nose, body and fins all clear the ridge before taking station over the bumper.');
+$ridge->close();
+
+// An unsteered prop hits either the moving chassis or the ground. Drive the public Session through the impact.
+foreach(['car','ground'] as $object) {
+	$game=new Session($flat); $game->camera->position=[0.,35.,0.]; $game->camera->yaw=M_PI;
+	$game->input(['actions'=>['car'],'values'=>['airPatrolEnabled'=>true]],0.,16/9);
+	for($i=0;$game->findingCarSite() && $i<1000;$i++) $game->input([],0.,16/9);
+	$c=$game->car->state(); $hitState=$checkpoint;
+	$shot=&$hitState['seeker']; $shot['phase']='missed'; $shot['clock']=0.; $shot['impact']=null;
+	$shot['pose']=['x'=>$c['x']+($object==='car' ? 0. : 12.),'y'=>$c['y']+($object==='car' ? .65 : 4.),
+		'z'=>$c['z']-9.,'yaw'=>0.,'roll'=>0.,'pitch'=>$object==='car' ? 0. : -.5];
+	$shot['velocity']=$object==='car' ? [0.,0.,90.] : [0.,-22.,40.];
+	$game->airPatrol->resume($hitState); unset($shot);
+	$hits=0; $flashes=0; $peak=0.; $sawSmoke=false;
+	for($i=0;$i<600;$i++) {
+		$game->step(1/60);
+		if($game->airPatrol->carImpact!==null) $hits++;
+		$peak=max($peak,$game->car->state()['y']-$c['y']);
+		$burstCount=0;
+		foreach(str_split($game->airPatrol->smoke?->instances() ?? '',FlightTrails::STRIDE) as $bytes) {
+			$instance=unpack('g*',$bytes);
+			if($instance[9]===1.) $sawSmoke=true;
+			if($instance[9]===2.) $burstCount++;
+		}
+		$flashes=max($flashes,$burstCount);
+	}
+	expect($sawSmoke && $flashes===1 && !$game->airPatrol->smoke,"A $object hit emits one burst and its exhaust and flash expire.");
+	expect($game->mode==='car' && $game->car->state()['motion']==='driving' &&
+		($object==='car' ? $hits===1 && $peak>3. : $hits===0 && $peak<.5),
+		'Only a direct hit throws the car, and the normal landing or recovery returns control.');
+	$game->close();
+}
 
 // Raise a wall on the flight path itself, which can be well away from the driver's path.
 $pilot->resume($checkpoint); $p=$pilot->pose();

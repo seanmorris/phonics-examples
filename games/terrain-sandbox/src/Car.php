@@ -539,6 +539,21 @@ final class Car
 		return abs($support[1]) < .40 && abs($support[2]) < .40 && $support[3] < .38;
 	}
 
+	/** Throw the live chassis from an arcade prop contact and let normal wheel/roof recovery finish the landing. */
+	public function kickFrom(array $point): void
+	{
+		if(!$this->tumble) {
+			$horizontal=$this->speed*cos($this->roadPitch);
+			$s=$this->suspension;
+			$this->tumble=new CarTumble($this->x,$this->y,$this->z,$this->yaw,$this->pitch,$this->roll,
+				$horizontal*cos($this->drift),$s->verticalSpeed,$s->pitchRate,$s->rollRate,-$horizontal*sin($this->drift));
+			$this->drift=0.;
+		}
+		$this->recoveryTime=$this->roadHold=0.;
+		$this->floodedHold=false;
+		$this->tumble->kickFrom($point);
+	}
+
 	private function stepTumble(float $dt, Landscape $land, float $water, array $posts = []): bool
 	{
 		$body = $this->tumble;

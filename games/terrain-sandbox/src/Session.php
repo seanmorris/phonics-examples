@@ -874,8 +874,12 @@ final class Session
 			$this->duck()->step($this->nearGates($this->camera->position), $this->camera->position,
 				$this->chaseTarget($after));
 		if($this->settings['airPatrolEnabled'] && $this->mode==='car' && $mode==='car' && !$this->network && !isset($this->landscape->recipe()['join'])) {
-			if($this->airPatrol->step($seconds,$after,fn()=>$this->view(1.)[0],$this->aspect,$this->landscape,$this->water->level()))
+			if($this->airPatrol->step($seconds,$after,fn()=>$this->view(1.)[0],$this->aspect,$this->landscape,$this->water->level(),$before))
 				$this->dirty = true;
+			if($this->airPatrol->carImpact!==null) {
+				$this->car->kickFrom($this->airPatrol->carImpact);
+				$after=$this->car->state();
+			}
 		}
 		if($mode !== $this->mode) $this->guardRace();
 		elseif($racing)
@@ -3141,7 +3145,10 @@ final class Session
 			$this->chase->board($this->camera,$this->car->state(),$this->landscape);
 			$this->camera=clone $frame['camera']; $this->camera->fov=(new Camera)->fov;
 			$this->chase->resume($this->camera,$frame['camera']->fov);
-			if($this->settings['airPatrolEnabled']) $this->airPatrol->resume($events['airPatrol'] ?? null);
+			if($this->settings['airPatrolEnabled']) {
+				$this->airPatrol->resume($events['airPatrol'] ?? null);
+				$child->restorePatrolSmoke($this->airPatrol,$child->duration(),$frame);
+			}
 			$this->lamps->resume($p['lamps']); $this->tireDust=new TireDust;
 			if(isset($events['delivery'])) $this->delivery=DeliveryRun::resume($events['delivery'],$events['sites']);
 		} elseif($this->mode==='jet') {

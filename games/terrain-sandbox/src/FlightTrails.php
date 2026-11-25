@@ -7,7 +7,8 @@ final class FlightTrails
 {
 	// Two vec4 endpoints (position and birth time), followed by kind, lifetime and opacity.
 	public const STRIDE = 44;
-	private const SMOKE_LIFE = 1.85, VAPOR_LIFE = .78, BURST_LIFE = .95;
+	public const SMOKE_LIFE = 1.85;
+	private const VAPOR_LIFE = .78, BURST_LIFE = .95;
 	private array $smoke = [], $vapor = [], $bursts = [];
 	private float $now = 0.0, $stepStart = 0.0, $density = 0.0;
 	private int $tick = 0;
@@ -35,9 +36,8 @@ final class FlightTrails
 		}
 	}
 
-	public function step(float $dt, array $before, array $after): void
+	private function advance(float $dt): void
 	{
-		if($dt <= 0) return;
 		$this->stepStart = $this->now;
 		$this->now += $dt;
 		$this->tick++;
@@ -45,6 +45,25 @@ final class FlightTrails
 		$this->expire($this->smoke,self::SMOKE_LIFE);
 		$this->expire($this->bursts,self::BURST_LIFE);
 
+	}
+
+	/** Build the same exhaust segments from the arcade prop's visible poses, in live play or a replay. */
+	public function seeker(float $dt, ?array $before, ?array $after, ?array $impact): void
+	{
+		if($dt<=0.) return;
+		$this->advance($dt);
+		if($after!==null) {
+			$before ??= $after;
+			$this->exhaust([$before['x'],$before['y'],$before['z']],[$after['x'],$after['y'],$after['z']],
+				array_slice(VehicleModel::basis($before),6),array_slice(VehicleModel::basis($after),6),$dt);
+		}
+		if($impact!==null) $this->burst($impact,$dt);
+	}
+
+	public function step(float $dt, array $before, array $after): void
+	{
+		if($dt<=0.) return;
+		$this->advance($dt);
 		// The vertical component of the span stays well behaved through inverted flight and loops.
 		$bank = abs(sin($after['roll']) * cos($after['pitch']));
 		if($bank < .15 && $this->density === 0.0) return;

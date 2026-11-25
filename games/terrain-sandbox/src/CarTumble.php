@@ -79,6 +79,18 @@ final class CarTumble
 		$this->wake();
 	}
 
+	/** A fixed arcade kick away from the contact, added to any motion the car already has. */
+	public function kickFrom(array $point): void
+	{
+		$x=$this->x-$point[0]; $z=$this->z-$point[2];
+		$r=max(.5,hypot($x,$z));
+		$side=($this->cosYaw*$x-$this->sinYaw*$z)/$r;
+		$ahead=($this->sinYaw*$x+$this->cosYaw*$z)/$r;
+		$this->side+=15.*$side; $this->ahead+=15.*$ahead; $this->up+=14.;
+		$this->rollRate+=2.2*$side; $this->pitchRate-=1.6*$ahead;
+		$this->wake();
+	}
+
 	public function wake(): void
 	{
 		$this->quiet = 0;

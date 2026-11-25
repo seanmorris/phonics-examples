@@ -24,7 +24,7 @@ layout(location=2) in vec4 endPoint;
 layout(location=3) in vec3 style; // vapor, smoke, burst or dust; lifetime; density
 uniform mat4 viewProjection;
 uniform vec3 eye;
-uniform vec2 projectionScale;
+uniform vec2 projectionScale, smokeFade;
 uniform float clock;
 out vec2 disk;
 out float opacity;
@@ -77,7 +77,7 @@ void main() {
 	float radius = mix(.20 + .75*age, .78 + 2.5*age, smoke) * mix(.88,1.12,jitter.y);
 	p.xy += sampleCorner.xy * projectionScale * radius;
 	gl_Position = p;
-	opacity = style.z * mix(.36,.43,smoke) * (1.-smoothstep(.04,1.,life)) * smoothstep(2.,8.,p.w);
+	opacity = style.z * mix(.36,.43,smoke) * (1.-smoothstep(.04,1.,life)) * smoothstep(smokeFade.x,smokeFade.y,p.w);
 }
 GLSL, <<<'GLSL'
 #version 300 es
@@ -131,7 +131,7 @@ GLSL);
 		glBindVertexArray(0);
 	}
 
-	public function draw(FlightTrails|TireDust $trails, float $alpha, Camera $camera, int $width, int $height, float $night): void
+	public function draw(FlightTrails|TireDust $trails, float $alpha, Camera $camera, int $width, int $height, float $night, bool $closeExhaust=false): void
 	{
 		glBindVertexArray($this->vao[0]);
 		if($trails !== $this->source || $this->revision !== $trails->revision)
@@ -149,6 +149,7 @@ GLSL);
 		glUniform2f($p->location('projectionScale'),$focal*$height/$width,$focal);
 		glUniformMatrix4fv($p->location('viewProjection'),1,false,$camera->viewProjection($width,$height));
 		glUniform3f($p->location('eye'),...$camera->position);
+		glUniform2f($p->location('smokeFade'),$closeExhaust ? .45 : 2.,$closeExhaust ? 3. : 8.);
 		glUniform1f($p->location('clock'),$trails->timeAt($alpha));
 		glUniform3f($p->location('tint'),.92-.64*$night,.94-.59*$night,.98-.48*$night);
 

@@ -63,9 +63,9 @@ final class DemoEvents
 		}
 		$this->sample=$index;
 		$view=$this->shown;
-		if($fraction>0. && isset($view['airPatrol']['pose']) && ($this->changes[$this->cursor][0] ?? -1)===$index+1) {
+		if($fraction>0. && isset($view['airPatrol']) && ($this->changes[$this->cursor][0] ?? -1)===$index+1) {
 			$next=json_decode($this->changes[$this->cursor][1],true,32,JSON_THROW_ON_ERROR)['airPatrol'] ?? null;
-			if(isset($next['pose'])) $view['airPatrol']['pose']=AirPatrol::interpolate($view['airPatrol']['pose'],$next['pose'],$fraction);
+			if(isset($view['airPatrol']['pose'],$next['pose'])) $view['airPatrol']['pose']=AirPatrol::interpolate($view['airPatrol']['pose'],$next['pose'],$fraction);
 			if(isset($view['airPatrol']['seeker']['pose'],$next['seeker']['pose']))
 				$view['airPatrol']['seeker']['pose']=AirPatrol::interpolate($view['airPatrol']['seeker']['pose'],$next['seeker']['pose'],$fraction);
 		}
@@ -117,19 +117,20 @@ final class DemoEvents
 			if(!is_array($v) || !array_key_exists('pose',$v)) return false;
 			$legacy=self::vector($v['flight'] ?? null,9);
 			if(!$legacy && !self::vector($v['flight'] ?? null,6)) return false;
-			if(($v['phase'] ?? null)==='idle') return $v['pose']===null && !isset($v['seeker']);
-			if(!in_array($v['phase'] ?? null,['arrival','escort','departure'],true) || !is_array($v['pose'])) return false;
 			$keys=['x','y','z','yaw','pitch','roll'];
 			if(isset($v['seeker'])) {
 				$s=$v['seeker'];
 				if($legacy || !is_array($s) || !self::vector([$s['clock'] ?? null,$s['passSpeed'] ?? null],2)
-					|| !array_key_exists('pose',$s)) return false;
+					|| (isset($s['impact']) && !self::vector($s['impact'],3))
+					|| (isset($s['velocity']) && !self::vector($s['velocity'],3)) || !array_key_exists('pose',$s)) return false;
 				if(in_array($s['phase'] ?? null,['mounted','reload'],true)) {
 					if($s['pose']!==null || ($s['start'] ?? null)!==[]) return false;
 				} elseif(!in_array($s['phase'] ?? null,['drop','chase','missed'],true) || !self::vector($s['start'] ?? null,6)
 					|| !is_array($s['pose']) || count($s['pose'])!==6 ||
 					!self::vector(array_map(fn($k)=>$s['pose'][$k] ?? null,$keys),6)) return false;
 			}
+			if(($v['phase'] ?? null)==='idle') return $v['pose']===null && (!isset($v['seeker']) || !$legacy);
+			if(!in_array($v['phase'] ?? null,['arrival','escort','departure'],true) || !is_array($v['pose'])) return false;
 			if(!$legacy) {
 				if(!self::vector($v['direction'] ?? null,3)) return false;
 				[$x,$y,$z]=$v['direction'];

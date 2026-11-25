@@ -74,8 +74,12 @@ final class DemoPlayback
 		if(!$before || $before['mode']!==$frame['mode'] || $before['world']!==$frame['world'] || $dt<0 || $dt>.25) {
 			$s->tireDust = new TireDust;
 			$s->flightTrails = $frame['mode']==='jet' ? new FlightTrails : null;
+			$tape->restorePatrolSmoke($s->airPatrol,$tape->playhead ?? 0.,$frame);
 		} elseif($dt>0) {
-			if($frame['mode']==='car') $s->tireDust->step($dt,$frame['events']['contacts'] ?? [],$frame['vehicle']);
+			if($frame['mode']==='car') {
+				$s->tireDust->step($dt,$frame['events']['contacts'] ?? [],$frame['vehicle']);
+				$s->airPatrol->stepSmoke($dt,$before['events']['airPatrol']['seeker'] ?? null,$frame['events']['airPatrol']['seeker'] ?? null);
+			}
 			$s->flightTrails?->step($dt,$before['vehicle'],$frame['vehicle']);
 		}
 		$this->previous = $frame;

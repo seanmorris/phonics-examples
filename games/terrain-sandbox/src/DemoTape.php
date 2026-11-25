@@ -212,6 +212,25 @@ final class DemoTape
 		return $child;
 	}
 
+	/** Rebuild only the still-visible exhaust and impact puffs when the timeline jumps. */
+	public function restorePatrolSmoke(AirPatrol $patrol,float $time,array $frame): void
+	{
+		$patrol->smoke=null;
+		if($frame['mode']!=='car' || !isset($frame['events']['airPatrol'])) return;
+		$start=max(0.,$time-FlightTrails::SMOKE_LIFE);
+		$last=$this->frame($start);
+		for($i=1;$start<$time;$i++) {
+			$t=min($time,$start+$i/30.);
+			$f=$t===$time ? $frame : $this->frame($t);
+			$dt=$f['time']-$last['time'];
+			if($dt>0. && $dt<=.25 && $f['world']===$last['world'] && $f['mode']==='car' && $last['mode']==='car')
+				$patrol->stepSmoke($dt,$last['events']['airPatrol']['seeker'] ?? null,$f['events']['airPatrol']['seeker'] ?? null);
+			else $patrol->smoke=null;
+			if($t===$time) break;
+			$last=$f;
+		}
+	}
+
 	/** Interpolate at presentation time. Cuts between maps, vehicles and viewpoints stay instantaneous. */
 	public function frame(float $time): array
 	{

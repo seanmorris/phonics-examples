@@ -324,10 +324,10 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		if($patrol !== null) {
 			$model = $models['f5'] ??= new VehicleModel(__DIR__.'/assets/f5/mesh.bin.gz');
 			$model->draw($patrol+['power'=>.65],$viewCamera,$session->atmosphere,$session->water,$width,$height);
-			$seeker=$events ? ($events['airPatrol']['seeker'] ?? null) : $session->airPatrol->seeker($shotAlpha);
-			if(($seeker['phase'] ?? '')==='mounted') $projectiles[]=Jet::projectileMount($patrol,0);
-			elseif(isset($seeker['pose'])) $projectiles[]=$seeker['pose'];
 		}
+		$seeker=$events ? ($events['airPatrol']['seeker'] ?? null) : $session->airPatrol->seeker($shotAlpha);
+		if($patrol!==null && ($seeker['phase'] ?? '')==='mounted') $projectiles[]=Jet::projectileMount($patrol,0);
+		elseif(isset($seeker['pose'])) $projectiles[]=$seeker['pose'];
 	}
 	if($session->mode === 'jet' && $session->jetView === 'chase')
 	{
@@ -527,6 +527,9 @@ $engine->start(
 			if($trails?->active())
 				($trailRenderer ??= new TrailRenderer)->draw($trails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
+			if($session->mode==='car' && $session->airPatrol->smoke)
+				($trailRenderer ??= new TrailRenderer)->draw($session->airPatrol->smoke,$sample ? 1. : $shotAlpha,$viewCamera,$width,$height,
+					$session->atmosphere->uniforms()['nightVisibility'],closeExhaust:true);
 			foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->smoke($site,$viewCamera,$width,$height,$session->time);
 			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$arrowBearing,$viewCamera,$width,$height);
 			$jet = $session->mode === 'jet';

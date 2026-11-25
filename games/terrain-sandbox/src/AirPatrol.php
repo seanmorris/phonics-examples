@@ -11,6 +11,8 @@ final class AirPatrol
 	private string $phase = 'idle';
 	private float $elapsed = 0., $slow = 0., $side = 1., $circleRemaining = 0.;
 	private float $probeIn = 0., $aheadFloor = 0.;
+	public ?FlightTrails $smoke=null;
+	public ?array $carImpact=null;
 	private ?Jet $jet = null;
 	private ?SpeedSeeker $seeker = null;
 	private ?array $previous = null;
@@ -67,14 +69,18 @@ final class AirPatrol
 	}
 
 	/** True while the aircraft or its departure needs a new frame. */
-	public function step(float $dt,array $car,callable $eye,float $aspect,Landscape $land,float $water): bool
+	public function step(float $dt,array $car,callable $eye,float $aspect,Landscape $land,float $water,?array $beforeCar=null): bool
 	{
+		$this->carImpact=null;
 		if($this->phase==='idle') {
+			$fading=$this->seeker!==null || $this->smoke!==null;
+			$this->advanceSeeker($dt,$car,null,'departure',$land,$water,$beforeCar);
+			if(!$this->smoke && !isset($this->seeker?->state()['pose'])) $this->seeker=null;
 			$this->elapsed=max(0.,$this->elapsed-$dt);
-			if($this->elapsed>0. || $car['speed']<=60.*Car::MPS_PER_MPH) return false;
+			if($this->elapsed>0. || $car['speed']<=60.*Car::MPS_PER_MPH) return $fading;
 			if($this->arrive($car,$eye(),$aspect,$land,$water)) return true;
 			$this->elapsed=2.; // Recheck an obstructed approach after the car has moved on.
-			return false;
+			return $fading;
 		}
 		$this->elapsed += $dt;
 		$p = $this->previous = $this->jet->state();
@@ -141,11 +147,12 @@ final class AirPatrol
 		}
 		$flying=$this->jet->fly($dt,$throttle,$bank,$climb,$land,$water);
 		$next=$this->jet->state();
-		if($flying) $this->seeker->step($dt,$car,$next,$this->phase,$land,$water);
+		$this->advanceSeeker($dt,$car,$next,$flying ? $this->phase : 'departure',$land,$water,$beforeCar);
 		if($this->circleRemaining>0.) $this->circleRemaining=max(0.,$this->circleRemaining-
 			$this->side*self::angle($next['yaw']-$p['yaw']));
 		if(!$flying || ($this->phase==='departure' && $this->elapsed>2. && !self::visible($next,$eye(),$aspect))) {
-			$this->phase='idle'; $this->elapsed=12.; $this->jet=$this->previous=$this->seeker=null;
+			$this->phase='idle'; $this->elapsed=12.; $this->jet=$this->previous=null;
+			if(!$this->smoke && $this->seeker->state()['pose']===null) $this->seeker=null;
 		}
 		return true;
 	}
@@ -166,6 +173,23 @@ final class AirPatrol
 		return $p;
 	}
 
+	private function advanceSeeker(float $dt,array $car,?array $plane,string $phase,Landscape $land,float $water,?array $beforeCar): void
+	{
+		$before=$this->seeker?->state();
+		$hit=$this->seeker?->step($dt,$car,$plane,$phase,$land,$water,$beforeCar);
+		$this->stepSmoke($dt,$before,$this->seeker?->state());
+		if(($hit['kind'] ?? null)==='car') $this->carImpact=$hit['point'];
+	}
+
+	public function stepSmoke(float $dt,?array $from,?array $to): void
+	{
+		$impact=$to['impact'] ?? null;
+		if($impact===($from['impact'] ?? null)) $impact=null;
+		if(!isset($to['pose']) && $impact===null && !$this->smoke) return;
+		($this->smoke ??= new FlightTrails)->seeker($dt,$from['pose'] ?? null,$to['pose'] ?? null,$impact);
+		if(!$this->smoke->active()) $this->smoke=null;
+	}
+
 	public function seeker(float $alpha=1.): ?array { return $this->seeker?->state($alpha); }
 
 	public function snapshot(): ?array
@@ -178,6 +202,7 @@ final class AirPatrol
 	public function resume(?array $s): void
 	{
 		$this->jet=$this->previous=$this->seeker=null;
+		$this->smoke=$this->carImpact=null;
 		$this->phase='idle'; $this->elapsed=$this->slow=$this->circleRemaining=$this->probeIn=$this->aheadFloor=0.;
 		if($s===null) return;
 		$this->phase=$s['phase'];
@@ -188,9 +213,9 @@ final class AirPatrol
 			return;
 		}
 		[$this->elapsed,$this->slow,$this->side,$this->circleRemaining,$this->probeIn,$this->aheadFloor]=$s['flight'];
+		if(isset($s['pose']) || isset($s['seeker'])) $this->seeker=new SpeedSeeker;
+		if(isset($s['seeker'])) $this->seeker->resume($s['seeker']);
 		if($s['pose']!==null) {
-			$this->seeker=new SpeedSeeker;
-			if(isset($s['seeker'])) $this->seeker->resume($s['seeker']);
 			$this->jet=new Jet;
 			$d=$s['direction'];
 			$this->jet->resumeFlight($s['pose'],[0,0.,0.,0.,...$d,...$d]);
