@@ -34,6 +34,7 @@ $drive->input(['values'=>['airPatrolEnabled'=>true],'keys'=>['KeyW'=>1,'ShiftLef
 $bank=$visible=0.; $minSide=INF; $maxSide=0.; $minSeparation=INF; $first=null; $entryTime=0.; $wingRelease=false;
 $releaseTime=$stationTime=$hitTime=null; $visibleRelease=false;
 $maxLead=0.; $swing=false;
+$glances=[];
 for($i=0;$i<880;$i++) {
 	$drive->step(1/60); $drive->demo->capture($drive);
 	$pilot=$drive->airPatrol->snapshot();
@@ -41,6 +42,10 @@ for($i=0;$i<880;$i++) {
 	$p=$pilot['pose']; [$eye,$car]=$drive->view(1.);
 	$first ??= abs($car['speed'])/Car::MPS_PER_MPH;
 	$shot=$pilot['seeker']; $time=$drive->demo->duration();
+	if(isset($pilot['glance'])) {
+		[$pan,$tilt]=$pilot['glance'];
+		if(abs($pan)+abs($tilt)>deg2rad(1.)) $glances[$pilot['phase']==='arrival' ? 'arrival' : $shot['phase']]=$time;
+	}
 	if($shot['phase']==='drop' && $shot['clock']===0.) {
 		$releaseTime=$time;
 		$wing=Jet::projectileMount($p,0); $released=$pilot['seeker']['pose'];
@@ -77,6 +82,7 @@ expect($stationTime!==null && $hitTime!==null && $hitTime-$stationTime>=3. && $h
 	'Driving straight through the rear-quarter warning produces a real bumper hit in three to four seconds.');
 expect($first>60. && $first<62. && $bank>.67,'The F5 visibly banks into the chase camera just after the driver exceeds 60 mph.');
 expect($minSide<2. && $maxSide>11. && $visible>300 && $minSeparation>30.,'The pilot paces overhead and alongside with a clear view of the car.');
+expect(isset($glances['arrival'],$glances['drop'],$glances['chase']),'Both the first fly-by and the approaching seeker draw a visible camera glance.');
 $drive->input(['actions'=>['demo-stop']],0.,16/9);
 $demo=$drive->demo->export();
 $copy=DemoTape::import($demo);
@@ -89,6 +95,27 @@ expect($drive->airPatrol->pose()===null,'Switching off dismisses an active patro
 for($i=0;$i<10;$i++) $drive->step(1/60);
 expect($drive->car->state()['speed']>60.*Car::MPS_PER_MPH && $drive->airPatrol->snapshot()===null,'The patrol stays off at speed.');
 $drive->close();
+
+// Exercise the normal pad input even when straight ahead is both the manual and resting look angle.
+foreach([$glances['arrival'],$glances['chase']] as $at) {
+	$game=new Session($flat);
+	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$at],'demo-take-control'] as $action)
+		$game->input(['actions'=>[$action]],0.,16/9);
+	$eyeAtCut=$copy->frame($at)['camera'];
+	$view=$game->view(1.)[0];
+	expect(abs($view->yaw-$eyeAtCut->yaw)+abs($view->pitch-$eyeAtCut->pitch)<.0001,'Taking control preserves the recorded glance exactly once.');
+	foreach([[0.,-.34,false],[0.,-.36,true],[1.,0.,true],[-1.,0.,true],[0.,1.,true]] as [$x,$y,$manual]) {
+		$game->input(['pad'=>[0.,0.,$x,$y,0.,0.,0]],0.,16/9);
+		$view=$game->view(.5)[0]; $base=$game->carView(.5)[0];
+		expect(($view->yaw===$base->yaw && $view->pitch===$base->pitch)===$manual,'Any deliberate right-stick direction immediately owns both view angles.');
+	}
+	$game->step(1/60);
+	expect(!isset($game->airPatrol->snapshot()['glance']),'Holding manual look clears the automatic glance.');
+	$game->input([],0.,16/9); $game->step(1/60);
+	[$pan,$tilt]=$game->airPatrol->snapshot()['glance'] ?? [0.,0.];
+	expect(max(abs($pan),abs($tilt))<deg2rad(.5),'Centering the stick eases automatic framing back in.');
+	$game->close();
+}
 
 $rewound=new AirPatrol;
 $when=$stationTime+.5;
@@ -108,7 +135,8 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 	$game=new Session($flat);
 	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$releaseTime+$delay],'demo-take-control'] as $action)
 		$game->input(['actions'=>[$action]],0.,16/9);
-	$lockedAt=$wonAt=$previousPose=null; $missed=$followed=$boosted=$driftedOnApproach=false;
+	$lockedAt=$wonAt=$previousPose=null; $missed=$followed=$driftedOnApproach=false;
+	$returnSpeeds=[]; $glancedOnReturn=false;
 	for($tick=0;$tick<360;$tick++) {
 		if($tick===0 || $tick===24) $game->input(['keys'=>$tick===0 ? ['KeyW'=>1,$steer=>1,'Space'=>1] : ['KeyW'=>1]],0.,16/9);
 		$beforeShot=$game->airPatrol->seeker();
@@ -128,14 +156,15 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 		}
 		if(($shot['phase'] ?? '')==='return') {
 			$at=$shot['pose'];
+			$glancedOnReturn=$glancedOnReturn || isset($patrol['glance']);
 			if($lockedAt===null) {
 				$lockedAt=$game->demo->duration();
 				$car=$game->car->state(); $body=VehicleModel::basis($car);
 				$along=($at['x']-$car['x'])*$body[6]+($at['y']-$car['y'])*$body[7]+($at['z']-$car['z'])*$body[8];
 				expect($followed && $missed && $along<=-Car::BODY_REAR,'The lock switches from behind the actual rear bumper after tailing the car.');
-			} elseif(abs($shot['clock']-.10)<1e-6) {
+			} else {
 				$speed=60.*hypot(hypot($at['x']-$previousPose['x'],$at['z']-$previousPose['z']),$at['y']-$previousPose['y']);
-				$boosted=$speed>1.85*$shot['passSpeed'];
+				$returnSpeeds[(int)round(60*$shot['clock'])]=$speed/$shot['passSpeed'];
 			}
 		}
 		$previousPose=$shot['pose'] ?? null;
@@ -149,7 +178,9 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 	expect($missed===$shakes,'A slide that ends before the bumper chase cannot shake the lock later.');
 	expect(($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'Only a drift that brings the loose seeker back near the F5 wins.');
 	if($wins) {
-		expect($boosted && abs($wonAt-$lockedAt-.5)<.04,'The visible return accelerates in its first tenth of a second and continues through impact.');
+		expect(abs($returnSpeeds[1]-1.)<.08 && $returnSpeeds[6]>$returnSpeeds[1] && $returnSpeeds[6]<1.8 &&
+			$returnSpeeds[12]>max(1.85,$returnSpeeds[6]),'The first frame carries the drift speed smoothly into a visible 200 ms burst.');
+		expect($glancedOnReturn && abs($wonAt-$lockedAt-.55)<.04,'The camera follows the departing seeker through the short return.');
 		$won=$game->airPatrol->snapshot();
 		$away=new AirPatrol; $away->resume($won);
 		$fast=$game->car->state(); $fast['speed']=70.;
@@ -176,7 +207,7 @@ foreach([[-4.,true,true],[4.,true,false],[-4.,false,false]] as [$x,$releasedFrom
 	$prop->resume(['phase'=>'missed','clock'=>.2,'start'=>array_fill(0,6,0.),'pose'=>$pose,'velocity'=>[1.,0.,0.],'passSpeed'=>1.,
 		($releasedFromRear ? 'rearPassGap' : 'passGap')=>25.]);
 	$car=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>M_PI/2,'speed'=>50.,'drift'=>0.];
-	$plane=array_replace($pose,['x'=>10.,'y'=>8.]);
+	$plane=array_replace($pose,['x'=>10.,'y'=>8.,'vx'=>0.,'vy'=>0.,'vz'=>0.]);
 	$prop->step(1/60,$car,$plane,'escort',$land,-10.);
 	expect(($prop->state()['phase']==='return')===$locks,'Only a rear release still behind the rotated car can switch to the F5.');
 }

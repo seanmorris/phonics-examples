@@ -876,6 +876,7 @@ final class Session
 		if($this->settings['airPatrolEnabled'] && $this->mode==='car' && $mode==='car' && !$this->network && !isset($this->landscape->recipe()['join'])) {
 			if($this->airPatrol->step($seconds,$after,fn()=>$this->view(1.)[0],$this->aspect,$this->landscape,$this->water->level(),$before))
 				$this->dirty = true;
+			if($this->airPatrol->advanceGlance($this->camera,$after,$this->manualLook(),$seconds)) $this->dirty=true;
 			if($this->airPatrol->carImpact!==null) {
 				$this->car->kickFrom($this->airPatrol->carImpact);
 				$after=$this->car->state();
@@ -1264,8 +1265,13 @@ final class Session
 	 */
 	private function lookAngle(): float
 	{
-		$x = $this->pad['lookX']; $y = $this->pad['lookY'];
-		return $x*$x + $y*$y < .35*.35 ? 0.0 : atan2($x, -$y);
+		return $this->manualLook() ? atan2($this->pad['lookX'], -$this->pad['lookY']) : 0.0;
+	}
+
+	private function manualLook(): bool
+	{
+		$x=$this->pad['lookX']; $y=$this->pad['lookY'];
+		return $x*$x+$y*$y>=.35*.35;
 	}
 
 	/**
@@ -2541,8 +2547,11 @@ final class Session
 			default => [$this->camera, null]
 		};
 		if($this->mode === 'jet' && $this->jetView === 'cockpit') return [Jet::cockpit($pose),$pose];
-		if($this->mode === 'fly' || $this->course->count() === 0) return [$eye, $pose];
-		return [$this->duck()->apply($eye, $this->chaseTarget($pose), $this->nearGates($eye->position)), $pose];
+		if($this->mode !== 'fly' && $this->course->count() !== 0)
+			$eye=$this->duck()->apply($eye, $this->chaseTarget($pose), $this->nearGates($eye->position));
+		if($this->mode==='car' && $this->settings['airPatrolEnabled'] && !$this->manualLook())
+			$eye=$this->airPatrol->glanceView($eye,$this->paused ? 1. : $alpha);
+		return [$eye,$pose];
 	}
 
 	/** Point to keep in view while the chase camera moves around a gate. */
@@ -3147,6 +3156,9 @@ final class Session
 			$this->chase->resume($this->camera,$frame['camera']->fov);
 			if($this->settings['airPatrolEnabled']) {
 				$this->airPatrol->resume($events['airPatrol'] ?? null);
+				// The recorded eye already includes this glance. Restore the underlying chase angle.
+				[$pan,$tilt]=$events['airPatrol']['glance'] ?? [0.,0.];
+				$this->camera->yaw-=$pan; $this->camera->pitch-=$tilt;
 				$child->restorePatrolSmoke($this->airPatrol,$child->duration(),$frame);
 			}
 			$this->lamps->resume($p['lamps']); $this->tireDust=new TireDust;

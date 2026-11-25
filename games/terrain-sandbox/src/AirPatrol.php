@@ -17,6 +17,8 @@ final class AirPatrol
 	private ?Jet $jet = null;
 	private ?SpeedSeeker $seeker = null;
 	private ?array $previous = null;
+	private const NEUTRAL_GLANCE = [0.,0.];
+	private array $glance=self::NEUTRAL_GLANCE, $previousGlance=self::NEUTRAL_GLANCE;
 
 	private static function angle(float $v): float { return atan2(sin($v),cos($v)); }
 
@@ -197,16 +199,60 @@ final class AirPatrol
 
 	public function seeker(float $alpha=1.): ?array { return $this->seeker?->state($alpha); }
 
+	/** A small pan and tilt in the driver's view. The boom continues following the car. */
+	public function advanceGlance(Camera $eye,array $car,bool $manual,float $dt): bool
+	{
+		$this->previousGlance=$this->glance;
+		if($manual) {
+			$changed=$this->glance!==self::NEUTRAL_GLANCE;
+			$this->previousGlance=$this->glance=self::NEUTRAL_GLANCE;
+			return $changed;
+		}
+		$point=$this->seeker()['pose'] ?? null;
+		$weight=1.;
+		if($point!==null) {
+			$range=hypot(hypot($point['x']-$car['x'],$point['z']-$car['z']),$point['y']-$car['y']);
+			$weight=max(0.,min(1.,(38.-$range)/30.));
+		} elseif($this->phase==='arrival') $point=$this->pose();
+		$goal=self::NEUTRAL_GLANCE;
+		if($point!==null && $weight>0.) {
+			$x=$point['x']-$eye->position[0]; $y=$point['y']-$eye->position[1]; $z=$point['z']-$eye->position[2];
+			$pan=self::angle(atan2($x,-$z)-$eye->yaw);
+			// Let an approaching wing enter the forward view before inviting a glance.
+			$weight*=max(0.,min(1.,(M_PI/2-abs($pan))/.35));
+			$tilt=atan2($y,hypot($x,$z))-$eye->pitch;
+			$goal=[$weight*max(-deg2rad(5.),min(deg2rad(5.),.18*$pan)),
+				$weight*max(-deg2rad(3.),min(deg2rad(3.),.18*$tilt))];
+		}
+		if($goal===$this->glance) return false;
+		$remaining=2**(-$dt/.12);
+		foreach($goal as $i=>$angle) {
+			$gap=($this->glance[$i]-$angle)*$remaining;
+			$this->glance[$i]=abs($gap)<.00002 ? $angle : $angle+$gap;
+		}
+		return true;
+	}
+
+	public function glanceView(Camera $eye,float $alpha): Camera
+	{
+		if($this->glance===self::NEUTRAL_GLANCE && $this->previousGlance===self::NEUTRAL_GLANCE) return $eye;
+		$view=clone $eye;
+		foreach(['yaw','pitch'] as $i=>$axis) $view->$axis+=$this->previousGlance[$i]+$alpha*($this->glance[$i]-$this->previousGlance[$i]);
+		return $view;
+	}
+
 	public function snapshot(): ?array
 	{
 		if($this->phase==='idle' && $this->elapsed===0. && !$this->repelled) return null;
 		return ['phase'=>$this->phase,'flight'=>[$this->elapsed,$this->slow,$this->side,$this->circleRemaining,$this->probeIn,$this->aheadFloor],
-			'direction'=>$this->jet ? array_slice($this->jet->motion(),4,3) : null,'pose'=>$this->jet?->state(),'seeker'=>$this->seeker()]+($this->repelled ? ['repelled'=>true] : []);
+			'direction'=>$this->jet ? array_slice($this->jet->motion(),4,3) : null,'pose'=>$this->jet?->state(),'seeker'=>$this->seeker()]
+			+($this->glance!==self::NEUTRAL_GLANCE ? ['glance'=>$this->glance] : [])+($this->repelled ? ['repelled'=>true] : []);
 	}
 
 	public function resume(?array $s): void
 	{
 		$this->repelled=$s['repelled'] ?? false;
+		$this->previousGlance=$this->glance=$s['glance'] ?? self::NEUTRAL_GLANCE;
 		$this->jet=$this->previous=$this->seeker=null;
 		$this->smoke=$this->carImpact=null;
 		$this->phase='idle'; $this->elapsed=$this->slow=$this->circleRemaining=$this->probeIn=$this->aheadFloor=0.;

@@ -10,7 +10,7 @@ final class SpeedSeeker
 {
 	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 12.;
 	// The F5 normally escorts about 42 m ahead and above the car.
-	private const RETURN_RADIUS = 50., RETURN_SECONDS = .50, BOOST_RAMP = .10;
+	private const RETURN_RADIUS = 50., RETURN_SECONDS = .55, BOOST_RAMP = .20;
 	/** An eligible coast tracks this gap; its last value marks the boosted return in recorded takes. */
 	private ?float $rearPassGap=null;
 	private string $phase = 'mounted';
@@ -67,7 +67,8 @@ final class SpeedSeeker
 				if($this->clock>=.10 && $gap<=self::RETURN_RADIUS && $gap<$this->rearPassGap && $this->behindBumper($car)) {
 					$this->phase='return'; $this->clock=0.;
 					$this->start=[$this->pose['x']-$plane['x'],$this->pose['y']-$plane['y'],$this->pose['z']-$plane['z'],
-						$this->pose['yaw'],$this->pose['pitch'],$this->pose['roll']];
+						$this->pose['yaw'],$this->pose['pitch'],$this->pose['roll'],
+						$this->velocity[0]-$plane['vx'],$this->velocity[1]-$plane['vy'],$this->velocity[2]-$plane['vz']];
 				}
 				$this->rearPassGap=$gap;
 			}
@@ -139,18 +140,30 @@ final class SpeedSeeker
 	/** Arcade return animation: curl from the pickup offset into the moving F5. */
 	private function returnToPlane(float $dt,array $plane,array $beforeCar,array $car,Landscape $land,float $water): ?array
 	{
-		if($this->rearPassGap===null) {
+		$carry=0.;
+		$eased=count($this->start)===9;
+		if($eased) {
+			$t=min(1.,($this->clock+1e-9)/self::RETURN_SECONDS);
+			// Integrate a smoothstep speed ramp, then keep the gained speed through the end of the animation.
+			$time=$t*self::RETURN_SECONDS;
+			$u=min(1.,$time/self::BOOST_RAMP);
+			$distance=self::BOOST_RAMP*$u**3*(1.-.5*$u)+max(0.,$time-self::BOOST_RAMP);
+			$blend=$distance/(self::RETURN_SECONDS-.5*self::BOOST_RAMP);
+			// Carry the closing drift into the first frame. Its contribution fades to zero at the endpoint.
+			$carry=$time-self::RETURN_SECONDS*$blend;
+		} elseif($this->rearPassGap===null) {
 			// A take branched during an older return keeps the animation it was already playing.
 			$t=min(1.,$this->clock/.60);
 			$blend=self::smooth($t);
 		} else {
-			$t=min(1.,($this->clock+1e-9)/self::RETURN_SECONDS);
-			// Ramp up in the first beat, then carry the speed through the F5 impact.
-			$ramp=self::BOOST_RAMP/self::RETURN_SECONDS;
+			// The first boosted takes used a linear 100 ms speed ramp.
+			$t=min(1.,($this->clock+1e-9)/.50);
+			$ramp=.10/.50;
 			$blend=($t<$ramp ? .5*$t*$t/$ramp : $t-.5*$ramp)/(1.-.5*$ramp);
 		}
-		foreach(['x','y','z'] as $i=>$axis) $this->pose[$axis]=$plane[$axis]+(1.-$blend)*$this->start[$i];
-		$this->pose['y']+=3.*sin(M_PI*$t);
+		foreach(['x','y','z'] as $i=>$axis)
+			$this->pose[$axis]=$plane[$axis]+(1.-$blend)*$this->start[$i]+$carry*($this->start[6+$i] ?? 0.);
+		$this->pose['y']+=3.*sin(M_PI*($eased ? $blend : $t));
 		foreach(['yaw','pitch','roll'] as $i=>$axis) {
 			$d=$plane[$axis]-$this->start[3+$i];
 			$this->pose[$axis]=$this->start[3+$i]+$blend*atan2(sin($d),cos($d));
@@ -162,7 +175,7 @@ final class SpeedSeeker
 				// Face the exhaust trail away from the direction the mesh is moving.
 				[$x,$y,$z]=$this->velocity;
 				$turn=atan2($x,$z)-$this->start[3];
-				$tip=self::smooth($this->clock/self::BOOST_RAMP);
+				$tip=self::smooth($this->clock/.10);
 				$this->pose['yaw']=$this->start[3]+$tip*atan2(sin($turn),cos($turn));
 				$this->pose['pitch']=$this->start[4]+$tip*(atan2($y,hypot($x,$z))-$this->start[4]);
 			}

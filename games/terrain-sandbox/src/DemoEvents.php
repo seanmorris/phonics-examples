@@ -65,6 +65,10 @@ final class DemoEvents
 		$view=$this->shown;
 		if($fraction>0. && isset($view['airPatrol']) && ($this->changes[$this->cursor][0] ?? -1)===$index+1) {
 			$next=json_decode($this->changes[$this->cursor][1],true,32,JSON_THROW_ON_ERROR)['airPatrol'] ?? null;
+			if($next!==null && (isset($view['airPatrol']['glance']) || isset($next['glance']))) {
+				$from=$view['airPatrol']['glance'] ?? [0.,0.]; $to=$next['glance'] ?? [0.,0.];
+				foreach($from as $i=>$angle) $view['airPatrol']['glance'][$i]=$angle+$fraction*($to[$i]-$angle);
+			}
 			if(isset($view['airPatrol']['pose'],$next['pose'])) $view['airPatrol']['pose']=AirPatrol::interpolate($view['airPatrol']['pose'],$next['pose'],$fraction);
 			if(isset($view['airPatrol']['seeker']['pose'],$next['seeker']['pose']))
 				$view['airPatrol']['seeker']['pose']=AirPatrol::interpolate($view['airPatrol']['seeker']['pose'],$next['seeker']['pose'],$fraction);
@@ -116,6 +120,7 @@ final class DemoEvents
 			if($v===null) return true;
 			if(!is_array($v) || !array_key_exists('pose',$v)) return false;
 			$legacy=self::vector($v['flight'] ?? null,9);
+			if(isset($v['glance']) && (!self::vector($v['glance'],2) || abs($v['glance'][0])>deg2rad(5.)+.00001 || abs($v['glance'][1])>deg2rad(3.)+.00001)) return false;
 			if(isset($v['repelled']) && (!is_bool($v['repelled']) || !in_array($v['phase'] ?? null,['departure','idle'],true))) return false;
 			if(!$legacy && !self::vector($v['flight'] ?? null,6)) return false;
 			$keys=['x','y','z','yaw','pitch','roll'];
@@ -130,7 +135,8 @@ final class DemoEvents
 					|| (isset($s['velocity']) && !self::vector($s['velocity'],3)) || !array_key_exists('pose',$s)) return false;
 				if(in_array($s['phase'] ?? null,['mounted','reload'],true)) {
 					if($s['pose']!==null || ($s['start'] ?? null)!==[]) return false;
-				} elseif(!in_array($s['phase'] ?? null,['drop','chase','missed','return'],true) || !self::vector($s['start'] ?? null,6)
+				} elseif(!in_array($s['phase'] ?? null,['drop','chase','missed','return'],true)
+					|| !(self::vector($s['start'] ?? null,6) || ($s['phase']==='return' && isset($s['rearPassGap']) && self::vector($s['start'] ?? null,9)))
 					|| !is_array($s['pose']) || count($s['pose'])!==6 ||
 					!self::vector(array_map(fn($k)=>$s['pose'][$k] ?? null,$keys),6)) return false;
 			}
