@@ -318,6 +318,13 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		$model->draw($vehiclePose,
 			$viewCamera, $session->atmosphere, $session->water, $width, $height);
 	}
+	if($session->mode==='car') {
+		$patrol = $events ? ($events['airPatrol']['pose'] ?? null) : $session->airPatrol->pose($shotAlpha);
+		if($patrol !== null) {
+			$model = $models['f5'] ??= new VehicleModel(__DIR__.'/assets/f5/mesh.bin.gz');
+			$model->draw($patrol+['power'=>.65],$viewCamera,$session->atmosphere,$session->water,$width,$height);
+		}
+	}
 	$projectiles = [];
 	if($session->mode === 'jet' && $session->jetView === 'chase')
 	{
@@ -583,6 +590,7 @@ $engine->start(
 				$status['race'] = ($events['race'] ?? []) + $status['race'];
 				$status['delivery'] = $events['delivery'] ?? null;
 				$status['balloons'] = ($events['range'] ?? []) + $status['balloons'];
+				$status['airPatrol'] = $events['airPatrol'] ?? null;
 				$status['beachBalls'] = BeachBalls::positions($events['beachBalls'] ?? []);
 				if($vehiclePose !== null) $status[$sample['mode']] = $vehiclePose;
 			}

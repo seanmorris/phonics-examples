@@ -236,7 +236,7 @@ final class DemoTape
 		$vehicle = array_combine(self::VEHICLE,array_slice($a,14,22));
 		$vehicle['wheelTravel'] = array_slice($a,36,4);
 		$vehicle['lamps'] = array_combine(self::LAMPS,array_slice($a,40,4));
-		return ['events'=>$this->events->at($lo,$a[4],self::MODES[(int)$a[2]]),'world'=>(int)$a[1],'mode'=>self::MODES[(int)$a[2]],'flags'=>(int)$a[3],'time'=>$a[4],
+		return ['events'=>$this->events->at($lo,$a[4],self::MODES[(int)$a[2]],$f ?? 0.),'world'=>(int)$a[1],'mode'=>self::MODES[(int)$a[2]],'flags'=>(int)$a[3],'time'=>$a[4],
 			'azimuth'=>$a[5],'elevation'=>$a[6],'camera'=>$eye,'vehicle'=>$vehicle];
 	}
 }

@@ -42,6 +42,7 @@ final class Session
 	public Watercraft $craft;
 	public Car $car;
 	public TireDust $tireDust;
+	public AirPatrol $airPatrol;
 	/** The car's lamp levels and how far its pop-up headlights stand open. */
 	private CarLamps $lamps;
 	public Jet $jet;
@@ -589,6 +590,7 @@ final class Session
 		$this->camera = new Camera;
 		$this->craft = new Watercraft(gravity: self::DRIVING_GRAVITY);
 		$this->car = new Car;
+		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
 		$this->lamps = new CarLamps;
 		$this->jet = new Jet;
@@ -870,6 +872,10 @@ final class Session
 		if($this->mode !== 'fly' && !($this->mode === 'jet' && $this->jetView === 'cockpit'))
 			$this->duck()->step($this->nearGates($this->camera->position), $this->camera->position,
 				$this->chaseTarget($after));
+		if($this->mode==='car' && $mode==='car' && !$this->network && !isset($this->landscape->recipe()['join'])) {
+			if($this->airPatrol->step($seconds,$after,fn()=>$this->view(1.)[0],$this->aspect,$this->landscape,$this->water->level()))
+				$this->dirty = true;
+		}
 		if($mode !== $this->mode) $this->guardRace();
 		elseif($racing)
 		{
@@ -985,6 +991,7 @@ final class Session
 			if($site === null) { $this->message = 'No safe, dry grid position behind the start gate.'; return; }
 			$this->car->spawn($site,$this->landscape,$water);
 			$this->driver?->restart($site[0],$site[1]);
+			$this->airPatrol = new AirPatrol;
 			$this->tireDust = new TireDust;
 			$this->lamps->reset();
 			$this->chase->board($this->camera,$this->car->state(),$this->landscape);
@@ -1041,6 +1048,7 @@ final class Session
 		$this->delivery = null;
 		$this->releasePin();
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
+		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
 		$this->lamps->reset();
 		$this->chase->board($this->camera,$car->state(),$this->landscape);
@@ -2397,7 +2405,8 @@ final class Session
 		$this->car->translate($shift,$next,$this->water->level());
 		foreach($shift as $axis=>$d) $this->camera->position[$axis]+=$d;
 		$this->chase->resetInterpolation();
-		$this->tireDust=new TireDust;
+		$this->airPatrol = new AirPatrol;
+		$this->tireDust = new TireDust;
 		$this->message="Driving through $child."; $this->dirty=true;
 		if($cpu) $this->startJourneyDriver();
 	}
@@ -2413,6 +2422,7 @@ final class Session
 		$this->cancelPick(); $this->carSearch = null; $this->delivery = null;
 		$this->releasePin();
 		$this->car->spawn($site,$this->landscape,$this->water->level());
+		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
 		$this->lamps->reset();
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
@@ -2462,6 +2472,7 @@ final class Session
 		$this->driver?->restart($site[0],$site[1]);
 		$this->car->recoverToRoad($site,$this->landscape,$water,$flooded);
 		if($this->journeyDriver) $this->startJourneyDriver($this->journeyDriver->exit);
+		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
 		if(!$flooded) $this->chase->board($this->camera,$this->car->state(),$this->landscape);
 		$this->dirty = true;
@@ -2488,6 +2499,7 @@ final class Session
 		}
 		$this->releasePin();
 		$this->car->spawn($site, $this->landscape, $this->water->level());
+		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
 		$this->lamps->reset();
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
@@ -2647,6 +2659,7 @@ final class Session
 		$this->releasePin();
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		$this->airPatrol = new AirPatrol;
 		$this->journeyEntrances = JourneyRoad::entrances($landscape,$this->driveHighways!==null);
 		$this->duck = null;
 		$this->balloons = new BalloonPractice;
@@ -3119,6 +3132,7 @@ final class Session
 			$this->chase->board($this->camera,$this->car->state(),$this->landscape);
 			$this->camera=clone $frame['camera']; $this->camera->fov=(new Camera)->fov;
 			$this->chase->resume($this->camera,$frame['camera']->fov);
+			$this->airPatrol->resume($events['airPatrol'] ?? null);
 			$this->lamps->resume($p['lamps']); $this->tireDust=new TireDust;
 			if(isset($events['delivery'])) $this->delivery=DeliveryRun::resume($events['delivery'],$events['sites']);
 		} elseif($this->mode==='jet') {
@@ -3192,6 +3206,7 @@ final class Session
 				'destination'=>$this->network?->nodes[$this->square]['exits'][$this->journeyDriver->exit]
 					?? $this->landscape->recipe()['join']['destinations'][$this->journeyDriver->exit]['preset'] ?? $this->square,
 				'arrived'=>$this->journeyDriver->arrived] : null,
+			'airPatrol' => $this->mode==='car' ? $this->airPatrol->snapshot() : null,
 			'cpuDriver' => $this->driver?->phase, 'canWatchDriver' => $this->canWatchDriver(),
 			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),'lampAdaptation' => $this->lampAdaptation,
 			'roadPoints' => $this->road,'sketchVisible'=>$this->roadEditor->sketchVisible(),'message' => $this->message,

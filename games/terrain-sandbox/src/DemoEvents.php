@@ -22,6 +22,7 @@ final class DemoEvents
 			'car'=>$s->car->motion(), 'jet'=>$s->jet->motion(), 'craft'=>$s->craft->angularMotion(), default=>[]
 		};
 		$state = ['motion'=>base64_encode(pack('g*',...$dynamics)),
+			'airPatrol'=>$s->mode==='car' ? $s->airPatrol->snapshot() : null,
 			'raceDistance'=>$s->race->distanceFromStart(), 'rangeTimers'=>$s->mode==='jet' ? $s->balloons->timers() : null,
 			'race'=>$race,'target'=>$s->navigationTarget($vehicle),
 			'sites'=>$s->delivery?->beacons($s->time) ?? [],
@@ -46,7 +47,7 @@ final class DemoEvents
 		$this->bytes += strlen($encoded)+24;
 	}
 
-	public function at(int $index, float $clock, string $mode): array
+	public function at(int $index, float $clock, string $mode, float $fraction = 0.): array
 	{
 		if($index < $this->sample || ($this->changes[$this->cursor+256][0] ?? PHP_INT_MAX) <= $index) {
 			$lo=0; $hi=count($this->anchors);
@@ -62,6 +63,10 @@ final class DemoEvents
 		}
 		$this->sample=$index;
 		$view=$this->shown;
+		if($fraction>0. && isset($view['airPatrol']['pose']) && ($this->changes[$this->cursor][0] ?? -1)===$index+1) {
+			$next=json_decode($this->changes[$this->cursor][1],true,32,JSON_THROW_ON_ERROR)['airPatrol']['pose'] ?? null;
+			if($next!==null) $view['airPatrol']['pose']=AirPatrol::interpolate($view['airPatrol']['pose'],$next,$fraction);
+		}
 		if(($view['race']['state'] ?? null) === 'running') $view['race']['time'] += $clock;
 		if($mode === 'jet' && isset($view['range'])) $view['range']['elapsed'] += $clock;
 		return $view;
@@ -104,6 +109,14 @@ final class DemoEvents
 			if($bytes===false || !in_array(strlen($bytes),[0,12,40,80,104],true)) return false;
 			foreach(unpack('g*',$bytes) as $value) if(!is_finite($value) || abs($value)>1e9) return false;
 			return true;
+		}
+		if($key==='airPatrol') {
+			if($v===null) return true;
+			if(!is_array($v) || !self::vector($v['flight'] ?? null,9) || !array_key_exists('pose',$v)) return false;
+			if(($v['phase'] ?? null)==='idle') return $v['pose']===null;
+			if(!in_array($v['phase'] ?? null,['arrival','escort','departure'],true) || !is_array($v['pose'])) return false;
+			$p=$v['pose'];
+			return count($p)===6 && self::vector([$p['x']??null,$p['y']??null,$p['z']??null,$p['yaw']??null,$p['pitch']??null,$p['roll']??null],6);
 		}
 		if($key==='beachBalls') return BeachBalls::valid($v);
 		if($key==='rangeTimers') return $v===null || self::vector($v,7);

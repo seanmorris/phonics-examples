@@ -2584,4 +2584,6 @@ $pauseMenu->menu->back();
 expect($pauseMenu->finish($paused) && !$paused->menu && !$paused->paused, 'Back from the top page resumes');
 $paused->close();
 
+require __DIR__.'/support/air-patrol.php';
+
 echo "Landscape sandbox session: $checks checks passed\n";
