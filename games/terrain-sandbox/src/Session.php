@@ -2872,19 +2872,21 @@ final class Session
 		if($laps === null || (!$dense && count($saved) !== count($circuit->gates())))
 			throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
 
-		$fits = [[null,false]];
+		// Each entry is a gate width, the older pavement fit, and the gate sites chosen before posts were
+		// kept off the pavement beside sharp corners. Every older layout also used those sites.
+		$fits = [[null,false,false],[null,false,true]];
 		$road = $this->gateShapes->kind('road')['size'];
 		if(!$flooded) {
 			$widths = array_values(array_unique(array_column($saved,'width')));
 			$oldWidths = $circuit->featureArea !== null ? [30.,60.] : [$road['default'][0]];
-			if(count($widths) === 1 && in_array($widths[0],$oldWidths,true)) $fits[] = [$widths[0],false];
-			if($circuit->featureArea !== null || in_array($road['width'][0],$widths,true)) $fits[] = [null,true];
+			if(count($widths) === 1 && in_array($widths[0],$oldWidths,true)) $fits[] = [$widths[0],false,true];
+			if($circuit->featureArea !== null || in_array($road['width'][0],$widths,true)) $fits[] = [null,true,true];
 		}
 		$current = null;
-		foreach($fits as [$width,$oldFit]) {
-			try { $layout = $circuit->course($land,$this->gateShapes,$laps,$flooded,$width,$oldFit,$dense); }
+		foreach($fits as [$width,$oldFit,$oldSites]) {
+			try { $layout = $circuit->course($land,$this->gateShapes,$laps,$flooded,$width,$oldFit,$dense,$oldSites); }
 			catch(\RangeException|\OutOfBoundsException) { continue; }
-			if($width === null && !$oldFit) $current = $layout;
+			if($width === null && !$oldFit && !$oldSites) $current = $layout;
 			$expected = $layout->export()['gates'];
 			if(!$flooded && $saved[0]['height'] === $road['default'][1]) {
 				foreach($expected as &$gate) $gate['height'] = $road['default'][1];

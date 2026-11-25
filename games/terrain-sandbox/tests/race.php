@@ -1788,4 +1788,85 @@ $half = NavigationArrow::bearing($drop,$origin,$old,.1);
 $split = NavigationArrow::bearing($drop,$origin,NavigationArrow::bearing($drop,$origin,$old,.05),.05);
 expect(abs($half-M_PI)<1e-9 && abs($half-$split)<1e-9, 'A new target turns along the short arc by elapsed time.');
 
+// A gate whose waypoint falls just before a sharp corner would stand its inside post on the next leg of road, and its
+// pavement fit would run along that leg to the widest gate there is. The gate moves back up the straight instead.
+$cornered = new Session(['worldSize'=>2048,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-12]);
+// An 800 m by 160 m lap with its corners cut back 6 m, as the circuit finder rounds its turns. The lap line is
+// placed so the second gate's waypoint, three eighths of the way round, falls 8 m short of the first corner.
+$length = 4*400. + 4*80. - 48. + 4*hypot(6.,6.);
+$box = [[394.-(3*$length/8+8.),-80.],[394.,-80.],[400.,-74.],[400.,74.],[394.,80.],[-394.,80.],[-400.,74.],[-400.,-74.],[-394.,-80.]];
+$lap = new Circuit($box,-12.,null,[],1e6);
+$grade = CircuitRoad::grade($cornered->landscape,$lap);
+foreach($grade as $_) {}
+foreach($grade->getReturn() as $road) $cornered->landscape->queue($road);
+$cornered->landscape->commit();
+$paved = static function(Session $session, Course $course): int {
+	$count = 0;
+	foreach($course->posts() as [$x,$z]) $count += (int)Car::onPavement($session->landscape,$x,$z);
+	return $count;
+};
+$before = $lap->course($cornered->landscape,$cornered->gateShapes,1,false,legacySites: true);
+$after = $lap->course($cornered->landscape,$cornered->gateShapes,1,false);
+$widest = static fn(Course $course): float => max(array_column($course->export()['gates'],'width'));
+expect($widest($before) >= 55. && $paved($cornered,$before) > 0,
+	'The former siting put a post on the pavement and stretched the gate beside a corner');
+[, $stretched] = $before->export()['gates'];
+[, $moved] = $after->export()['gates'];
+expect($widest($after) < 39. && $paved($cornered,$after) === 0 && $moved['x'] <= 394.-24. && $moved['x'] > 394.-80.
+	&& abs($moved['z']+80.) < 2. && abs($stretched['x']-$moved['x']) > 16.,
+	'A gate beside a sharp corner moves up the straight until both posts stand off the pavement');
+[$gx,$gz] = $lap->gates()[1];
+expect(hypot($gx-$moved['x'],$gz-$moved['z']) < 2. && $lap->waypointAhead(1,$gx-1.,-80.) === null,
+	'Guidance hands off to the gate where it now stands');
+// A circuit saved with the former gate still opens, and takes the gate's new place.
+$file = json_decode($cornered->save(),true);
+$file['circuit'] = ['route'=>$lap->export(),'variant'=>'dry'];
+$file['course'] = $before->export();
+$cornered->load(json_encode($file));
+expect($widest($cornered->course) < 39. && $paved($cornered,$cornered->course) === 0,
+	'A circuit saved with the stretched gate loads with the gate resited');
+$cornered->close();
+
+// The report that found it: Karst Bay, 560 m forward of the opening view, causeways allowed. Checkpoint three sat 8 m
+// before a right-angle turn of the causeway and came out 60 m wide.
+$karst = new Session;
+input($karst,['actions'=>[['type'=>'generate','preset'=>'karst-bay']]]);
+[$kx,$ky,$kz] = $karst->camera->position;
+$karst->camera->position = [$kx+560.*sin($karst->camera->yaw),$ky,$kz-560.*cos($karst->camera->yaw)];
+input($karst,['values'=>['circuitCauseways'=>true],'actions'=>['circuit-find']]);
+while($karst->findingCircuit()) input($karst,[]);
+expect($karst->status()['circuit']['preview'],'Karst Bay offers a causeway circuit by the first tower');
+input($karst,['actions'=>['circuit-dry']]);
+while($karst->preparingRoad()) input($karst,[]);
+$karst->publishLandscape($karst->takeCandidate());
+$gates = $karst->course->export()['gates'];
+expect(count($gates) === 4 && max(array_column($gates,'width')) < 39.5 && $paved($karst,$karst->course) === 0,
+	'Every Karst Bay causeway gate spans one width of road with its posts off the pavement');
+// The causeway turns a right angle with water either side. The CPU racer once ran straight on there. It has to
+// hold the road with the gates as they are now, and as they were with two posts standing on the pavement.
+$causeway = (fn() => $this->circuit)->call($karst);
+foreach([false,true] as $former) {
+	if($former) {
+		input($karst,['actions'=>['cpu-demo']]);
+		$karst->course = $causeway->course($karst->landscape,$karst->gateShapes,1,false,legacySites: true);
+		expect($paved($karst,$karst->course) === 2,'The former siting stood two posts on the causeway');
+	}
+	input($karst,['actions'=>['cpu-demo']]);
+	expect($karst->watchingDriver(),'The CPU racer starts on the causeway circuit');
+	$afloat = 0;
+	for($i = 0; $i < 6000 && $karst->race->state !== 'finished'; $i++) {
+		$karst->step(1/60);
+		$p = $karst->car->state();
+		$sin = sin($p['yaw']); $cos = cos($p['yaw']);
+		$tires = 0;
+		foreach([[Car::WHEELBASE/2,Car::FRONT_TRACK/2],[-Car::WHEELBASE/2,Car::REAR_TRACK/2]] as [$along,$half])
+			foreach([-$half,$half] as $across)
+				$tires += (int)Car::onPavement($karst->landscape,$p['x']+$along*$sin+$across*$cos,$p['z']+$along*$cos-$across*$sin);
+		$afloat += (int)($tires === 0);
+	}
+	expect($karst->race->state === 'finished' && $afloat === 0 && $karst->car->state()['recoveries'] === 0,
+		'The CPU racer laps the Karst Bay causeway with a tire on the pavement throughout');
+}
+$karst->close();
+
 echo "Landscape sandbox race: $checks checks passed\n";

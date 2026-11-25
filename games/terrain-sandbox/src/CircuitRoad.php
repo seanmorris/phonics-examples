@@ -19,8 +19,13 @@ final class CircuitRoad
 	// At 75 mph a 140 m vertical radius asks for 8.0 m/s² of downward acceleration, below gravity.
 	private const MIN_CREST_RADIUS = 140.;
 
-	/** Fit both posts to the painted spline along the original checkpoint crossing plane. */
-	public static function gateSpan(Landscape $land, float $x, float $z, float $yaw, bool $regional = true, ?float &$pavement = null): array
+	/**
+	 * Fit both posts to the painted spline along the original checkpoint crossing plane.
+	 * @param bool $bounded False keeps a span that never met the pavement's edge, as circuits saved before
+	 * November 2026 did beside a sharp corner.
+	 */
+	public static function gateSpan(Landscape $land, float $x, float $z, float $yaw, bool $regional = true, ?float &$pavement = null,
+		bool $bounded = true): array
 	{
 		$pavement = null;
 		$acrossX = cos($yaw);
@@ -33,15 +38,18 @@ final class CircuitRoad
 		$edges = [];
 		foreach([-1,1] as $side) {
 			$distance = $half;
+			$error = 0.;
 			// On a bend the fitted spline can sit to one side of the racing line or cross it at an angle.
 			// Correct along the gate span until the post clears the local pavement edge.
 			for($i = 0; $i < self::EDGE_REFINEMENTS; $i++) {
 				$land->material($x+$side*$distance*$acrossX,$z+$side*$distance*$acrossZ,$offset,$mark);
-				if($mark === null) break;
-				$error = $mark[2] + self::POST_CLEARANCE - abs($mark[0]);
+				$error = $mark === null ? 0. : $mark[2] + self::POST_CLEARANCE - abs($mark[0]);
 				if(abs($error) < .001) break;
 				$distance += $error;
 			}
+			// Beside a sharp corner the nearest pavement is the next leg's. The span runs along it and never
+			// reaches an edge, so stand the post at the road's own width instead.
+			if($bounded && abs($error) > .5) $distance = $half;
 			$edges[] = $side*$distance;
 		}
 		[$left,$right] = $edges;

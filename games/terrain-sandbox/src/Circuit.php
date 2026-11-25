@@ -17,6 +17,8 @@ final class Circuit
 	private array $forkStations = [];
 	private ?array $waypoints = null;
 	private ?array $gatePlan = null;
+	/** Distance along the route of each scored gate, by waypoint index, for the current and the older siting. */
+	private array $gateSites = [];
 	/** Guidance points in travel order for each numbered gate's approach, with zero for the lap line. */
 	private array $guideLegs = [];
 	/** Only the active waypoint needs a pavement fit as the vehicle moves inside its lane. */
@@ -75,6 +77,70 @@ final class Circuit
 		return $this->waypoints ??= $this->stations($this->waypointStations());
 	}
 
+	/**
+	 * Whether a road gate at this distance along the route would stand both posts off the route's pavement, with
+	 * no sharp corner within 24 m either side. Just before or after such a corner the inside post lands on the next
+	 * leg of road, and the pavement fit runs along that leg instead of across this one.
+	 */
+	private function clearSite(float $at): bool
+	{
+		$headings = [];
+		for($offset = -24.; $offset <= 24.; $offset += 8.) {
+			$headings[] = $this->stations([fmod($at+$offset+$this->length,$this->length)])[0][2];
+		}
+		// A turn of more than 30 degrees inside 16 m is tighter than about a 30 m radius.
+		foreach($headings as $i => $heading) {
+			$turn = ($headings[$i+2] ?? $heading) - $heading;
+			if(abs(atan2(sin($turn),cos($turn))) > M_PI/6) return false;
+		}
+		[[$x,$z,$yaw]] = $this->stations([$at]);
+		$reach = CircuitRoad::WIDTH/2 + CircuitRoad::POST_CLEARANCE;
+		$count = count($this->points);
+		foreach([-1,1] as $side) {
+			$px = $x + $side*$reach*cos($yaw);
+			$pz = $z - $side*$reach*sin($yaw);
+			foreach($this->points as $i => [$ax,$az]) {
+				[$bx,$bz] = $this->points[($i+1)%$count];
+				$dx = $bx-$ax; $dz = $bz-$az;
+				$t = max(0., min(1., (($px-$ax)*$dx+($pz-$az)*$dz)/max(1e-12,$dx*$dx+$dz*$dz)));
+				if(hypot($ax+$t*$dx-$px,$az+$t*$dz-$pz) < $reach-.25) return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Where each scored gate stands along the route, keyed by its waypoint. A gate keeps its waypoint's station
+	 * unless that site is not clear. Then it moves the shortest way along the route, up to 64 m and short of the
+	 * neighboring waypoints, to one that is. The lap line stays where the route begins.
+	 * @param bool $legacySites True repeats the sites used before November 2026, which ignored the posts.
+	 */
+	private function gateStations(bool $legacySites = false): array
+	{
+		if(isset($this->gateSites[$legacySites])) return $this->gateSites[$legacySites];
+		$stations = $this->waypointStations();
+		$sites = [];
+		foreach($this->gateWaypointIndices() as $order => $index) {
+			$at = $stations[$index];
+			if($order && !$legacySites && !$this->clearSite($at)) {
+				$earliest = $stations[$index-1];
+				$latest = $stations[$index+1] ?? $this->length;
+				// A fork's gate has to stay beyond its junction, so it only moves onward.
+				$ways = isset($this->forkStations[$index]) ? [1] : [-1,1];
+				for($step = 8.; $step <= 64.; $step += 8.) {
+					foreach($ways as $way) {
+						$moved = $at+$way*$step;
+						if($moved <= $earliest+8. || $moved >= $latest-8. || !$this->clearSite($moved)) continue;
+						$at = $moved;
+						break 2;
+					}
+				}
+			}
+			$sites[$index] = $at;
+		}
+		return $this->gateSites[$legacySites] = $sites;
+	}
+
 	/** Keep roughly one station in three. Prefer a nearby fork and leave room either side of the lap line. */
 	public function gateWaypointIndices(): array
 	{
@@ -102,22 +168,22 @@ final class Circuit
 	}
 
 	/** @return list<array{float,float,float}> X, Z and the heading through each scored gate in race order. */
-	public function gates(): array
+	public function gates(bool $legacySites = false): array
 	{
-		if($this->gatePlan !== null) return $this->gatePlan;
-		$points = $this->waypoints();
-		return $this->gatePlan = array_map(static fn(int $i): array => $points[$i], $this->gateWaypointIndices());
+		if($legacySites) return $this->stations(array_values($this->gateStations(true)));
+		return $this->gatePlan ??= $this->stations(array_values($this->gateStations()));
 	}
 
 	private function guideLeg(int $nextGate): array
 	{
 		$indices = $this->gateWaypointIndices();
-		$stations = $this->waypointStations();
+		// Each leg ends where its gate stands, which can be a little off the gate's waypoint.
+		$stations = array_replace($this->waypointStations(),$this->gateStations());
 		$first = $indices[$nextGate === 0 ? count($indices)-1 : $nextGate-1];
 		$end = $nextGate === 0 ? count($stations) : $indices[$nextGate];
+		$points = $this->stations($stations);
 		$stations[] = $this->length;
 		$from = $stations[$first]; $to = $stations[$end];
-		$points = $this->waypoints();
 		$line = [[$from, $points[$first][0], $points[$first][1]]];
 		foreach($this->vertexStations as $i=>$at) {
 			if($at >= $to) break;
@@ -181,10 +247,11 @@ final class Circuit
 	}
 
 	/** Fit the horizontal crossing plane to the local road, shared by scored gates and unmarked waypoints. */
-	private function roadSpan(Landscape $land, float $x, float $z, float $yaw, bool $legacyPavementFit = false): array
+	private function roadSpan(Landscape $land, float $x, float $z, float $yaw, bool $legacyPavementFit = false,
+		bool $legacySites = false): array
 	{
 		$regional = $this->featureArea !== null;
-		[$x,$z,$width] = CircuitRoad::gateSpan($land,$x,$z,$yaw,$regional,$pavement);
+		[$x,$z,$width] = CircuitRoad::gateSpan($land,$x,$z,$yaw,$regional,$pavement,!$legacySites);
 		$fitted = $pavement !== null && (!$regional || (!$legacyPavementFit && $pavement !== CircuitRoad::WIDTH));
 		return [$x,$z,$width,$fitted];
 	}
@@ -227,9 +294,9 @@ final class Circuit
 
 	/** Place the circuit's gates in one go; placing() spreads the same work out. */
 	public function course(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, ?float $legacyWidth = null,
-		bool $legacyPavementFit = false, bool $legacyDensity = false): Course
+		bool $legacyPavementFit = false, bool $legacyDensity = false, bool $legacySites = false): Course
 	{
-		$placing = $this->placing($landscape, $shapes, $laps, $flooded, $legacyWidth, $legacyPavementFit, $legacyDensity);
+		$placing = $this->placing($landscape, $shapes, $laps, $flooded, $legacyWidth, $legacyPavementFit, $legacyDensity, $legacySites);
 		foreach($placing as $_) {}
 		return $placing->getReturn();
 	}
@@ -246,7 +313,7 @@ final class Circuit
 	 * @return \Generator Returns the Course.
 	 */
 	public function placing(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, ?float $legacyWidth = null,
-		bool $legacyPavementFit = false, bool $legacyDensity = false): \Generator
+		bool $legacyPavementFit = false, bool $legacyDensity = false, bool $legacySites = false): \Generator
 	{
 		if($flooded && $this->floodedLevel === null) throw new \RuntimeException('This circuit has no flooded variant.');
 		$course = new Course($shapes);
@@ -256,12 +323,12 @@ final class Circuit
 		$width = $flooded ? ($regional ? 24. : null) : $legacyWidth;
 		$fitPavement = !$flooded && $legacyWidth === null;
 		$height = $flooded ? null : 2 * $shapes->kind('road')['size']['default'][1];
-		foreach(($legacyDensity ? $this->waypoints() : $this->gates()) as $i => [$x,$z,$yaw])
+		foreach(($legacyDensity ? $this->waypoints() : $this->gates($legacySites)) as $i => [$x,$z,$yaw])
 		{
 			// Keep the original footing over a stock generated road. An edited section uses its own pavement span.
 			$fittedSpan = false;
 			if($fitPavement)
-				[$x,$z,$width,$fittedSpan] = $this->roadSpan($landscape,$x,$z,$yaw,$legacyPavementFit);
+				[$x,$z,$width,$fittedSpan] = $this->roadSpan($landscape,$x,$z,$yaw,$legacyPavementFit,$legacySites);
 			$opening = $legacyPavementFit && $fittedSpan ? max($width,$shapes->kind('road')['size']['width'][0]) : $width;
 			$size = $shapes->fit($kind,$opening,$height,$fittedSpan);
 			$role = $i === 0 ? 'start' : 'checkpoint';
