@@ -103,18 +103,31 @@ expect(isset($afterHit['events']['airPatrol']['seeker']['mount']) && !isset($cop
 $copy->restorePatrolSmoke($rewound,$hitTime+.6,$afterHit);
 expect($rewound->smoke?->active()===true && !$rewound->smoke->showsLodgedSeeker(),'The fast car has left its shell in the fading burst, including on a demo seek.');
 
-// Play three handbrake turns from the same actual launch, using only ordinary driving inputs.
-foreach([[.02,false],[.53,true],[2.,false]] as [$delay,$wins]) {
+// Start each handbrake turn from the same recorded launch, including the old fly-out win.
+foreach([[.02,'KeyD',false],[.53,'KeyD',false],[1.55,'KeyA',false],[3.,'KeyD',false],[3.,'KeyA',true]] as [$delay,$steer,$wins]) {
 	$game=new Session($flat);
 	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$releaseTime+$delay],'demo-take-control'] as $action)
 		$game->input(['actions'=>[$action]],0.,16/9);
-	$lockedAt=$wonAt=null; $missed=false;
+	$lockedAt=$wonAt=$previousPose=null; $missed=$followed=$boosted=false;
 	for($tick=0;$tick<360;$tick++) {
-		if($tick===0 || $tick===24) $game->input(['keys'=>$tick===0 ? ['KeyW'=>1,'KeyD'=>1,'Space'=>1] : ['KeyW'=>1]],0.,16/9);
+		if($tick===0 || $tick===24) $game->input(['keys'=>$tick===0 ? ['KeyW'=>1,$steer=>1,'Space'=>1] : ['KeyW'=>1]],0.,16/9);
 		$game->step(1/60); $game->demo->capture($game);
 		$patrol=$game->airPatrol->snapshot(); $shot=$patrol['seeker'] ?? [];
+		if(($shot['phase'] ?? '')==='chase') $followed=true;
 		if(($shot['phase'] ?? '')==='missed') $missed=true;
-		if(($shot['phase'] ?? '')==='return') $lockedAt ??= $game->demo->duration();
+		if(($shot['phase'] ?? '')==='return') {
+			$at=$shot['pose'];
+			if($lockedAt===null) {
+				$lockedAt=$game->demo->duration();
+				$car=$game->car->state(); $body=VehicleModel::basis($car);
+				$along=($at['x']-$car['x'])*$body[6]+($at['y']-$car['y'])*$body[7]+($at['z']-$car['z'])*$body[8];
+				expect($followed && $missed && $along<=-Car::BODY_REAR,'The lock switches from behind the actual rear bumper after tailing the car.');
+			} elseif(abs($shot['clock']-.10)<1e-6) {
+				$speed=60.*hypot(hypot($at['x']-$previousPose['x'],$at['z']-$previousPose['z']),$at['y']-$previousPose['y']);
+				$boosted=$speed>1.85*$shot['passSpeed'];
+			}
+		}
+		$previousPose=$shot['pose'] ?? null;
 		if(($patrol['repelled'] ?? false) && $wonAt===null) {
 			$wonAt=$game->demo->duration();
 			expect($shot['impact']===[$patrol['pose']['x'],$patrol['pose']['y'],$patrol['pose']['z']] &&
@@ -123,7 +136,7 @@ foreach([[.02,false],[.53,true],[2.,false]] as [$delay,$wins]) {
 	}
 	expect($missed && ($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'Only a drift that brings the loose seeker back near the F5 wins.');
 	if($wins) {
-		expect($wonAt-$lockedAt>.5,'The player sees the return flight before the win.');
+		expect($boosted && abs($wonAt-$lockedAt-.5)<.04,'The visible return accelerates in its first tenth of a second and continues through impact.');
 		$won=$game->airPatrol->snapshot();
 		$away=new AirPatrol; $away->resume($won);
 		$fast=$game->car->state(); $fast['speed']=70.;
@@ -143,6 +156,17 @@ foreach([[.02,false],[.53,true],[2.,false]] as [$delay,$wins]) {
 	$game->close();
 }
 
+// Rotating the car rotates the eligibility plane. An old wing-side pass cannot arm itself after scrubbing.
+foreach([[-4.,true,true],[4.,true,false],[-4.,false,false]] as [$x,$releasedFromRear,$locks]) {
+	$prop=new SpeedSeeker;
+	$pose=['x'=>$x,'y'=>4.,'z'=>0.,'yaw'=>M_PI/2,'pitch'=>0.,'roll'=>0.];
+	$prop->resume(['phase'=>'missed','clock'=>.2,'start'=>array_fill(0,6,0.),'pose'=>$pose,'velocity'=>[1.,0.,0.],'passSpeed'=>1.,
+		($releasedFromRear ? 'rearPassGap' : 'passGap')=>25.]);
+	$car=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>M_PI/2,'speed'=>50.,'drift'=>0.];
+	$plane=array_replace($pose,['x'=>10.,'y'=>8.]);
+	$prop->step(1/60,$car,$plane,'escort',$land,-10.);
+	expect(($prop->state()['phase']==='return')===$locks,'Only a rear release still behind the rotated car can switch to the F5.');
+}
 // Cross the 80 ms release between two ticks. Inspect the endpoints and times actually consumed by the shader.
 foreach([30,60,120] as $hz) {
 	$effects=new FlightTrails; $mount=[0.,.6,-1.7,0.,0.]; $base=['x'=>5.,'y'=>0.,'z'=>0.,'yaw'=>0.,'pitch'=>0.,'roll'=>0.];
@@ -237,7 +261,8 @@ $skid=$driver; $skid['drift']=.3;
 $pilot->step(1/60,$skid,$eyeAt,16/9,$land,-10.);
 $miss=$pilot->seeker();
 expect($miss['phase']==='missed','A real slide immediately shakes the current seeker.');
-$other=new AirPatrol; $other->resume($pilot->snapshot());
+$widePass=$pilot->snapshot(); $widePass['pose']['x']+=180.; // Keep the F5 out of retargeting range on both paths.
+$pilot->resume($widePass); $other=new AirPatrol; $other->resume($widePass);
 for($i=0;$i<60;$i++) {
 	$pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
 	$other->step(1/60,$displaced,$eyeAt,16/9,$land,-10.);

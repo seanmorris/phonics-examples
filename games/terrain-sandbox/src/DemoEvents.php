@@ -122,6 +122,7 @@ final class DemoEvents
 			if(isset($v['seeker'])) {
 				$s=$v['seeker'];
 				if($legacy || !is_array($s) || !self::vector([$s['clock'] ?? null,$s['passSpeed'] ?? null],2)
+					|| (isset($s['rearPassGap']) && (!in_array($s['phase'] ?? null,['missed','return'],true) || !self::vector([$s['rearPassGap']],1) || $s['rearPassGap']<0))
 					|| (isset($s['passGap']) && (($s['phase'] ?? null)!=='missed' || !self::vector([$s['passGap']],1) || $s['passGap']<0))
 					|| (isset($s['mount']) && (!self::vector($s['mount'],5) || !isset($s['impact']) || ($s['phase'] ?? null)!=='reload'))
 					|| (isset($s['carFrames']) && !self::vector($s['carFrames'],12))
