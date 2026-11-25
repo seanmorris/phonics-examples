@@ -84,6 +84,9 @@ final class BakedMesh
 	/** Draw every triangle of the bound mesh with the current program and uniforms. */
 	public function draw(): void { glDrawElements(GL_TRIANGLES, $this->indexCount, GL_UNSIGNED_SHORT, 0); }
 
+	/** Draw an indexed part of the bound mesh, measured in uint16 indices. */
+	public function drawRange(int $first, int $count): void { glDrawElements(GL_TRIANGLES, $count, GL_UNSIGNED_SHORT, 2*$first); }
+
 	/** Release the context-local handles. */
 	public function close(): void
 	{

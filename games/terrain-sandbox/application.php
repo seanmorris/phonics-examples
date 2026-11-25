@@ -25,6 +25,7 @@ use TerrainSandbox\DemoPlayback;
 use TerrainSandbox\NavigationArrow;
 use TerrainSandbox\GateModel;
 use TerrainSandbox\CurveSignModel;
+use TerrainSandbox\JourneySignModel;
 use TerrainPhonics\TerrainAppearance;
 use TerrainSandbox\GroundShadow;
 use TerrainSandbox\Jet;
@@ -65,6 +66,7 @@ $visibleSites = [];
 $shotAlpha = 1.0;
 $gates = new GateModel($session->gateShapes, __DIR__ . '/assets/gates/');
 $curveSigns = new CurveSignModel;
+$journeySigns = new JourneySignModel;
 $courseRevision = -1;
 $course = null;
 $viewCamera = $session->camera;
@@ -288,7 +290,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 
 $shadow = null;
 $grass = null;
-$drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use ($gates, $curveSigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites, &$grass): void {
+$drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use ($gates, $curveSigns, $journeySigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites, &$grass): void {
 	// Grass multiplies the ground the terrain pass drew, so it comes first: signs, shadows and vehicles then cover it.
 	$grassQuality = (int)round($session->settings['grass']);
 	if($grassQuality > 0 && ($style = GrassShells::style($session->grassStyle() ?? '')) !== null)
@@ -300,6 +302,7 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 			$width, $height, $eyeY-$floor);
 	}
 	$curveSigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
+	$journeySigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
 	foreach($visibleSites as $site)
 		if($site['kind'] !== 'smoke') ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
 	// The car's shadow darkens the ground under it, so it draws after the terrain and before the car.
@@ -355,7 +358,7 @@ $liveScene = $scene;
 $playback = null;
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$liveSession, $liveScene, &$playback, &$hiddenGates, $drawOpaque, $gates, $curveSigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
+		$liveSession, $liveScene, &$playback, &$hiddenGates, $drawOpaque, $gates, $curveSigns, $journeySigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
 		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound,
 		$pauseMenu, &$displayTerrain, $journeyAtlas, $atlasResult
@@ -454,7 +457,9 @@ $engine->start(
 				+ ($b['y']-$a['y'])*$forward[1] + ($b['z']-$a['z'])*$forward[2]) <=> 0.);
 		}
 		if(($hadVisibleSmoke || $visibleSites) && $session->time !== $lastRenderedTime) $dirty = true;
-		$dirty = $curveSigns->update($sample ? $playback->terrain : $displayTerrain) || $dirty;
+		$signTerrain = $sample ? $playback->terrain : $displayTerrain;
+		$dirty = $curveSigns->update($signTerrain) || $dirty;
+		$dirty = $journeySigns->update($signTerrain,$session->journeySquare()!==null) || $dirty;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
@@ -497,7 +502,7 @@ $engine->start(
 			if($journeyAtlas->needsChart) $journeyAtlas->capture($scene,$session,$width,$height,$atlasResult);
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
-				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !($events['balloons'] ?? $session->balloons->targets()) ? null
+				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !$journeySigns->count && !($events['balloons'] ?? $session->balloons->targets()) ? null
 					: fn() => $drawOpaque($session,$scene,$sample ? $playback->hiddenGates : $hiddenGates,$events));
 			$trails = match($session->mode) { 'jet' => $session->flightTrails, 'car' => $session->tireDust, default => null };
 			if($trails?->active())
@@ -555,7 +560,8 @@ $engine->start(
 		{
 			$status = $session->status() + ['screenshotView' => $pauseMenu->screenshotView(), 'renderer' => $scene->stats() + ($session->course->count() > 0
 					? ['gateDraws' => $gates->drawn, 'gateMs' => $gates->ms] : ['gateDraws' => 0, 'gateMs' => 0.0])
-					+ ['spotLights' => count($spotLights[0]),'curveSigns'=>$curveSigns->count,'curveSignsDrawn'=>$curveSigns->drawn],
+					+ ['spotLights' => count($spotLights[0]),'curveSigns'=>$curveSigns->count,'curveSignsDrawn'=>$curveSigns->drawn,
+						'journeySigns'=>$journeySigns->count,'journeySignsDrawn'=>$journeySigns->drawn],
 				'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
 				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];
@@ -580,7 +586,7 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$grass, $pauseMenu, $journeyAtlas): void {
+	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, $journeySigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$grass, $pauseMenu, $journeyAtlas): void {
 		$journeyAtlas->cancel();
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');
@@ -593,10 +599,11 @@ $engine->start(
 		$pauseMenu->release();
 		$gates->release();
 		$curveSigns->close();
+		$journeySigns->close();
 		$playback?->close();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $session, &$playback, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$grass, &$dirty, $pauseMenu): void {
+	static function() use ($scene, $session, &$playback, $gates, $curveSigns, $journeySigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$grass, &$dirty, $pauseMenu): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
@@ -611,6 +618,7 @@ $engine->start(
 		$pauseMenu->release();
 		$gates->release();
 		$curveSigns->close();
+		$journeySigns->close();
 		$scene->restore();
 		$playback?->scene->restore();
 		$session->roadEditor->captured = null;
