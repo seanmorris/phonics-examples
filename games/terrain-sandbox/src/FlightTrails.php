@@ -12,6 +12,9 @@ final class FlightTrails
 	private array $smoke = [], $vapor = [], $bursts = [];
 	private float $now = 0.0, $stepStart = 0.0, $density = 0.0;
 	private int $tick = 0;
+	private const FLASH_HOLD = .080;
+	/** Birth tick, birth time and last seated nose position of the car flash. */
+	private ?array $carFlash = null;
 	public int $revision = 0;
 
 	public function active(): bool { return (bool)($this->vapor || $this->smoke || $this->bursts); }
@@ -48,7 +51,7 @@ final class FlightTrails
 	}
 
 	/** Build the same exhaust segments from the arcade prop's visible poses, in live play or a replay. */
-	public function seeker(float $dt, ?array $before, ?array $after, ?array $impact): void
+	public function seeker(float $dt, ?array $before, ?array $after, ?array $impact, ?array $mount, array $car, float $impactAge=0., ?array $previousCar=null): void
 	{
 		if($dt<=0.) return;
 		$this->advance($dt);
@@ -57,7 +60,34 @@ final class FlightTrails
 			$this->exhaust([$before['x'],$before['y'],$before['z']],[$after['x'],$after['y'],$after['z']],
 				array_slice(VehicleModel::basis($before),6),array_slice(VehicleModel::basis($after),6),$dt);
 		}
-		if($impact!==null) $this->burst($impact,$dt);
+		if($impact!==null) {
+			$age=min($dt,max(0.,$impactAge));
+			$point=$impact;
+			if($mount!==null) {
+				$point=SeekerMount::point($mount,$car);
+				if($age>0. && $previousCar!==null) {
+					$old=SeekerMount::point($mount,$previousCar);
+					foreach($old as $i=>$v) $point[$i]+=($v-$point[$i])*$age/$dt;
+				}
+				$this->carFlash=[$this->tick,$this->now-$age,$point];
+			}
+			$this->burst($point,$dt-$age);
+		}
+		if($this->carFlash!==null && $mount!==null) $this->carryFlash(SeekerMount::point($mount,$car));
+	}
+
+	/** Move the existing burst, then freeze its center at the release instant, even midway through a tick. */
+	private function carryFlash(array $nose): void
+	{
+		[$tick,$birth,$from]=$this->carFlash;
+		$start=max($birth,$this->stepStart);
+		$end=min($this->now,$birth+self::FLASH_HOLD);
+		if($end<=$start) return;
+		$t=($end-$start)/($this->now-$start);
+		foreach($nose as $i=>$v) $nose[$i]=$from[$i]+$t*($v-$from[$i]);
+		$this->bursts[$tick][1]=pack('g*',$from[0],$from[1],$from[2],$birth,$nose[0],$nose[1],$nose[2],$end,2.,self::BURST_LIFE,$start);
+		$this->revision++;
+		$this->carFlash=$end<$birth+self::FLASH_HOLD ? [$tick,$birth,$nose] : null;
 	}
 
 	public function step(float $dt, array $before, array $after): void
@@ -117,7 +147,7 @@ final class FlightTrails
 		[$x,$y,$z] = $point;
 		$birth = min($this->now,$this->stepStart+$duration);
 		$this->bursts[$this->tick] ??= [$this->now,''];
-		$this->bursts[$this->tick][1] .= pack('g*',$x,$y,$z,$birth,$x,$y,$z,$birth,2.0,self::BURST_LIFE,1.0);
+		$this->bursts[$this->tick][1] .= pack('g*',$x,$y,$z,$birth,$x,$y,$z,$birth,2.0,self::BURST_LIFE,$birth);
 		$this->revision++;
 	}
 }

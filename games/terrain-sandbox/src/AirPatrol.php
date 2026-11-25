@@ -177,16 +177,16 @@ final class AirPatrol
 	{
 		$before=$this->seeker?->state();
 		$hit=$this->seeker?->step($dt,$car,$plane,$phase,$land,$water,$beforeCar,$eye,$aspect);
-		$this->stepSmoke($dt,$before,$this->seeker?->state());
+		$this->stepSmoke($dt,$before,$this->seeker?->state(),$car,$beforeCar);
 		if(($hit['kind'] ?? null)==='car') $this->carImpact=$hit['point'];
 	}
 
-	public function stepSmoke(float $dt,?array $from,?array $to): void
+	public function stepSmoke(float $dt,?array $from,?array $to,array $car,?array $previousCar): void
 	{
 		$impact=$to['impact'] ?? null;
 		if($impact===($from['impact'] ?? null)) $impact=null;
 		if(!isset($to['pose']) && $impact===null && !$this->smoke) return;
-		($this->smoke ??= new FlightTrails)->seeker($dt,$from['pose'] ?? null,$to['pose'] ?? null,$impact);
+		($this->smoke ??= new FlightTrails)->seeker($dt,$from['pose'] ?? null,$to['pose'] ?? null,$impact,$to['mount'] ?? null,$car,$to['clock'] ?? 0.,$previousCar);
 		if(!$this->smoke->active()) $this->smoke=null;
 	}
 

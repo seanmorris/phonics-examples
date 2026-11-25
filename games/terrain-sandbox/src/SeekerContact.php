@@ -64,7 +64,7 @@ final class SeekerContact
 			$p=$i===$n ? $to : AirPatrol::interpolate($from,$to,$i/$n);
 			if($near) {
 				$c=$i===$n ? $car : AirPatrol::interpolate($oldCar,$car,$i/$n);
-				if(($point=self::car($p,$c))!==null) return ['kind'=>'car','point'=>$point];
+				if(($point=self::car($p,$c))!==null) return ['kind'=>'car','point'=>$point,'mount'=>SeekerMount::atContact($point,$p,$c)];
 			}
 			if($coasting && $p['y']<=self::floor($p,$land,$water,$point)) return ['kind'=>'ground','point'=>$point];
 		}

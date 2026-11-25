@@ -32,7 +32,11 @@ out float pattern;
 out float burstLife;
 void main() {
 	bool dust = style.x > 2.5;
-	vec4 point = dust ? startPoint : mix(startPoint, endPoint, sampleCorner.z);
+	bool burst = style.x > 1.5 && !dust;
+	vec4 point = dust || burst ? startPoint : mix(startPoint, endPoint, sampleCorner.z);
+	// A car flash moves between two centers. Keep its original birth time as the particles expand.
+	if (burst && endPoint.w > style.z)
+		point.xyz = mix(startPoint.xyz, endPoint.xyz, clamp((clock-style.z)/(endPoint.w-style.z),0.,1.));
 	float age = clock - point.w;
 	if (age < 0.0 || age >= style.y) { gl_Position = vec4(2.,2.,2.,1.); return; }
 	float life = age / style.y;
@@ -50,11 +54,11 @@ void main() {
 		opacity = .54*style.z * smoothstep(0.,.07,life) * (1.-smoothstep(.14,1.,life));
 		return;
 	}
-	if (style.x > 1.5) {
+	if (burst) {
 		// The same twelve quads form a central flash and an expanding shell of smoke puffs.
 		float part = floor(sampleCorner.z * 12.);
 		float y = 1.-2.*sampleCorner.z, ring = sqrt(1.-y*y);
-		float angle = part*2.39996 + fract(dot(point.xz,vec2(.037,.013)))*6.283;
+		float angle = part*2.39996 + fract(point.w*1.73)*6.283;
 		vec3 spread = vec3(ring*cos(angle),y,ring*sin(angle)) * (1.-exp(-5.*life))*11.;
 		if (part < .5) spread = vec3(0.);
 		spread.y += 5.*life;

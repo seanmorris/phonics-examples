@@ -35,6 +35,7 @@ use TerrainSandbox\TracerBatch;
 use TerrainSandbox\TrailRenderer;
 use TerrainSandbox\DisplayUnits;
 use TerrainSandbox\Session;
+use TerrainSandbox\SeekerMount;
 
 $app = new Context;
 $music = new BackgroundMusic($app);
@@ -329,6 +330,7 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		}
 		$seeker=$events ? ($events['airPatrol']['seeker'] ?? null) : $session->airPatrol->seeker($shotAlpha);
 		if($patrol!==null && ($seeker['phase'] ?? '')==='mounted') $projectiles[]=Jet::projectileMount($patrol,0);
+		elseif(isset($seeker['mount'])) $projectiles[]=SeekerMount::model($seeker['mount'],$vehiclePose);
 		elseif(isset($seeker['pose'])) {
 			$projectiles[]=$seeker['pose'];
 			$traffic[]=['missile',$seeker['pose']['x'],$seeker['pose']['z']];

@@ -78,7 +78,7 @@ final class DemoPlayback
 		} elseif($dt>0) {
 			if($frame['mode']==='car') {
 				$s->tireDust->step($dt,$frame['events']['contacts'] ?? [],$frame['vehicle']);
-				$s->airPatrol->stepSmoke($dt,$before['events']['airPatrol']['seeker'] ?? null,$frame['events']['airPatrol']['seeker'] ?? null);
+				$s->airPatrol->stepSmoke($dt,$before['events']['airPatrol']['seeker'] ?? null,$frame['events']['airPatrol']['seeker'] ?? null,$frame['vehicle'],$before['vehicle']);
 			}
 			$s->flightTrails?->step($dt,$before['vehicle'],$frame['vehicle']);
 		}

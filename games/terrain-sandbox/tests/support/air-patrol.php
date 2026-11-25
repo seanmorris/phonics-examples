@@ -1,6 +1,6 @@
 <?php
 use TerrainPhonics\{Camera,Landscape};
-use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,FlightTrails,Jet,Session,SpeedSeeker,VehicleModel};
+use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,FlightTrails,Jet,Session,SpeedSeeker,SeekerMount,VehicleModel};
 
 $flat = ['worldSize'=>4096,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-10.];
 $land = new Landscape($flat);
@@ -97,6 +97,24 @@ expect($rewound->smoke?->active()===true,'Seeking into a chase reconstructs the 
 $copy->restorePatrolSmoke($rewound,0.,$copy->frame(0.));
 expect($rewound->smoke===null,'Rewinding before launch clears later smoke.');
 
+$afterHit=$copy->frame($hitTime+.6);
+expect(isset($afterHit['events']['airPatrol']['seeker']['mount']) && !isset($copy->frame($hitTime+1.6)['events']['airPatrol']['seeker']['mount']),
+	'The seated model survives a demo seek and clears after its 1.5 second hold.');
+$copy->restorePatrolSmoke($rewound,$hitTime+.6,$afterHit);
+expect($rewound->smoke?->active()===true,'Seeking past detachment rebuilds the fading burst.');
+
+// Cross the 80 ms release between two ticks. Inspect the endpoints and times actually consumed by the shader.
+foreach([30,60,120] as $hz) {
+	$effects=new FlightTrails; $mount=[0.,.6,-1.7,0.,0.]; $base=['x'=>5.,'y'=>0.,'z'=>0.,'yaw'=>0.,'pitch'=>0.,'roll'=>0.];
+	$effects->seeker(1/$hz,null,null,[5.,.6,-1.7],$mount,$base);
+	for($tick=1;$tick<=ceil(.15*$hz);$tick++) {
+		$car=$base; $car['x']+=100.*$tick/$hz;
+		$effects->seeker(1/$hz,null,null,null,$mount,$car);
+		$b=array_values(unpack('g*',$effects->instances()));
+		expect(count($b)===11 && abs($b[4]-(5.+100.*min(.080,$tick/$hz)))<.0001 &&
+			abs($b[7]-$b[3]-min(.080,$tick/$hz))<.00001,"A single flash follows the nose for precisely 80 ms at $hz Hz.");
+	}
+}
 // A sudden move of the formation station can command a turn but cannot relocate the airframe.
 $driver=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>0.,'drift'=>0.,'speed'=>72.];
 $eye=new Camera; $eye->yaw=M_PI; $eye->pitch=.1;
@@ -230,10 +248,24 @@ foreach(['car','ground'] as $object) {
 		'z'=>$c['z']-9.,'yaw'=>0.,'roll'=>0.,'pitch'=>$object==='car' ? 0. : -.5];
 	$shot['velocity']=$object==='car' ? [0.,0.,90.] : [0.,-22.,40.];
 	$game->airPatrol->resume($hitState); unset($shot);
-	$hits=0; $flashes=0; $peak=0.; $sawSmoke=false;
+	$hits=0; $flashes=0; $peak=0.; $sawSmoke=false; $lodged=false; $cleared=false;
 	for($i=0;$i<600;$i++) {
 		$game->step(1/60);
 		if($game->airPatrol->carImpact!==null) $hits++;
+		$effect=$game->airPatrol->seeker();
+		if(isset($effect['mount'])) {
+			expect($object==='car' && $effect['phase']==='reload' && $effect['pose']===null,'Only a direct hit leaves an inert projectile.');
+			if($effect['clock']>.5) {
+				$pose=$game->car->state(); $mount=$effect['mount']; $body=VehicleModel::basis($pose);
+				$m=SeekerMount::model($mount,$pose);
+				foreach(['x','y','z'] as $k=>$axis) {
+					$tip=$m[$axis]+2.*$m['basis'][6+$k];
+					$expected=$pose[$axis]+$mount[0]*$body[$k]+$mount[1]*$body[3+$k]+$mount[2]*$body[6+$k];
+					expect(abs($tip-$expected)<1e-6,'The model rotates around its buried nose during the tumble.');
+				}
+				$lodged=true;
+			}
+		} elseif($lodged) $cleared=true;
 		$peak=max($peak,$game->car->state()['y']-$c['y']);
 		$burstCount=0;
 		foreach(str_split($game->airPatrol->smoke?->instances() ?? '',FlightTrails::STRIDE) as $bytes) {
@@ -243,6 +275,7 @@ foreach(['car','ground'] as $object) {
 		}
 		$flashes=max($flashes,$burstCount);
 	}
+	expect($object==='ground' || ($lodged && $cleared),'The inert shell lasts through the flash and then clears.');
 	expect($sawSmoke && $flashes===1 && !$game->airPatrol->smoke,"A $object hit emits one burst and its exhaust and flash expire.");
 	expect($game->mode==='car' && $game->car->state()['motion']==='driving' &&
 		($object==='car' ? $hits===1 && $peak>3. : $hits===0 && $peak<.5),

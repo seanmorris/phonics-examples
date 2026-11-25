@@ -224,7 +224,7 @@ final class DemoTape
 			$f=$t===$time ? $frame : $this->frame($t);
 			$dt=$f['time']-$last['time'];
 			if($dt>0. && $dt<=.25 && $f['world']===$last['world'] && $f['mode']==='car' && $last['mode']==='car')
-				$patrol->stepSmoke($dt,$last['events']['airPatrol']['seeker'] ?? null,$f['events']['airPatrol']['seeker'] ?? null);
+				$patrol->stepSmoke($dt,$last['events']['airPatrol']['seeker'] ?? null,$f['events']['airPatrol']['seeker'] ?? null,$f['vehicle'],$last['vehicle']);
 			else $patrol->smoke=null;
 			if($t===$time) break;
 			$last=$f;

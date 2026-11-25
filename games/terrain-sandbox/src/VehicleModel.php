@@ -264,7 +264,7 @@ final class VehicleModel
 	 */
 	public function draw(array $pose, Camera $camera, Atmosphere $sky, Water $water, int $width, int $height): void
 	{
-		$basis = self::basis($pose);
+		$basis = $pose['basis'] ?? self::basis($pose);
 		$p = $this->program;
 		self::light($p, $camera, $sky, $water, $width, $height, $pose['y']);
 		if(isset($pose['power']) && $this->controls)

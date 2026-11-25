@@ -16,7 +16,7 @@ final class SpeedSeeker
 	private array $start = [];
 	/** Two smoothed copies of the driver's animation frame, retained when branching a demo mid-pass. */
 	private array $carFrames = [];
-	private ?array $pose = null, $previous = null;
+	private ?array $pose = null, $previous = null, $mount = null;
 
 	public function step(float $dt,array $car,?array $plane,string $patrol,Landscape $land,float $water,?array $beforeCar=null,?callable $eye=null,float $aspect=1.): ?array
 	{
@@ -24,6 +24,7 @@ final class SpeedSeeker
 		$this->clock+=$dt;
 		$drifting=abs($car['drift'])>=self::SLIP && ($car['motion'] ?? 'driving')==='driving';
 		if($this->phase==='reload') {
+			if($this->clock>=1.5) $this->mount=null;
 			if($this->clock>=self::RELOAD_SECONDS) { $this->phase='mounted'; $this->clock=0.; $this->impact=null; }
 			return null;
 		}
@@ -55,7 +56,7 @@ final class SpeedSeeker
 			foreach(['x','y','z'] as $i=>$axis) $this->pose[$axis]+=$this->velocity[$i]*$dt;
 			$hit=SeekerContact::first($this->previous,$this->pose,$beforeCar ?? $car,$car,true,$land,$water);
 			if($this->clock>=6. || $hit!==null) {
-				$this->impact=$hit['point'] ?? null;
+				$this->impact=$hit['point'] ?? null; $this->mount=$hit['mount'] ?? null;
 				$this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[]; $this->pose=$this->velocity=null;
 			}
 			return $hit;
@@ -104,7 +105,7 @@ final class SpeedSeeker
 				($p['z']-$this->previous['z'])/$dt];
 		}
 		if($this->previous!==null && ($hit=SeekerContact::first($this->previous,$p,$beforeCar ?? $car,$car,false,$land,$water))!==null) {
-			$this->impact=$hit['point']; $this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[]; $this->pose=$this->velocity=null;
+			$this->impact=$hit['point']; $this->mount=$hit['mount'] ?? null; $this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[]; $this->pose=$this->velocity=null;
 			return $hit;
 		}
 		$this->pose=$p;
@@ -166,7 +167,7 @@ final class SpeedSeeker
 	{
 		$p=$this->pose;
 		if($alpha<1. && $this->previous!==null && $p!==null) $p=AirPatrol::interpolate($this->previous,$p,$alpha);
-		return ['phase'=>$this->phase,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
+		return ['phase'=>$this->phase,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
 	}
 
 	public function resume(array $s): void
@@ -179,7 +180,7 @@ final class SpeedSeeker
 			if($this->phase==='chase') $this->clock=0.;
 			if($this->phase==='drop') $this->clock*=self::DROP_SECONDS/2.4;
 		}
-		$this->impact=$s['impact'] ?? null;
+		$this->impact=$s['impact'] ?? null; $this->mount=$s['mount'] ?? null;
 		$this->velocity=$s['velocity'] ?? ($this->phase==='missed' ? self::motionAlongPose($this->pose,$this->passSpeed) : null);
 	}
 }
