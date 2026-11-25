@@ -127,14 +127,16 @@ range('exits',()=>{
 	gantryPanel(left,-4.08,7.8,16);
 	mounts.exits=gantryPanel(right,4.08,7.8,16);
 });
-range('fork',()=>{
+function roadsidePanel(rect) {
 	const r=.095,z=.04,b=-1.4,t=3.35,none=[0,0,1,1];
 	quad([[-r,b,z-r],[r,b,z-r],[r,t,z-r],[-r,t,z-r]],[0,0,-1],none,tag.hardware);
 	quad([[r,b,z+r],[-r,b,z+r],[-r,t,z+r],[r,t,z+r]],[0,0,1],none,tag.hardware);
 	quad([[-r,b,z+r],[-r,b,z-r],[-r,t,z-r],[-r,t,z+r]],[-1,0,0],none,tag.hardware);
 	quad([[r,b,z-r],[r,b,z+r],[r,t,z+r],[r,t,z-r]],[1,0,0],none,tag.hardware);
-	panel(fork,0,1.60,2.65,-.085);
-});
+	panel(rect,0,1.60,2.65,-.085);
+}
+range('fork',()=>roadsidePanel(fork));
+range('wrongWay',()=>roadsidePanel(wrongWay));
 
 const header=Buffer.alloc(16), indexBytes=Buffer.alloc(2*indices.length);
 [vertices.length,indices.length,width,height].forEach((v,i)=>header.writeUInt32LE(v,i*4));

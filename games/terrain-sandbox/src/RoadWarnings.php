@@ -9,6 +9,7 @@ final class RoadWarnings
 {
 	public const CURVE=2, HAIRPIN=3, SWERVE=4, KINK=5, MERGE=6, HILL=7, DIP=8;
 	public const LEAD=400*DisplayUnits::FOOT;
+	private const WRONG_WAY_MARGIN=.25*JourneySigns::MILE;
 	private const POLE_SPACING=100*DisplayUnits::FOOT;
 	private const FACE_WIDTH=5.30; // Keep separate turn diamonds clear of one another.
 	private const PAIR_DISTANCE=200*DisplayUnits::FOOT;
@@ -16,14 +17,14 @@ final class RoadWarnings
 	private array $sections=[], $starts=[], $features=[], $posts=[];
 	private float $length=0.;
 	private bool $closed=false;
-	private string $entrance;
+	private string $entrance, $exit;
 
-	private function append(array $road,int $direction): void
+	private function append(array $road,int $direction,int $id): void
 	{
 		$stations=$road['_road']['stations'];
 		$length=$stations[array_key_last($stations)];
 		$this->starts[]=$this->length;
-		$this->sections[]=[$road,$direction,$length];
+		$this->sections[]=[$road,$direction,$length,$id];
 		$this->length+=$length;
 	}
 
@@ -40,10 +41,9 @@ final class RoadWarnings
 	}
 
 	/** Join editable road chunks in geometric order, including chunks authored in reverse. */
-	public static function sites(Landscape $land): \Generator
+	private static function paths(array $roads): \Generator
 	{
-		$roads=array_filter($land->roads(),static fn($r)=>$r['material']==='road');
-		$nodes=$ends=$seen=$approaches=$incoming=$paths=[]; $roots=[];
+		$nodes=$ends=$seen=$paths=[]; $roots=[];
 		foreach($roads as $id=>$road) {
 			$p=$road['points'];
 			$a=JourneySigns::node($p[0]); $b=JourneySigns::node($p[array_key_last($p)]);
@@ -69,16 +69,24 @@ final class RoadWarnings
 			$forward=$votes<=>0 ?: $sections[0][1];
 			if($forward<0) { $sections=array_reverse($sections); [$first,$last]=[$last,$first]; }
 			$path=new self;
-			foreach($sections as [$roadId,$orientation]) $path->append($roads[$roadId],$orientation*$forward);
+			foreach($sections as [$roadId,$orientation]) $path->append($roads[$roadId],$orientation*$forward,$roadId);
 			if($path->length<.01) continue;
-			$path->entrance=$first;
+			$path->entrance=$first; $path->exit=$last;
 			$path->closed=$last===$first && count($nodes[$first])===2;
-			if(!$path->closed) {
-				$approaches[$first][]=[$path,-1];
-				$approaches[$last][]=[$path,1];
-				$incoming[$last][]=$path;
-			}
 			$paths[]=$path;
+		}
+		return $paths;
+	}
+
+	public static function sites(Landscape $land): \Generator
+	{
+		$roads=array_filter($land->roads(),static fn($r)=>$r['material']==='road');
+		$paths=yield from self::paths($roads);
+		$approaches=$incoming=[];
+		foreach($paths as $path) if(!$path->closed) {
+			$approaches[$path->entrance][]=[$path,-1];
+			$approaches[$path->exit][]=[$path,1];
+			$incoming[$path->exit][]=$path;
 		}
 		foreach($paths as $path) yield from $path->survey();
 
@@ -128,6 +136,92 @@ final class RoadWarnings
 			}
 			foreach($approaches as $travel=>$approach) yield from $path->sharedPoles($approach,$travel,$roads,$turnPosts);
 		}
+	}
+
+	/** Red roadside signs fill gaps between the wrong-way faces already mounted on gantries. */
+	public static function wrongWaySigns(Landscape $land,array $gantries=[]): \Generator
+	{
+		$roads=array_filter($land->roads(),static fn($r)=>$r['material']==='road');
+		$paths=yield from self::paths($roads);
+		$pending=$outgoing=$queue=$since=$done=$sites=[];
+		foreach($paths as $i=>$path) {
+			$outgoing[$path->entrance][]=$i;
+			$pending[$path->exit]=($pending[$path->exit] ?? 0)+1;
+		}
+		foreach($paths as $i=>$path) if(!isset($pending[$path->entrance])) $queue[]=$i;
+		// Start at real entrances, then seed any remaining cyclic components. Each common tail is signed once.
+		$seed=0;
+		while($queue || $seed<count($paths)) {
+			$i=$queue ? array_pop($queue) : $seed++;
+			if(isset($done[$i])) continue;
+			$done[$i]=true; $path=$paths[$i];
+			$distance=yield from $path->repeatWrongWay($land,$roads,$gantries,$since[$path->entrance] ?? 0.,$sites);
+			$end=$path->exit;
+			// Keep the longer unsigned approach within the spacing limit when two routes rejoin.
+			$since[$end]=max($since[$end] ?? 0.,$distance);
+			if(--$pending[$end]===0) array_push($queue,...($outgoing[$end] ?? []));
+			yield;
+		}
+		return $sites;
+	}
+
+	private function repeatWrongWay(Landscape $land,array $roads,array $gantries,float $since,array &$sites): \Generator
+	{
+		$spacing=3.*JourneySigns::MILE;
+		$last=-min($since,$spacing);
+		$fixed=[];
+		foreach($this->sections as $i=>[, $direction,$length,$id]) foreach($gantries[$id] ?? [] as $station)
+			$fixed[]=$this->starts[$i]+($direction>0 ? $station : $length-$station);
+		sort($fixed,SORT_NUMERIC);
+		// On a lap the final gap crosses the start line. Distribute its posts like every other gap.
+		if($this->closed) {
+			if(!$fixed && $this->length<$spacing) return 0.;
+			$last=$fixed ? end($fixed)-$this->length : 0.;
+			if(!$fixed) {
+				$count=max(1,(int)round($this->length/$spacing));
+				for($i=0;$i<$count;$i++) {
+					yield from $this->wrongWayPost(($i+.5)*$this->length/$count,$land,$roads,$sites);
+					yield;
+				}
+				return 0.;
+			}
+		}
+		foreach($fixed as $at) {
+			$gap=$at-$last;
+			// Allow a quarter mile of leeway so a gantry just past the three-mile mark serves both purposes.
+			$intervals=max(1,(int)ceil($gap/($spacing+self::WRONG_WAY_MARGIN)));
+			for($i=1;$i<$intervals;$i++) {
+				$station=$last+$gap*$i/$intervals;
+				yield from $this->wrongWayPost($this->closed ? $station : max(0.,$station),$land,$roads,$sites);
+				yield;
+			}
+			$last=$at;
+		}
+		if($this->closed) return 0.;
+		for($due=$last+$spacing;$due<=$this->length+1.e-6;$due=($placed ?? $due)+$spacing) {
+			$placed=yield from $this->wrongWayPost($due,$land,$roads,$sites);
+			if($placed!==null) $last=$placed;
+			yield;
+		}
+		return max(0.,$this->length-$last);
+	}
+
+	private function wrongWayPost(float $station,Landscape $land,array $roads,array &$sites): \Generator
+	{
+		// Search both shoulders near the planned station if other pavement covers the normal footing.
+		for($offset=0.;$offset<=self::WRONG_WAY_MARGIN;$offset+=12.) {
+			foreach($offset===0. ? [0.] : [-$offset,$offset] as $shift) {
+				$at=$station+$shift;
+				if(!$this->closed && ($at<0. || $at>$this->length+1.e-6)) continue;
+				$pose=$this->shoulder($at,-1,$roads);
+				if($pose===null) continue;
+				[$x,$z,$tx,$tz]=$pose;
+				$sites[]=['kind'=>'wrongWay','position'=>[$x,$land->height($x,$z),$z],'heading'=>[$tx,$tz]];
+				return $at;
+			}
+			yield;
+		}
+		return null;
 	}
 
 	/** Vertical separation from a tangent launch at top speed, after gravity acts across the measured span. */
@@ -371,14 +465,21 @@ final class RoadWarnings
 			if($along<$minimum || ($turnPosts && $along>$hazard)) continue;
 			if(!$this->closed && ($along<-.01 || $along>$this->length+.01)) continue;
 			$at=$travel<0 ? $this->length-$along : $along;
-			$p=$this->pose($at); [$x,,$z]=$p['position']; [$tx,$tz]=$p['heading']; $tx*=$travel; $tz*=$travel;
-			foreach([1,-1] as $shoulder) {
-				$offset=$shoulder*($p['width']/2.+2.5); $sx=$x-$tz*$offset; $sz=$z+$tx*$offset;
-				if(($turnPosts && !self::clearFooting($sx,$sz,$symbol,$turnPosts)) || Edits::onRoad($sx,$sz,$roads)) continue;
-				$wrapped=$this->closed ? fmod(fmod($along,$this->length)+$this->length,$this->length) : $along;
-				return ['at'=>$wrapped,'lead'=>$hazard-$along,'slack'=>$along-$minimum,
-					'pose'=>[$sx,$sz,$tx,$tz],'symbol'=>$symbol];
-			}
+			$pose=$this->shoulder($at,$travel,$roads,$symbol,$turnPosts);
+			if($pose===null) continue;
+			$wrapped=$this->closed ? fmod(fmod($along,$this->length)+$this->length,$this->length) : $along;
+			return ['at'=>$wrapped,'lead'=>$hazard-$along,'slack'=>$along-$minimum,'pose'=>$pose,'symbol'=>$symbol];
+		}
+		return null;
+	}
+
+	private function shoulder(float $at,int $travel,array $roads,int $symbol=0,array $turnPosts=[]): ?array
+	{
+		$p=$this->pose($at); [$x,,$z]=$p['position']; [$tx,$tz]=$p['heading']; $tx*=$travel; $tz*=$travel;
+		foreach([1,-1] as $side) {
+			$offset=$side*($p['width']/2.+2.5); $sx=$x-$tz*$offset; $sz=$z+$tx*$offset;
+			if(($turnPosts && !self::clearFooting($sx,$sz,$symbol,$turnPosts)) || Edits::onRoad($sx,$sz,$roads)) continue;
+			return [$sx,$sz,$tx,$tz];
 		}
 		return null;
 	}

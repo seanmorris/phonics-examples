@@ -21,7 +21,7 @@ final class JourneySigns
 	public static function layout(Landscape $land,bool $journeyStage=false): \Generator
 	{
 		$recipe=$land->recipe(); $join=$recipe['join'] ?? null;
-		if(!$join && !$journeyStage) return [];
+		if(!$join && !$journeyStage) return yield from RoadWarnings::wrongWaySigns($land);
 		$half=($join['span'] ?? $recipe['worldSize'])*.5;
 		$squares=$join ? JoinedTerrain::origins($join['span'],count($join['destinations'])) : [[0.,0.]];
 		$roads=$land->roads();
@@ -36,7 +36,7 @@ final class JourneySigns
 			yield;
 		}
 
-		$sites=$forks=[];
+		$sites=$forks=$gantries=[];
 		// Start a run on each entrance and each outgoing arm. Shared arrivals can feed one
 		// fork, but a fork ends the incoming run, so successive splits never multiply routes.
 		foreach($starts as $root=>$a) {
@@ -55,9 +55,12 @@ final class JourneySigns
 				yield;
 			}
 
-			$at=static function(float $distance) use($run,$roads): array {
+			$at=static function(float $distance,?array &$gantries=null) use($run,$roads): array {
 				foreach(array_reverse($run,true) as $i=>$start)
-					if($distance >= $start) return self::pose($roads[$i],$distance-$start);
+					if($distance >= $start) {
+						if($gantries!==null) $gantries[$i][]=$distance-$start;
+						return self::pose($roads[$i],$distance-$start);
+					}
 				return self::pose($roads[array_key_first($run)],0.);
 			};
 			if(count($next)>1) {
@@ -66,7 +69,7 @@ final class JourneySigns
 					$post=yield from self::forkPost($land,$roads,$next,$ends,$outgoing,$at($length));
 					if($post!==null) $sites['fork:'.$b]=$post;
 				}
-				$pose=$at(max(0.,$length-self::MILE/2));
+				$pose=$at(max(0.,$length-self::MILE/2),$gantries);
 				$sites['exits:'.self::node($pose['position'])]=['kind'=>'exits']+$pose;
 			}
 			foreach($visits as $square=>$ranges) {
@@ -88,14 +91,14 @@ final class JourneySigns
 					foreach($junctions as $junction) if($junction>$station) {
 						$goal=$junction; $caption='junction'; break;
 					}
-					$pose=$at($station);
+					$pose=$at($station,$gantries);
 					$sites['mile:'.self::node($pose['position'])]=['kind'=>'mile','square'=>$square,
 						'fraction'=>$fraction,'remaining'=>$goal-$station,'caption'=>$caption]+$pose;
 				}
 			}
 			yield;
 		}
-		return array_values($sites);
+		return [...array_values($sites),...(yield from RoadWarnings::wrongWaySigns($land,$gantries))];
 	}
 
 	/** A single outgoing road continues the same arm, including across a join from an unrelated side road. */

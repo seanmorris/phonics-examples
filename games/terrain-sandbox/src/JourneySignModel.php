@@ -28,7 +28,7 @@ final class JourneySignModel
 			$changed=$this->count>0;
 			$this->sites=$this->mileMarkers=[]; $this->count=$this->drawn=0;
 			$this->land=$land; $this->revision=$land->revision(); $this->stage=$journeyStage;
-			$this->build=isset($land->recipe()['join']) || $journeyStage ? JourneySigns::layout($land,$journeyStage) : null;
+			$this->build=JourneySigns::layout($land,$journeyStage);
 		}
 		if($this->build===null) return $changed;
 		$until=hrtime(true)+800_000;
@@ -83,7 +83,7 @@ final class JourneySignModel
 			[$x,$y,$z]=$site['position']; $kind=$site['kind'];
 			if(($x-$eye[0])**2+($y-$eye[1])**2+($z-$eye[2])**2>1800.**2) continue;
 			$mount=$this->art['mounts'][$kind] ?? null;
-			$span=$site['width']+2.; $scale=1.; $lift=0.; $r=2.; $top=4.25;
+			$span=($site['width'] ?? 0.)+2.; $scale=1.; $lift=0.; $r=2.; $top=4.25;
 			if($mount) {
 				$scale=min(1.,$span/$mount['fitWidth']);
 				$span=max($span,$mount['span']*$scale);
@@ -106,10 +106,10 @@ final class JourneySignModel
 			}
 			[$tx,$tz]=$site['heading'];
 			if(!isset($site['feet'])) {
-				$ground=$kind==='fork' ? $y : $this->land->height($x,$z);
+				$ground=$mount===null ? $y : $this->land->height($x,$z);
 				$offset=$span*.5+.4;
 				$this->sites[$i]['ground']=$ground;
-				$this->sites[$i]['feet']=$kind==='fork' ? [0.,0.] : [
+				$this->sites[$i]['feet']=$mount===null ? [0.,0.] : [
 					$this->land->height($x+$tz*$offset,$z-$tx*$offset)-$ground,
 					$this->land->height($x-$tz*$offset,$z+$tx*$offset)-$ground];
 			}

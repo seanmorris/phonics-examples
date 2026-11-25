@@ -45,7 +45,8 @@ road($land,$a,$bend,34.);
 road($land,$s,[$edge,110.,$south[1]]);
 $land->commit();
 $signs=layout($land);
-expectSign(count($signs)===11,'Three traversed landscapes have nine mile markers, a paired exit gantry and one fork post.');
+$standalone=kinds($signs,'wrongWay'); $total=count($signs);
+expectSign($standalone && $total===11+count($standalone),'Three traversed landscapes have nine mile markers, an exit gantry, a fork post and roadside reverse warnings.');
 foreach([$west,$north,$south] as $i=>$square) {
 	$miles=array_values(array_filter(kinds($signs,'mile'),fn($site)=>$site['square']===$i));
 	expectSign(array_column($miles,'fraction')===[.25,.5,.75],'Every traversed landscape has three quarter marks.');
@@ -77,11 +78,11 @@ $visible=$land->previewWithoutRoads([0]);
 expectSign(!kinds(layout($visible),'fork') && !kinds(layout($visible),'exits'),'Hiding a diverging arm removes both fork instructions.');
 $cache=new JourneySignModel;
 for($i=0;$i<1000 && !$cache->count;$i++) $cache->update($land);
-expectSign($cache->count===11 && !$cache->update($land),'An idle frame reuses the completed layout.');
+expectSign($cache->count===$total && !$cache->update($land),'An idle frame reuses the completed layout.');
 $dots=array_map(static fn($sign)=>[$sign['position'][0],$sign['position'][2]],kinds($signs,'mile'));
 expectSign(count($dots)===9 && $cache->mileMarkers()===$dots,'Every mileage gantry has exactly one map dot at its real road position.');
-for($i=0;$i<1000;$i++) if($cache->update($restored) && $cache->count===11) break;
-expectSign($cache->count===11,'Opening the same saved journey again rebuilds its markers at the same revision.');
+for($i=0;$i<1000;$i++) if($cache->update($restored) && $cache->count===$total) break;
+expectSign($cache->count===$total,'Opening the same saved journey again rebuilds its markers at the same revision.');
 $restored->close();
 $land->undo(); $cache->update($land);
 expectSign($cache->count===0,'Undo clears obsolete signs from the renderer before the next draw.');
@@ -124,12 +125,65 @@ $gore=[3000.,100.,0.]; $finish=[8192.,100.,0.];
 road($terminal,[-8192.,100.,-1900.],$gore);
 road($terminal,[-8192.,100.,1900.],$gore);
 road($terminal,$gore,$finish); $terminal->commit();
-expectSign(!layout($terminal),'A standalone sandbox road does not acquire highway signage.');
+$plain=layout($terminal);
+expectSign($plain && count(kinds($plain,'wrongWay'))===count($plain),'Long standalone roads carry periodic reverse warnings.');
 $merged=layout($terminal,true);
 expectSign(!kinds($merged,'fork') && !kinds($merged,'exits'),'Two origins and one destination is a rejoin, so it has no exit warning.');
-expectSign(count($merged)===5 && count(array_filter($merged,fn($s)=>$s['caption']==='junction'))===4,
+expectSign(count(kinds($merged,'mile'))===5 && count(array_filter($merged,fn($s)=>($s['caption'] ?? '')==='junction'))===4,
 	'Both incoming routes count down to the rejoin and share the single mile marker on their common tail.');
 $terminal->close();
+// Three-mile stations follow the pavement through a bend and across a reversed, out-of-order edit.
+$mile=JourneySigns::MILE;
+$highway=new Landscape($form+['worldSize'=>16384]);
+$a=[-7000.,0.,-3000.]; $b=[-4500.,0.,-3000.]; $c=[-4500.,0.,2600.]; $d=[3000.,0.,2600.];
+road($highway,$c,$b); road($highway,$c,$d); road($highway,$a,$b); $highway->commit();
+$posts=kinds(layout($highway),'wrongWay');
+expectSign(count($posts)===3,'A 9.69-mile highway has three reverse warnings.');
+foreach($posts as $i=>$post) {
+	$at=3.*($i+1)*$mile;
+	[$x,,$z]=$post['position']; [$tx,$tz]=$post['heading'];
+	if(!$i) expectSign(abs($x-(-4500.+16.5))<.01 && abs($z-(-3000.+$at-2500.))<.01 && $tz<-.999,
+		'The three-mile sign faces reverse traffic on its right shoulder after the first bend.');
+	else expectSign(abs($x-(-4500.+$at-8100.))<.01 && abs($z-(2600.-16.5))<.01 && $tx<-.999,
+		'The six- and nine-mile faces follow the tangent after the second bend.');
+	expectSign(!Edits::onRoad($x,$z,$highway->roads()),'The reverse sign footing clears the pavement.');
+}
+$hidden=$highway->previewWithoutRoads([0]);
+expectSign(count(kinds(layout($hidden),'wrongWay'))===1,'Hiding a road breaks the continuous distance at the missing link.');
+$hidden->close(); $highway->close();
+
+// Both shorter arms inherit the two miles before the fork. Their common tail needs one copy.
+$network=new Landscape($form+['worldSize'=>16384]);
+$f=[-6500.+2*$mile,0.,0.]; $j=[$f[0]+2*$mile,0.,0.];
+road($network,[-6500.,0.,0.],$f);
+foreach([-1.,1.] as $side) {
+	$mid=[$f[0]+$mile,0.,$side*.75*$mile];
+	road($network,$f,$mid); road($network,$mid,$j);
+}
+road($network,$j,[$j[0]+3*$mile,0.,0.]); $network->commit();
+$posts=kinds(layout($network),'wrongWay');
+$arms=array_filter($posts,fn($s)=>abs($s['position'][2])>.5*$mile);
+$tail=array_values(array_filter($posts,fn($s)=>$s['position'][0]>$j[0]));
+expectSign(count($posts)===3 && count($arms)===2 && count($tail)===1 && abs($tail[0]['position'][0]-($j[0]+1.5*$mile))<.01,
+	'Each arm gets the three-mile sign, then one six-mile sign serves both routes after the rejoin.');
+$network->close();
+
+// The wraparound gap is the same three miles as the gap through the middle of the lap.
+$lap=new Landscape($form+['worldSize'=>16384]);
+$a=[0.,0.,0.]; $b=[2*$mile,0.,0.]; $c=[2*$mile,0.,$mile]; $d=[0.,0.,$mile];
+foreach([[$a,$b],[$b,$c],[$c,$d],[$d,$a]] as [$from,$to]) road($lap,$from,$to);
+road($lap,[-5000.,0.,0.],[-4900.,0.,0.]); $lap->commit();
+$posts=kinds(layout($lap),'wrongWay');
+expectSign(count($posts)===2 && abs($posts[0]['position'][0]-1.5*$mile)<.01 && abs($posts[1]['position'][0]-.5*$mile)<.01
+	&& $posts[0]['heading'][0]<-.999 && $posts[1]['heading'][0]>.999,'A six-mile circuit has two signs facing against the lap.');
+$lap->close();
+
+$gantries=new Landscape($form+['worldSize'=>16384]);
+road($gantries,[-8192.,0.,0.],[0.,0.,0.]); road($gantries,[0.,0.,0.],[8192.,0.,0.]); $gantries->commit();
+$signs=layout($gantries,true);
+expectSign(count(kinds($signs,'mile'))===3 && !kinds($signs,'wrongWay'),'Existing gantry backs every 2.55 miles already cover this stage.');
+$gantries->close();
+
 expectSign(JourneySigns::legend(JourneySigns::MILE)===['1','MILE']
 	&& JourneySigns::legend(0.46*JourneySigns::MILE)===['0.5','MILES']
 	&& JourneySigns::legend(19.6*JourneySigns::MILE)===['20','MILES'],'Mileage lettering handles sub-mile values, rounding and singular units.');
