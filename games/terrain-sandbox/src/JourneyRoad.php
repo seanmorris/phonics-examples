@@ -272,14 +272,39 @@ final class JourneyRoad
 		return [$road,...array_values($changes)];
 	}
 
+	/** For each road record, map each reachable eastern exit to the next connected record on that route. */
+	public static function outwardLinks(array $roads,array $r): array
+	{
+		$half=$r['worldSize']/2;
+		$parents=$sources=$next=$queue=[];
+		foreach($roads as $i=>$road) {
+			if($road['material']!=='road') continue;
+			$p=$road['points']; $last=end($p);
+			$sources[$i]=JourneySigns::node($p[0]);
+			$parents[JourneySigns::node($last)][]=$i;
+			if(abs($last[0]-$half)>1.) continue;
+			$slot=count($r['join']['destinations'] ?? [])===2 && $last[2]>0. ? 1 : 0;
+			$queue[]=[$i,$slot,null];
+		}
+		// Each record gets at most one successor per reachable exit, also for edited networks with cycles.
+		for($j=0;$j<count($queue);$j++) {
+			[$i,$slot,$child]=$queue[$j];
+			if(array_key_exists($slot,$next[$i] ?? [])) continue;
+			$next[$i][$slot]=$child;
+			foreach($parents[$sources[$i]] ?? [] as $parent) $queue[]=[$parent,$slot,$i];
+		}
+		return $next;
+	}
+
 	/** Resolve the start and first fork from the edited network. World coordinates can change when a knot is moved. */
 	public static function entrances(Landscape $land,bool $journeyStage=false): array
 	{
 		if(!$journeyStage && !isset($land->recipe()['join'])) return [];
 		$roads = $land->roads();
 		$west = $incoming = null;
-		foreach($roads as $road) {
-			if($west === null || $road['points'][0][0] < $west['points'][0][0]) $west = $road;
+		$exits=self::outwardLinks($roads,$land->recipe());
+		foreach($roads as $id=>$road) {
+			if((!$exits || isset($exits[$id])) && ($west === null || $road['points'][0][0] < $west['points'][0][0])) $west = $road;
 			$end = $road['points'][array_key_last($road['points'])];
 			$branches = 0;
 			foreach($roads as $next) if($next['points'][0] == $end) $branches++;

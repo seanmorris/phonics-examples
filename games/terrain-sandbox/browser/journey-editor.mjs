@@ -92,7 +92,8 @@ function markup(options) {
 	<div class="journey-footer"><div class="journey-actions"><button type="button" data-action="journey-build">Build and drive</button>
 	<button type="button" data-edit-flight hidden>Return to free flight</button>
 	<button type="button" data-action="journey-drive" hidden>Drive from west edge</button>
-	<button type="button" data-action="journey-fork" hidden>Drive from fork</button></div>
+	<button type="button" data-action="journey-fork" hidden>Drive from fork</button>
+	<button type="button" data-action="journey-cpu" hidden>Watch journey driver</button></div>
 	<progress data-journey-meter aria-label="Journey build progress" hidden></progress>
 	<p class="terrain-note" data-journey-progress role="status"></p></div></div>`;
 }
@@ -492,6 +493,9 @@ function mount(frame, canvas, signal, roadMap) {
 			const button=el('[data-action='+key+']');
 			button.hidden=!driveSelection(fork);
 		}
+		const cpu=el('[data-action=journey-cpu]');
+		cpu.hidden=!state?.journeyDriver && !(state?.canWatchJourney && driveSelection(false));
+		cpu.textContent=state?.journeyDriver ? 'Take the wheel' : 'Watch journey driver';
 	}
 	function refresh() {
 		driveButtons();
@@ -566,7 +570,8 @@ function mount(frame, canvas, signal, roadMap) {
 		if(previous?.mode!==next.mode)el('[data-edit-flight]').hidden=next.mode==='fly';
 		if(previous?.generation!==next.generation || previous?.journeyArrival!==next.journeyArrival || oldPlan!==plan)renderNetwork();
 		lastRoadMap=roads;
-		if(!tab.hidden && (wasBusy!==busy || previous?.preparing!==next.preparing || previous?.picking!==next.picking)) driveButtons();
+		if(!tab.hidden && (wasBusy!==busy || previous?.preparing!==next.preparing || previous?.picking!==next.picking
+			|| previous?.canWatchJourney!==next.canWatchJourney || Boolean(previous?.journeyDriver)!==Boolean(next.journeyDriver))) driveButtons();
 		if(!tab.hidden && (shared || roadsChanged || wasBusy!==busy || previous?.generation!==next.generation || previous?.revision!==next.revision
 			|| previous?.journeyReady!==next.journeyReady || previous?.journeySurveying!==next.journeySurveying
 			|| previous?.settings.waterLevel!==next.settings.waterLevel || previous?.settings.waterColor!==next.settings.waterColor

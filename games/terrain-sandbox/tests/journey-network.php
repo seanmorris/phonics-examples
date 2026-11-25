@@ -2,11 +2,39 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
-use TerrainPhonics\JoinedTerrain;
-use TerrainSandbox\{JourneyAtlas,JourneyNetwork,JourneyRoad,Session};
+use TerrainPhonics\{JoinedTerrain,Landscape};
+use TerrainSandbox\{Car,JourneyAtlas,JourneyDriver,JourneyNetwork,JourneyRoad,JourneySigns,Session};
 
 function networkCheck(bool $ok,string $message): void { if(!$ok) throw new RuntimeException($message); }
 function settleNetwork(Session $s): void { while($s->preparingRoad()) $s->input([],0.,1.,9.); }
+
+// A short section of genuine journey pavement exercises both fork choices with the normal tires and gearbox.
+$roadRecipe=JourneyRoad::recipe('rolling-prairie',['rolling-prairie','rolling-prairie'],16384);
+$testLand=new Landscape($roadRecipe); $edge=$testLand->recipe()['worldSize']/2;
+foreach([[[$edge-650.,80.,0.],[$edge-450.,80.,0.]],
+	[[$edge-450.,80.,0.],[$edge-320.,80.,-25.],[$edge-170.,80.,-100.],[$edge,80.,-100.]],
+	[[$edge-450.,80.,0.],[$edge-320.,80.,25.],[$edge-170.,80.,100.],[$edge,80.,100.]]] as $points)
+	$testLand->queue(['type'=>'road','width'=>28.,'shoulder'=>18.,'points'=>$points]);
+$testLand->commit();
+foreach([0,1] as $exit) {
+	$car=new Car;
+	$site=$car->checkedSite($testLand,-10.,$edge-600.,0.,M_PI/2,[]);
+	$car->spawn($site,$testLand,-10.);
+	$driver=JourneyDriver::board($testLand,$car->state(),$exit);
+	networkCheck($driver?->exit===$exit,'Both exits are reachable before the fork.');
+	for($i=0;$i<3600 && !$driver->arrived;$i++) {
+		[$pedal,$steer,$handbrake,$boost]=$driver->controls($car->state());
+		networkCheck($car->step(1/60,$pedal,$steer,$testLand,-10.,$handbrake,[],$boost),'CPU stays on supported ground.');
+		if(($i%30)===0) {
+			$p=$car->state();
+			networkCheck(Car::onPavement($testLand,$p['x'],$p['z']),'CPU follows the pavement through the fork.');
+		}
+	}
+	$p=$car->state();
+	networkCheck($driver->arrived && $p['x']>$edge-35. && abs($p['z']-($exit ? 100. : -100.))<4.,
+		'The car physically reaches the selected exit.');
+}
+$testLand->close();
 
 $plan="A rolling-prairie -> B,C\nB limestone -> E,F\nC coast -> F,G\nE mountain\nF river-valley -> H\nG canyon\nH rolling-prairie";
 $chain='';
@@ -178,14 +206,20 @@ networkCheck($s->status()['journeyWaiting'] && $held['speed']>0.,'A late window 
 for($i=0;$i<90;$i++) $s->step(1/60);
 networkCheck($s->car->state()===$held,'The car cannot roll into the void while the next window loads.');
 $shift=(new JourneyNetwork($plan))->translation('A','C',$land->recipe());
+networkCheck(JourneyDriver::board($land,$held,0)?->exit===1,'Beyond the fork the CPU follows the arm the car is already on.');
+$s->input(['actions'=>['journey-cpu']],0.,1.,0.);
 settleNetwork($s);
 $after=$s->car->state();
 networkCheck($s->status()['journeySquare']==='C' && $s->status()['journeyExits']===['F','G']
 	&& !$s->status()['journeyWaiting'] && $after['speed']===$held['speed']
 	&& abs($after['x']-$held['x']-$shift[0])<1.e-6 && $s->landscape->material($after['x'],$after['z'])==='road',
 	'The input clock resumes C on the same pavement with both onward destinations.');
+networkCheck($s->watchingJourney() && in_array($s->status()['journeyDriver']['destination'],['F','G'],true),
+	'The CPU takes the next fork decision on the new stage without resetting the moving car.');
+$s->input(['actions'=>['journey-take-wheel']],0.,1.);
+networkCheck(!$s->watchingJourney() && $s->mode==='car' && $s->car->state()===$after,'Taking control preserves the live car and speed.');
 $mid=$s->save();
-foreach([['B','journey-fork'],['G','journey-drive'],['C','journey-drive']] as [$stage,$action]) {
+foreach([['B','journey-fork'],['G','journey-cpu'],['C','journey-drive']] as [$stage,$action]) {
 	$s->input(['actions'=>[['type'=>$action,'stage'=>$stage,'generation'=>$s->generation]]],0.,1.);
 	settleNetwork($s);
 	$car=$s->car->state();
@@ -194,6 +228,27 @@ foreach([['B','journey-fork'],['G','journey-drive'],['C','journey-drive']] as [$
 		"The selected stage $stage supplies the requested entrance.");
 	$s->step(1/60);
 	if($stage==='G') {
+		networkCheck($s->watchingJourney() && $s->status()['journeyDriver']['destination']==='G','Watch boards the inspected terminal stage.');
+		// Board a short distance before the actual eastern edge, and let the regular physics stop the car.
+		$s->input(['actions'=>['journey-take-wheel']],0.,1.);
+		$east=$s->landscape->recipe()['worldSize']/2; $site=null;
+		foreach($s->landscape->roads() as $road) {
+			$end=end($road['points']);
+			if(abs($end[0]-$east)>1.) continue;
+			$length=end($road['_road']['stations']);
+			$pose=JourneySigns::pose($road,$length-120.);
+			[$x,,$z]=$pose['position']; [$tx,$tz]=$pose['heading'];
+			$site=$s->car->checkedSite($s->landscape,$s->water->level(),$x,$z,atan2($tx,$tz),[]);
+			if($site) break;
+		}
+		networkCheck($site!==null,'The terminal highway has a dry final approach.');
+		$s->car->spawn($site,$s->landscape,$s->water->level());
+		$s->input(['actions'=>['journey-cpu'],'keys'=>['KeyA'=>true,'KeyS'=>true]],0.,1.);
+		for($i=0;$i<2400 && !$s->status()['journeyDriver']['arrived'];$i+=30)
+			for($j=0;$j<30;$j++) $s->step(1/60);
+		$parked=$s->car->state();
+		networkCheck($s->status()['journeyDriver']['arrived'] && $parked['x']>$east-42. && $parked['x']<$east-10. && abs($parked['speed'])<.31,
+			'The CPU drives to the destination and brakes before the map edge.');
 		$s->load($s->save());
 		networkCheck($s->journeySquare()==='G','A terminal map can be saved and reopened.');
 	}

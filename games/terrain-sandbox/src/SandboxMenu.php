@@ -149,7 +149,9 @@ final class SandboxMenu
 
 		if($session->watchingDriver() || $session->canWatchDriver())
 			$items['cpu-demo'] = $act($session->watchingDriver() ? 'Stop CPU demo' : 'Watch CPU racer', 'cpu-demo');
-		if(!$session->watchingDriver() && in_array($session->mode, ['fly', 'car'], true)) $items['delivery'] = $act('Package run', 'delivery');
+		if($session->watchingJourney()) $items['journey-cpu']=$act('Take the wheel','journey-take-wheel');
+		elseif($session->canWatchJourney()) $items['journey-cpu']=$act('Watch journey driver','journey-cpu');
+		if(!$session->watchingDriver() && !$session->watchingJourney() && in_array($session->mode, ['fly', 'car'], true)) $items['delivery'] = $act('Package run', 'delivery');
 
 		if($session->mode === 'jet')
 		{

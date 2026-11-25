@@ -66,6 +66,7 @@ final class Session
 	private array $vehicles = [];
 	private ?int $demoEntity = null;
 	private ?CircuitDriver $driver = null;
+	private ?JourneyDriver $journeyDriver = null;
 	public ?DeliveryRun $delivery = null;
 	private float $aspect = 16/9;
 	/** Dimensions of each gate kind, for placement, crossings, car collision and drawing. */
@@ -508,7 +509,7 @@ final class Session
 	private ?JourneyHighways $highways = null, $driveHighways = null;
 	private ?array $journeyBuildProgress = null;
 	private ?string $boardingStage = null;
-	private bool $boardingFork = false;
+	private bool $boardingFork = false, $boardingCPU = false;
 	private array $journeyEntrances = [], $journeyViews = [], $preparedViews = [];
 	private ?string $journeyBuildPhase = null;
 	private ?JourneyNetwork $network = null, $buildingNetwork = null;
@@ -681,7 +682,8 @@ final class Session
 				$this->surfaceLayers = $this->materialPreset = $this->paint = null;
 				$this->switchPresetLook($previous,$next->recipe()['preset']);
 				$this->preparing = false;
-				$this->driveJourney($this->boardingFork);
+				$this->driveJourney($this->boardingFork,$this->boardingCPU);
+				$this->boardingCPU=false;
 				$this->boardingStage=null; $this->boardingFork=false;
 			}
 			if($wasPicking) $this->advancePick($pickMs);
@@ -781,7 +783,8 @@ final class Session
 		{
 			$before = $this->car->state();
 			$this->chase->look = $this->lookAngle();
-			[$pedal,$steer,$handbrake,$boost] = $this->driver?->controls($before,$seconds,$this->race->state === 'finished') ?? [
+			[$pedal,$steer,$handbrake,$boost] = $this->journeyDriver?->controls($before)
+				?? $this->driver?->controls($before,$seconds,$this->race->state === 'finished') ?? [
 				$this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
 				$this->blend('KeyA', 'KeyD', $this->pad['x']),
 				$this->held('Space') === 1 || ($this->pad['buttons'] & self::PAD_A) !== 0,
@@ -911,6 +914,23 @@ final class Session
 
 	public function watchingDriver(): bool { return $this->driver !== null; }
 
+	public function watchingJourney(): bool { return $this->journeyDriver!==null; }
+
+	public function canWatchJourney(): bool
+	{
+		return isset($this->journeyEntrances['west']) && in_array($this->mode,['fly','car'],true)
+			&& $this->driver===null && $this->delivery===null && !$this->course->count()
+			&& !$this->preparing && !$this->picking && $this->roadWork===null && $this->carSearch===null;
+	}
+
+	private function startJourneyDriver(?int $preferred=null): void
+	{
+		$this->journeyDriver=JourneyDriver::board($this->landscape,$this->car->state(),$preferred ?? random_int(0,1));
+		if($this->journeyDriver) $this->paused=false;
+		$this->message=$this->journeyDriver ? 'CPU driving the highway.' : 'Drive onto the onward highway to start the journey driver.';
+		$this->dirty=true;
+	}
+
 	public function canWatchDriver(): bool
 	{
 		return $this->mode === 'fly' && $this->circuitVariant === 'dry' && $this->circuit !== null
@@ -1028,6 +1048,7 @@ final class Session
 
 	private function stopDemo(): void
 	{
+		$this->journeyDriver=null;
 		if($this->driver === null) return;
 		$this->systems->registry->destroy($this->demoEntity);
 		$this->demoEntity = null;
@@ -1047,6 +1068,7 @@ final class Session
 	 */
 	private function guardRace(): void
 	{
+		if($this->journeyDriver && ($this->mode!=='car' || $this->course->count() || $this->delivery)) $this->journeyDriver=null;
 		if($this->driver !== null && ($this->mode !== 'car' || $this->circuit !== $this->driver->circuit
 			|| $this->course !== $this->driver->course || $this->course->revision !== $this->driver->revision))
 			$this->stopDemo();
@@ -1585,7 +1607,7 @@ final class Session
 	private function action(mixed $action): void
 	{
 		if(!is_array($action)) $action = ['type' => $action];
-		if($this->preparing && in_array($action['type'] ?? '', ['undo','redo','generate','load','road-apply','journey-build','journey-drive','journey-fork'], true))
+		if($this->preparing && in_array($action['type'] ?? '', ['undo','redo','generate','load','road-apply','journey-build','journey-drive','journey-fork','journey-cpu'], true))
 		throw new \RuntimeException('Preparing the previous terrain edit. Please wait.');
 		if($this->picking && in_array($action['type'] ?? '', ['undo','redo','road-apply','save'], true))
 		{ $this->message = 'Finding the ground for the previous click. Please wait.'; return; }
@@ -1765,20 +1787,28 @@ final class Session
 					}
 				})();
 				break;
-			case 'journey-drive': case 'journey-fork':
+			case 'journey-take-wheel':
+				if($this->journeyDriver) {
+					$this->journeyDriver=null; $this->dirty=true;
+					$this->message='You have the wheel.';
+				}
+				break;
+			case 'journey-drive': case 'journey-fork': case 'journey-cpu':
 				if(isset($action['generation']) && $action['generation']!==$this->generation) break;
-				$fork=$type==='journey-fork';
+				$fork=$type==='journey-fork'; $cpu=$type==='journey-cpu';
+				if($cpu && (!$this->canWatchJourney() || $this->journeyDriver)) break;
 				$stage=$action['stage'] ?? $this->square;
 				if($stage!==null && (!isset($this->network->nodes[$stage]) || ($fork && count($this->network->nodes[$stage]['exits'])!==2))) break;
 				if($stage===$this->square) {
-					if(isset($this->journeyEntrances[$fork?'fork':'west'])) $this->driveJourney($fork);
+					if($cpu && $this->mode==='car') $this->startJourneyDriver();
+					elseif(isset($this->journeyEntrances[$fork?'fork':'west'])) $this->driveJourney($fork,$cpu);
 					break;
 				}
 				$this->discardOnward();
 				$highways=$this->driveHighways;
 				$next=new Landscape($highways->recipe($stage));
 				$this->buildingNetwork=$this->network;
-				$this->boardingStage=$stage; $this->boardingFork=$fork;
+				$this->boardingStage=$stage; $this->boardingFork=$fork; $this->boardingCPU=$cpu;
 				$this->preparing=true;
 				$this->message="Opening stage {$stage}…";
 				$this->roadWork=(function() use($next,$highways,$stage) {
@@ -1882,7 +1912,7 @@ final class Session
 				$this->download = $this->save(); break;
 			case 'load': $this->load((string)($action['json'] ?? '')); break;
 			case 'delivery':
-				if($this->watchingDriver()) break;
+				if($this->watchingDriver() || $this->journeyDriver) break;
 				if($this->delivery !== null)
 				{
 					$this->delivery = null;
@@ -2350,6 +2380,7 @@ final class Session
 			if(abs($x)<= $next->recipe()['worldSize']/2 && abs($z)<=$next->recipe()['worldSize']/2 && $next->material($x,$z)==='road')
 				$views[]=[$x,$z,$relief];
 		}
+		$cpu=$this->journeyDriver!==null;
 		$props=$this->balloons->beachBalls->translated($shift,$next->recipe()['worldSize']/2);
 		$this->replace($next,$this->driveHighways);
 		$this->balloons->beachBalls->restore($props);
@@ -2363,9 +2394,10 @@ final class Session
 		$this->chase->resetInterpolation();
 		$this->tireDust=new TireDust;
 		$this->message="Driving through $child."; $this->dirty=true;
+		if($cpu) $this->startJourneyDriver();
 	}
 
-	private function driveJourney(bool $fork): void
+	private function driveJourney(bool $fork,bool $cpu=false): void
 	{
 		$pose = $this->journeyEntrances[$fork ? 'fork' : 'west'] ?? null;
 		$site = $pose === null ? null : $this->car->checkedSite($this->landscape,$this->water->heightRange()[1],
@@ -2382,6 +2414,7 @@ final class Session
 		$this->chase->board($this->camera,$this->car->state(),$this->landscape);
 		$this->message = $fork ? 'Choose either branch at the fork.' : ($this->square===null
 			? 'Drive east to the landscape junction.' : "Driving from the west edge of {$this->square}.");
+		if($cpu) $this->startJourneyDriver();
 		$this->dirty = true;
 	}
 
@@ -2423,6 +2456,7 @@ final class Session
 		if($site === null) return false;
 		$this->driver?->restart($site[0],$site[1]);
 		$this->car->recoverToRoad($site,$this->landscape,$water,$flooded);
+		if($this->journeyDriver) $this->startJourneyDriver($this->journeyDriver->exit);
 		$this->tireDust = new TireDust;
 		if(!$flooded) $this->chase->board($this->camera,$this->car->state(),$this->landscape);
 		$this->dirty = true;
@@ -2709,7 +2743,7 @@ final class Session
 		} catch(\Throwable $error) {
 			$this->roadWork = null;
 			$this->journeyBuildPhase = null; $this->journeyBuildProgress=null;
-			$this->boardingStage=null; $this->boardingFork=false;
+			$this->boardingStage=null; $this->boardingFork=$this->boardingCPU=false;
 			$this->buildingNetwork = null;
 			$this->preparing = false;
 			$this->roadEditor->applyResult($error->getMessage());
@@ -2738,6 +2772,7 @@ final class Session
 	 */
 	public function publishLandscape(Landscape $landscape): void
 	{
+		$this->journeyDriver=null;
 		$this->discardOnward();
 		$this->circuitSearch = null; $this->circuitPreview = null;
 		if($this->course->count() === 0) $this->roadGateCommit = null;
@@ -3146,6 +3181,10 @@ final class Session
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(), 'beachBalls'=>BeachBalls::positions($this->balloons->beachBalls->states()),
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,'inputTheme' => $this->inputTheme,'hint' => $this->hint(),
+			'canWatchJourney'=>$this->canWatchJourney(), 'journeyDriver'=>$this->journeyDriver ? [
+				'destination'=>$this->network?->nodes[$this->square]['exits'][$this->journeyDriver->exit]
+					?? $this->landscape->recipe()['join']['destinations'][$this->journeyDriver->exit]['preset'] ?? $this->square,
+				'arrived'=>$this->journeyDriver->arrived] : null,
 			'cpuDriver' => $this->driver?->phase, 'canWatchDriver' => $this->canWatchDriver(),
 			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),'lampAdaptation' => $this->lampAdaptation,
 			'roadPoints' => $this->road,'sketchVisible'=>$this->roadEditor->sketchVisible(),'message' => $this->message,

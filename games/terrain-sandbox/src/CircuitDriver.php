@@ -7,11 +7,12 @@ use TerrainPhonics\Landscape;
 /** Drives a closed circuit with the same four controls available to a player. */
 final class CircuitDriver
 {
+	use DriverControls;
+
 	private const TOP_SPEED = Car::TOP_SPEED_MPH * Car::MPS_PER_MPH;
 	private array $line, $speedLimit = [], $sight = [];
 	private array $bends = [], $nextBend = [];
 	private int $count, $segment;
-	private bool $serviceBraking = false;
 	private ?int $activeBend = null;
 	private float $spacing, $phaseTime = 0.;
 	public string $phase = 'Driving';
@@ -103,7 +104,6 @@ final class CircuitDriver
 	}
 
 	private function wrap(int $i): int { return ($i % $this->count + $this->count) % $this->count; }
-	private static function angle(float $a): float { return atan2(sin($a), cos($a)); }
 
 	/** Group same-direction turns and put the apex halfway through their accumulated heading change. */
 	private function planBends(array $curvatures): void
@@ -284,10 +284,7 @@ final class CircuitDriver
 		$dx = $ax + $t*($bx - $ax) - $car['x'];
 		$dz = $az + $t*($bz - $az) - $car['z'];
 		// Pure pursuit from the travel direction, which can differ from the nose during a slide.
-		$bearing = atan2($dx,$dz);
-		$error = self::angle($bearing - ($car['yaw'] - $car['drift']));
-		$wheel = atan2(2 * Car::WHEELBASE * sin($error), max(1., hypot($dx, $dz)));
-		$steer = max(-1., min(1., -$wheel / Car::steeringLimit($speed)));
+		[$steer,$bearing,$error] = self::pursuit($car,$dx,$dz);
 		$limit = $this->limitAt($at);
 		// Point the sliding chassis into the outgoing line. Keep the correction tied to the
 		// pursuit point so a car wide of its line still steers back toward pavement.
@@ -298,7 +295,6 @@ final class CircuitDriver
 		// Feed in throttle as the bend opens during the next fraction of a second.
 		$exitLimit = $this->limitAt($at + .18*$speed/$this->spacing);
 		$limit += max(0., min(1.6, $exitLimit - $limit));
-		$pedal = max(-1., min(1., .8 + ($limit - $speed)*.50));
 		if($this->phase === 'Handbraking') {
 			// Turn the nose toward the exit while the rear wheels are locked, easing off as it lines up.
 			if($error*$noseError > 0.) {
@@ -307,9 +303,6 @@ final class CircuitDriver
 			}
 		}
 		$boost = $this->phase === 'Boosting';
-		if($boost || $speed < $limit+.9) $this->serviceBraking = false;
-		elseif($speed > $limit+3.1) $this->serviceBraking = true;
-		if(!$this->serviceBraking) $pedal = max(0.,$pedal);
-		return [$boost ? 1. : $pedal, $steer, $this->phase === 'Handbraking', $boost];
+		return [$this->pedal($speed,$limit,$boost), $steer, $this->phase === 'Handbraking', $boost];
 	}
 }

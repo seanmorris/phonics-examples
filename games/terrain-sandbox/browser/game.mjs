@@ -585,7 +585,8 @@ export function activate({module, canvas, session, services})
 				journeyProgress.textContent = 'Preparing the route before the drive…';
 				push({type, west: value('west'), destinations, span: Number(value('span')), ...network});
 			}
-			else if(type === 'journey-drive' || type === 'journey-fork') {
+			else if(type === 'journey-cpu' && latest?.journeyDriver) push('journey-take-wheel');
+			else if(type === 'journey-drive' || type === 'journey-fork' || type === 'journey-cpu') {
 				const selection = planner.driveSelection(type === 'journey-fork');
 				if(selection) push({type, ...selection});
 			}
@@ -1239,6 +1240,11 @@ export function activate({module, canvas, session, services})
 			}
 			else if(state.car?.motion === 'overturned') status.textContent = 'Car overturned. Recovering…';
 			else if(state.car?.motion === 'tumbling') status.textContent = 'Car tumbling…';
+			else if(state.journeyDriver) {
+				const id = state.journeyDriver.destination;
+				const destination = activeNetwork?.nodes[id] ? squareName(id,activeNetwork.nodes) : destinationNames.get(id) ?? id;
+				status.textContent = state.journeyDriver.arrived ? 'Journey complete · ' + destination : 'CPU driving to ' + destination;
+			}
 			else if(state.cpuDriver && state.race.state !== 'finished')
 			status.textContent = 'CPU racer · ' + state.cpuDriver;
 			else if(state.mode === 'car' && state.journeyForkAhead && !state.journeySquare && !state.delivery && state.race.state === 'idle')
@@ -1281,7 +1287,7 @@ export function activate({module, canvas, session, services})
 
 			button(
 				'delivery'
-			).disabled = Boolean(state.cpuDriver) || state.findingCarSite || state.race.state === 'running';
+			).disabled = Boolean(state.cpuDriver || state.journeyDriver) || state.findingCarSite || state.race.state === 'running';
 
 			button('delivery').textContent = state.delivery ? 'End package run' : 'Package run';
 			button('fly').hidden = state.mode === 'fly' && !state.findingCarSite;
