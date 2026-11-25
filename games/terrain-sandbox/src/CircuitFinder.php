@@ -154,6 +154,21 @@ final class CircuitFinder
 						if($circuit->floodedLevel !== null) $circuit->course($this->landscape,$shapes,$laps,true);
 					}
 					catch(\RuntimeException) { continue; }
+					// This circuit has passed. Move its lap line to a site with room if one is near and passes too.
+					if(($restart = $this->clearStart($circuit)) !== null) {
+						try
+						{
+							$moved = new Circuit($restart,$this->dryLevel,$circuit->floodedLevel,
+								heightDifference: $reliefFound, startHeight: $this->landscape->height(...$restart[0]));
+							$road = $moved->course($this->landscape,$shapes,$laps,false);
+							[$sx,$sz,$heading] = $moved->approach();
+							if($car->checkedSite($this->landscape,$dry,$sx,$sz,$heading,$road->posts()) !== null) {
+								if($moved->floodedLevel !== null) $moved->course($this->landscape,$shapes,$laps,true);
+								$circuit = $moved;
+							}
+						}
+						catch(\RuntimeException) {}
+					}
 					if($circuit->floodedLevel !== null) return $circuit;
 					$dryCircuit ??= $circuit;
 				}
@@ -393,10 +408,46 @@ final class CircuitFinder
 			$circuit->placed["dry:$laps"] = $road;
 			if($circuit->floodedLevel !== null)
 				$circuit->placed["flooded:$laps"] = yield from $circuit->placing($graded,$shapes,$laps,true);
-			return $circuit;
+			// Everything else is settled, so moving the lap line cannot change which circuit is chosen. If the
+			// moved start fails any of the checks the first one passed, keep the first.
+			$restart = $this->clearStart($circuit);
+			if($restart === null) return $circuit;
+			try
+			{
+				$moved = new Circuit($restart,$this->dryLevel,$circuit->floodedLevel,$this->junctionStations($restart,$forks),
+					$area,$roads,$reliefFound,$graded->height(...$restart[0]));
+				$road = yield from $moved->placing($graded,$shapes,$laps,false);
+				[$sx,$sz,$heading] = $moved->approach();
+				if((new Car)->checkedSite($graded,$this->dryLevel+$this->swell,$sx,$sz,$heading,$road->posts()) === null)
+					return $circuit;
+				$moved->placed["dry:$laps"] = $road;
+				if($moved->floodedLevel !== null)
+					$moved->placed["flooded:$laps"] = yield from $moved->placing($graded,$shapes,$laps,true);
+				return $moved;
+			}
+			catch(\RuntimeException | \InvalidArgumentException) { return $circuit; }
 		}
 		catch(\RuntimeException | \InvalidArgumentException) { return null; }
 		finally { $graded->close(); }
+	}
+
+	/**
+	 * Where to move a finished circuit's lap line so its gate has the room every other gate gets. The search puts
+	 * the start at the middle of the stretch nearest the camera, which can be in a chicane. Look up and down the
+	 * road from there and take the nearest site with both posts off the pavement and no sharp corner beside it.
+	 * A start pinned to a requested elevation stays where it is.
+	 * @return list<array{float,float}>|null The loop from its new start, or null when the start already has room
+	 * or none is found within 128 m.
+	 */
+	private function clearStart(Circuit $circuit): ?array
+	{
+		if($this->startHeight !== null || $circuit->clearSite(0.)) return null;
+		for($step = 8.; $step <= min(128.,.2*$circuit->length); $step += 8.) {
+			foreach([$step,$circuit->length-$step] as $at) {
+				if($circuit->clearSite($at)) return $circuit->startingAt($at);
+			}
+		}
+		return null;
 	}
 
 	/** Check the fitted road itself. A curve can cut across deeper water between routing cells. */

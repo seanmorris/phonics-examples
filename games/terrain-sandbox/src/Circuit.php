@@ -82,7 +82,7 @@ final class Circuit
 	 * no sharp corner within 24 m either side. Just before or after such a corner the inside post lands on the next
 	 * leg of road, and the pavement fit runs along that leg instead of across this one.
 	 */
-	private function clearSite(float $at): bool
+	public function clearSite(float $at): bool
 	{
 		$headings = [];
 		for($offset = -24.; $offset <= 24.; $offset += 8.) {
@@ -343,6 +343,26 @@ final class Circuit
 			yield;
 		}
 		return $course;
+	}
+
+	/**
+	 * The same loop of points, starting from a distance along the route instead of from its first point.
+	 * @return list<array{float,float}> Points for a circuit whose lap line stands at that distance.
+	 */
+	public function startingAt(float $at): array
+	{
+		$count = count($this->points);
+		foreach($this->points as $i => [$x,$z]) {
+			$next = $this->vertexStations[$i+1] ?? $this->length;
+			if($at >= $next) continue;
+			[$nx,$nz] = $this->points[($i+1)%$count];
+			$fraction = ($at-$this->vertexStations[$i])/max(1e-9,$next-$this->vertexStations[$i]);
+			$rest = [...array_slice($this->points,$i+1),...array_slice($this->points,0,$i+1)];
+			// Starting on a vertex would list it twice.
+			if($fraction < 1e-6) array_pop($rest);
+			return [[$x+$fraction*($nx-$x),$z+$fraction*($nz-$z)],...$rest];
+		}
+		return $this->points;
 	}
 
 	/** A boarding point upstream of the start gate. */
