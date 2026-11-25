@@ -411,21 +411,22 @@ final class CircuitFinder
 			// Everything else is settled, so moving the lap line cannot change which circuit is chosen. If the
 			// moved start fails any of the checks the first one passed, keep the first.
 			$restart = $this->clearStart($circuit);
-			if($restart === null) return $circuit;
-			try
-			{
-				$moved = new Circuit($restart,$this->dryLevel,$circuit->floodedLevel,$this->junctionStations($restart,$forks),
-					$area,$roads,$reliefFound,$graded->height(...$restart[0]));
-				$road = yield from $moved->placing($graded,$shapes,$laps,false);
-				[$sx,$sz,$heading] = $moved->approach();
-				if((new Car)->checkedSite($graded,$this->dryLevel+$this->swell,$sx,$sz,$heading,$road->posts()) === null)
-					return $circuit;
-				$moved->placed["dry:$laps"] = $road;
-				if($moved->floodedLevel !== null)
-					$moved->placed["flooded:$laps"] = yield from $moved->placing($graded,$shapes,$laps,true);
-				return $moved;
+			if($restart !== null) {
+				try {
+					$moved = new Circuit($restart,$this->dryLevel,$circuit->floodedLevel,$this->junctionStations($restart,$forks),
+						$area,$roads,$reliefFound,$graded->height(...$restart[0]));
+					$road = yield from $moved->placing($graded,$shapes,$laps,false);
+					[$sx,$sz,$heading] = $moved->approach();
+					if((new Car)->checkedSite($graded,$this->dryLevel+$this->swell,$sx,$sz,$heading,$road->posts()) !== null) {
+						$moved->placed["dry:$laps"] = $road;
+						if($moved->floodedLevel !== null)
+							$moved->placed["flooded:$laps"] = yield from $moved->placing($graded,$shapes,$laps,true);
+						$circuit = $moved;
+					}
+				} catch(\RuntimeException | \InvalidArgumentException) {}
 			}
-			catch(\RuntimeException | \InvalidArgumentException) { return $circuit; }
+			$circuit->rememberGrading($this->landscape,$graded);
+			return $circuit;
 		}
 		catch(\RuntimeException | \InvalidArgumentException) { return null; }
 		finally { $graded->close(); }

@@ -1485,6 +1485,16 @@ expect(in_array("dry:$laps", $placed, true) && in_array("flooded:$laps", $placed
 // A second author edits one generated section before applying the preview.
 $edited = new Session($generator->landscape->recipe());
 $plan = (fn() => $this->circuitPreview)->call($generator);
+$cachedPlan = clone $plan;
+$source = new Landscape($open);
+$other = new Landscape($open);
+$cachedPlan->rememberGrading($source,$source);
+expect($cachedPlan->takeGrading($other) === null, 'A circuit cannot publish another landscape’s graded preview');
+$source->queue(['type'=>'raise','x'=>0,'z'=>0,'radius'=>8,'amount'=>5]);
+$source->commit();
+expect($cachedPlan->takeGrading($source) === null, 'An edit after the survey prevents publication of the stale graded preview');
+$source->close();
+$other->close();
 (function($plan) { $this->circuitPreview = $plan; })->call($edited,$plan);
 $sections = $generator->roadEditor->circuitRoads();
 $edited->roadEditor->circuitDrafts($sections);

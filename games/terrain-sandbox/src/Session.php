@@ -1192,15 +1192,17 @@ final class Session
 		if($this->circuitPreview !== null && $roads)
 		{
 			$this->message = 'Preparing the graded circuit…';
-			$this->prepareRoads($roads,function(Landscape $graded) use ($roads,$circuit,$flooded) {
+			$prepared = $circuit->takeGrading($this->landscape);
+			if($roads !== $circuit->road) $prepared = null;
+			$this->prepareRoads($prepared === null ? $roads : [],function(Landscape $graded) use ($roads,$circuit,$flooded,$prepared) {
 				if($this->roadEditor->circuitEdited())
 					$circuit = CircuitRoad::editedCircuit($graded,$circuit,count($roads));
-				$placed = $circuit->placed[($flooded ? 'flooded' : 'dry') . ':' . $this->settings['gateLaps']] ?? null;
+				$placed = $prepared === null ? null : ($circuit->placed[($flooded ? 'flooded' : 'dry') . ':' . $this->settings['gateLaps']] ?? null);
 				$course = $placed !== null ? clone $placed
 					: yield from $circuit->placing($graded,$this->gateShapes,$this->settings['gateLaps'],$flooded);
 				$this->roadEditor->publishingCircuit();
 				$this->circuitCommit = [$circuit,$course,$flooded];
-			});
+			},$prepared);
 			return;
 		}
 		$course = $circuit->course($this->landscape,$this->gateShapes,$this->settings['gateLaps'],$flooded);
@@ -2685,9 +2687,9 @@ final class Session
 	}
 
 	/** A whole road batch becomes visible in one revision after its final section and gate are ready. */
-	private function prepareRoads(array $roads, ?\Closure $ready = null): void
+	private function prepareRoads(array $roads, ?\Closure $ready = null, ?Landscape $prepared = null): void
 	{
-		$candidate = $this->editable();
+		$candidate = $prepared ?? $this->editable();
 		$this->draft = null;
 		$this->preparing = true;
 		$this->message = 'Grading the road…';

@@ -307,6 +307,23 @@ final class Circuit
 	 */
 	public array $placed = [];
 
+	/** Graded preview for the source landscape and revision the survey sampled. */
+	private ?\WeakMap $grading = null;
+
+	public function rememberGrading(Landscape $source, Landscape $graded): void
+	{
+		$this->grading = new \WeakMap;
+		$this->grading[$source] = [$source->revision(), $graded->fork()];
+	}
+
+	public function takeGrading(Landscape $source): ?Landscape
+	{
+		$entry = $this->grading[$source] ?? null;
+		if($entry === null) return null;
+		$this->grading = null;
+		return $entry[0] === $source->revision() ? $entry[1] : null;
+	}
+
 	/**
 	 * Place the circuit's gates one at a time, yielding after each, so a search or a frame can pause between them.
 	 * Placing a graded circuit's gates took 0.7 s in one step.
