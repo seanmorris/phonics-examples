@@ -231,7 +231,7 @@ The menu also offers these actions:
 - In free flight: **Drive car**, **Watercraft**, **Fly F5** and **Package run**. In a vehicle: **Return to flight**, plus **Restart race** during a race, and **Balloon practice** and **Reset balloons** in the F5.
 - **Controls** lists the buttons for what you are doing, drawn for the keyboard or gamepad you used last.
 - In **Audio**, choosing a song from the Landscape Lab playlist starts it while the menu is open. The next song follows it in playlist order. **Off** pauses the soundtrack. The menu and the Lab share your saved volume and playback choice. The **Master** level controls the music, engine and tires together.
-- **Settings** sets the car headlights, jet handling, pitch direction, flight speed in knots and **Grass detail**. Grass, rice and heath stand up from the ground near you on landscapes that grow them. It reaches about 360 ft at the default surface quality. **High** traces each blade more finely, **Low** costs less and **Off** leaves the ground flat. Your choice is remembered in this browser.
+- **Settings** sets the car headlights, jet handling, pitch direction, flight speed in knots and **Grass detail**. Grass, rice and heath stand up from the ground near you on landscapes that grow them. It reaches about 360 ft at the default surface quality and grows up to the edge of a road's pavement. On a journey each landscape brings its own grass, and the grasses merge where the landscapes meet. **High** traces each blade more finely, **Low** costs less and **Off** leaves the ground flat. Your choice is remembered in this browser.
 - **Landscape Lab** closes the menu and opens the editor with the world still frozen.
 - **Quit to examples** asks first, because unsaved landscape edits are lost.
 

@@ -309,9 +309,11 @@ foreach(['arctic-meltwater'=>'glacier-ice','tidal-lagoon'=>'seagrass-beds'] as $
 	expect($waterways->mode === 'craft' && abs($craft['x']-$x) < .01 && abs($craft['z']-$z) < .01,
 		"The jet ski boards directly at the $preset starting site.");
 }
-// Standing grass is on at its low level by default, follows its setting and names the surface that grows it.
+// Standing grass is on at its low level by default, follows its setting and comes from the surface that grows it.
 $grassy = new Session;
-expect($grassy->status()['grass'] === 1 && $grassy->grassStyle() === TerrainPhonics\TerrainAppearance::style($grassy->landscape->recipe()),
+$grown = static fn(string $surface): ?array => TerrainPhonics\GrassShells::style($surface);
+expect($grassy->status()['grass'] === 1
+	&& $grassy->grassStyles() === [$grown(TerrainPhonics\TerrainAppearance::style($grassy->landscape->recipe()))],
 	'Grass starts at its low level on the landscape\'s own surface.');
 input($grassy,['values'=>['grass'=>2]]);
 expect($grassy->status()['grass'] === 2 && $grassy->dirty, 'Raising the grass level redraws the view.');
@@ -320,10 +322,21 @@ expect($grassy->status()['grass'] === 2, 'The grass level stays within its range
 input($grassy,['values'=>['grass'=>0]]);
 expect($grassy->status()['grass'] === 0, 'Grass can be turned off.');
 input($grassy,['actions'=>[['type'=>'generate','preset'=>'painted-badlands']]]);
-expect($grassy->grassStyle() === 'painted-badlands' && TerrainPhonics\GrassShells::style($grassy->grassStyle()) !== null,
+expect($grassy->grassStyles() === [$grown('painted-badlands')] && $grown('painted-badlands') !== null,
 	'A landscape that borrows another style grows its own grass.');
 input($grassy,['actions'=>[['type'=>'generate','preset'=>'canyon']]]);
-expect(TerrainPhonics\GrassShells::style($grassy->grassStyle()) === null, 'Bare rock grows no grass.');
+expect($grassy->grassStyles() === [null], 'Bare rock grows no grass.');
+// A journey grows each landscape's grass. A destination's height limit follows it to the departure's water level.
+$grassy->input(['actions'=>[
+	['type'=>'journey-build','west'=>'rolling-prairie','destinations'=>['rice-terraces','canyon'],'span'=>16384],
+]],0,1.);
+while($grassy->preparingRoad()) $grassy->input([],0,1.,6.);
+$joined = $grassy->landscape->recipe();
+$lift = $joined['waterLevel']-$joined['join']['destinations'][0]['waterLevel'];
+$rice = $grown('rice-terraces');
+$rice['top'] = [$rice['top'][0]+$lift, $rice['top'][1]+$lift];
+expect(isset($joined['join']) && abs($lift) > 1. && $grassy->grassStyles() === [$grown('rolling-prairie'), $rice, null],
+	'A journey lists the grass of its departure and both destinations.');
 $grassy->close();
 
 input($waterways,['values'=>['waterColor'=>'#315468','snowSlopeStart'=>.30]]);

@@ -293,13 +293,13 @@ $grass = null;
 $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use ($gates, $curveSigns, $journeySigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites, &$grass): void {
 	// Grass multiplies the ground the terrain pass drew, so it comes first: signs, shadows and vehicles then cover it.
 	$grassQuality = (int)round($session->settings['grass']);
-	if($grassQuality > 0 && ($style = GrassShells::style($session->grassStyle() ?? '')) !== null)
+	if($grassQuality > 0 && array_filter($styles = $session->grassStyles()))
 	{
 		$steps = GrassShells::steps($grassQuality);
 		[$eyeX,$eyeY,$eyeZ] = $viewCamera->position;
 		$floor = max($session->landscape->height($eyeX,$eyeZ), $session->water->level());
-		($grass ??= new GrassShells)->draw($scene, $viewCamera, $style, $session->water->level(), $session->time, $steps,
-			$width, $height, $eyeY-$floor);
+		($grass ??= new GrassShells)->draw($scene, $viewCamera, $styles, $session->water->level(), $session->time,
+			$steps, $width, $height, $eyeY-$floor);
 	}
 	$curveSigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
 	$journeySigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
