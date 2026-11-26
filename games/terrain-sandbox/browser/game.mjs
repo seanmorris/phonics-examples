@@ -1173,6 +1173,7 @@ export function activate({module, canvas, session, services})
 		const padsSame = padKey === previousPad && menuPadKey === previousMenuPad;
 
 		const racing = module.terrainRaceInput?.();
+
 		if(!racing && viewport === previousViewport && held === previousKeys && padsSame && !actions.length
 			&& !planner.hasRequest() && pendingDraft === null && surveyRequest === null && !clicks.length && !look[0]
 				&& !look[1] && !Object.keys(values).length
