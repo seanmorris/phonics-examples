@@ -2516,8 +2516,8 @@ $pauseMenu->open($paused);
 $rows = array_keys($pauseMenu->menu->rows());
 expect($paused->menu && $paused->paused && $paused->status()['menu'] === true && $rows[0] === 'resume'
 	&& array_intersect(['car', 'craft', 'jet', 'delivery'], $rows) === ['car', 'craft', 'jet', 'delivery']
-	&& !in_array('fly', $rows, true) && !in_array('race', $rows, true) && array_slice($rows, -5) === ['controls', 'audio', 'settings', 'lab', 'quit'],
-	'In free flight the menu offers the vehicles and a package run, then controls, audio, settings, the Lab and Quit');
+	&& !in_array('fly', $rows, true) && !in_array('race', $rows, true) && array_slice($rows, -6) === ['controls', 'audio', 'settings', 'online', 'lab', 'quit'],
+	'In free flight the menu offers the vehicles and a package run, then controls, audio, settings, online racing, the Lab and Quit');
 $pauseMenu->menu->press('screenshot');
 $photoTime = $paused->time;
 $paused->step(.25);
@@ -2582,6 +2582,11 @@ expect($pageCommands === ['lab', 'quit'], 'Quit leaves for the examples');
 $pauseMenu->menu->back();
 $pauseMenu->menu->back();
 expect($pauseMenu->finish($paused) && !$paused->menu && !$paused->paused, 'Back from the top page resumes');
+$pauseMenu->open($paused);
+$pauseMenu->menu->select('online');
+$pauseMenu->menu->activate();
+expect($pauseMenu->finish($paused) && !$paused->menu && $paused->paused && end($pageCommands) === 'online',
+	'Online racing opens the room and parks the local session');
 $paused->close();
 
 require __DIR__.'/support/air-patrol.php';
