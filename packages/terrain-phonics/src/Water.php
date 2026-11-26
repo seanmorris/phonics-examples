@@ -63,6 +63,7 @@ final class Water implements WaterSurface
 				, 'phase' => $phase
 			];
 		}
+
 		$this->baseWaves = $this->waves;
 	}
 
@@ -73,19 +74,26 @@ final class Water implements WaterSurface
 	 */
 	public function setWaveScale(float $scale): void
 	{
-		if(!is_finite($scale) || $scale < 0) throw new \InvalidArgumentException('Wave scale must be finite and nonnegative');
+		if(!is_finite($scale) || $scale < 0)
+		throw new \InvalidArgumentException('Wave scale must be finite and nonnegative');
+
 		if($this->waveScale === $scale) return;
 
 		$waves = [];
+
 		if($scale > 0)
 		{
 			foreach($this->baseWaves as $wave)
 			{
 				$wave['amplitude'] *= $scale;
-				if(!is_finite($wave['amplitude'])) throw new \InvalidArgumentException('Scaled wave amplitude must be finite');
+
+				if(!is_finite($wave['amplitude']))
+				throw new \InvalidArgumentException('Scaled wave amplitude must be finite');
+
 				$waves[] = $wave;
 			}
 		}
+
 		$this->waves = $waves;
 		$this->waveScale = $scale;
 		$this->revision++;
@@ -120,14 +128,19 @@ final class Water implements WaterSurface
 	public function level(): float { return $this->level; }
 
 	/**
+	 * Bound the vertical displacement of the water surface.
+	 *
 	 * @return array Conservative height interval for the displaced mesh including every wake.
 	 */
 	public function heightRange(): array
 	{
 		$span = 0.0;
+
 		foreach($this->waves as $wave) $span += abs($wave['amplitude']);
+
 		foreach($this->wakes as $wake) $span += abs($wake[2]);
-		return [$this->level-$span,$this->level+$span];
+
+		return [$this->level - $span,$this->level + $span];
 	}
 
 	/**
@@ -213,10 +226,13 @@ final class Water implements WaterSurface
 		{
 			$this->sampleTime = $time;
 			$this->sampleWakes = [];
+
 			foreach($this->wakes as [$wx,$wz,$strength,$start])
 			{
 				$age = $time - $start;
+
 				if($age <= 0 || $age >= self::WAKE_LIFETIME) continue;
+
 				$fade = sin(M_PI * $age / self::WAKE_LIFETIME) ** 2;
 				$fadeRate = M_PI / self::WAKE_LIFETIME * sin(2 * M_PI * $age / self::WAKE_LIFETIME);
 				$this->sampleWakes[] = [$wx,$wz,$strength,$age,$fade,$fadeRate,(3 * $age + 48) ** 2];
@@ -227,8 +243,10 @@ final class Water implements WaterSurface
 		{
 			// Smooth radial distance avoids an undefined derivative at the packet center.
 			$distanceSquared = ($x - $wx) ** 2 + ($z - $wz) ** 2 + .04;
+
 			// Beyond this radius exp(-.35 * 48²) already rounds to zero in a double.
 			if($distanceSquared > $outerSquared) continue;
+
 			$r = sqrt($distanceSquared);
 			$q = $r - 3 * $age;
 			$envelope = $strength * exp(-.45 * $age - .35 * $q * $q);
@@ -269,19 +287,27 @@ final class Water implements WaterSurface
 
 		$raw = $packets = $jets = [];
 		$bounds = null;
+
 		foreach($this->wakes as [$x,$z,$strength,$birth,$vx,$vz])
 		{
 			$raw[] = [$x,$z,$strength,$birth];
 			$age = $this->time - $birth;
+
 			if($age < 0 || $age >= self::WAKE_LIFETIME) continue;
+
 			$radius = 3 * $age;
 			$packets[] = [$x,$z,$radius,$strength * exp(-.45 * $age) * sin(M_PI * $age / self::WAKE_LIFETIME) ** 2];
 			$jets[] = [$vx,$vz];
 			// The GPU Gaussian is zero past radius + 18 m. Include a float-rounding margin.
 			$r = $radius + 18.02;
-			$bounds = $bounds === null ? [$x-$r,$z-$r,$x+$r,$z+$r] : [
-				min($bounds[0],$x-$r), min($bounds[1],$z-$r), max($bounds[2],$x+$r), max($bounds[3],$z+$r)
-			];
+			$bounds = $bounds === null
+				? [$x - $r,$z - $r,$x + $r,$z + $r]
+				: [
+					min($bounds[0], $x - $r)
+					, min($bounds[1], $z - $r)
+					, max($bounds[2], $x + $r)
+					, max($bounds[3], $z + $r)
+				];
 		}
 
 		return [
@@ -292,7 +318,9 @@ final class Water implements WaterSurface
 			, 'waveDynamics' => $dynamics
 			, 'wakeCount' => count($this->wakes)
 			, 'wakeVectors' => $raw
-			, 'frameWakes' => $packets, 'jetVelocities' => $jets, 'wakeBounds' => $bounds
+			, 'frameWakes' => $packets
+			, 'jetVelocities' => $jets
+			, 'wakeBounds' => $bounds
 			, 'waves' => $this->waves
 			, 'wakes' => $raw
 		];

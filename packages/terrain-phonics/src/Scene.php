@@ -36,14 +36,14 @@ final class Scene
 	private TerrainShadows $terrainShadows;
 	private Lod $lod;
 	private ?Clipmap $clipmap = null;
-	public ?SurfaceLayers $layers=null;
+	public ?SurfaceLayers $layers = null;
 	public ?TerrainAppearance $paint = null;
 	private array $boundPaint = [];
-	private ?SurfaceLayers $defaultLayers=null;
-	private ?TerrainAppearance $paletteAppearance=null;
+	private ?SurfaceLayers $defaultLayers = null;
+	private ?TerrainAppearance $paletteAppearance = null;
 	/** The palette supplied by the scene until the application assigns its own appearance. */
 	private TerrainAppearance $presetAppearance;
-	private array $layerBinding=[];
+	private array $layerBinding = [];
 	private array $materialPrograms = [];
 	private array $destinations = [], $paletteBuffer = [], $uploadedMaterials = [], $selectedMaterials = [];
 	private static ?int $journeyBindingOwner = null;
@@ -183,44 +183,76 @@ final class Scene
 	 * @param Water $water Shared analytic water model.
 	 * @param Atmosphere $atmosphere Shared atmosphere parameters and numerical lookup data.
 	 * @param bool $useClipmap Use GPU elevation textures. Pass false for the PHP patch renderer.
-	 * @param bool $retainJourneyBinding The caller reserves uniform-buffer binding zero for terrain scenes between draws.
+	 * @param bool $retainJourneyBinding The caller reserves uniform-buffer binding zero for terrain scenes
+	 * between draws.
 	 * @return void Initializes bounded preparation and graphics resources.
 	 */
 	public function __construct(
-		private Landscape $landscape,
-		private Water $water,
-		private Atmosphere $atmosphere,
-		private bool $useClipmap = true,
-		private readonly bool $retainJourneyBinding = false
+		private Landscape $landscape
+		, private Water $water
+		, private Atmosphere $atmosphere
+		, private bool $useClipmap = true
+		, private readonly bool $retainJourneyBinding = false
 	){
 		if($useClipmap) $this->clipmap = new Clipmap;
+
 		$this->indices = $useClipmap ? '' : GpuPatch::indices(Lod::CELLS);
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);
-		$this->appearance = $this->presetAppearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$landscape->recipe()['preset']] ?? []);
+
+		$this->appearance = $this->presetAppearance = new TerrainAppearance(
+			TerrainAppearance::PRESET_DEFAULTS[$landscape->recipe()['preset']] ?? []
+		);
 
 		$this->create();
 	}
 
-	/** Each endpoint keeps its own material stack, seed, and local elevation datum. */
+	/**
+	 * Each endpoint keeps its own material stack, seed, and local elevation datum.
+	 *
+	 * @param ?SurfaceLayers $westPalette Surface stack for the journey origin.
+	 * @return array Material bindings for the source and any destinations.
+	 */
 	private function regionalMaterials(?SurfaceLayers $westPalette = null): array
 	{
 		$r = $this->landscape->recipe();
 		$west = [$westPalette ?? $this->palette(),$r,[-$r['noiseOffsetX'],0.,-$r['noiseOffsetZ']]];
+
 		if(!isset($r['join'])) return [$west];
-		$origins = JoinedTerrain::origins($r['join']['span'],count($r['join']['destinations']));
+
+		$origins = JoinedTerrain::origins($r['join']['span'], count($r['join']['destinations']));
 		$west[2][0] += $origins[0][0];
-		if(!$this->destinations) $this->destinations = self::destinationMaterials($r,$origins);
+
+		if(!$this->destinations) $this->destinations = self::destinationMaterials($r, $origins);
+
 		return [$west,...$this->destinations];
 	}
 
+	/**
+	 * Prepare the layer stacks and coordinate origins for the destination terrains.
+	 *
+	 * @param array $recipe Landscape recipe including its seed and shape settings.
+	 * @param array $origins World coordinate origin of each landscape.
+	 * @return array Material bindings for each destination.
+	 */
 	private static function destinationMaterials(array $recipe, array $origins): array
 	{
 		$materials = [];
-		foreach($recipe['join']['destinations'] as $i=>$form) {
+
+		foreach($recipe['join']['destinations'] as $i => $form)
+		{
 			$appearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$form['preset']] ?? []);
-			$materials[] = [SurfaceLayers::landscape($form,$appearance),$form,
-				[$origins[$i+1][0]-$form['noiseOffsetX'],$recipe['waterLevel']-$form['waterLevel'],$origins[$i+1][1]-$form['noiseOffsetZ']]];
+			$materials[] = [
+				SurfaceLayers::landscape($form, $appearance),$form
+				, [
+					$origins[$i + 1][0] - $form['noiseOffsetX']
+					, $recipe['waterLevel'] - $form['waterLevel']
+					, $origins[$i + 1][
+					1
+					] - $form['noiseOffsetZ']
+				]
+			];
 		}
+
 		return $materials;
 	}
 
@@ -233,14 +265,22 @@ final class Scene
 		$root = dirname(__DIR__) . '/shaders/';
 		$atmosphere = AtmosphereRenderer::shaderSource();
 		$water = file_get_contents($root . 'water-functions.glsl');
-		$grid = $this->useClipmap ? "#define CLIPMAP\n".Clipmap::gridShader() : file_get_contents($root.'patch-grid.glsl');
-		$optics = WaterAppearance::shaderSource()."\n".file_get_contents($root.'weather.glsl');
+		$grid = $this->useClipmap
+			? "#define CLIPMAP\n" . Clipmap::gridShader()
+			: file_get_contents($root . 'patch-grid.glsl');
+
+		$optics = WaterAppearance::shaderSource() . "\n" . file_get_contents($root . 'weather.glsl');
 		$lamps = SpotLights::shaderSource();
 		$dark = SpotLights::shaderSource(false);
 
 		$groundVertex = str_replace('// PATCH', $grid, file_get_contents($root . 'terrain.vert'));
-		$ground = str_replace(['// ATMOSPHERE','// OPTICS'], [$atmosphere,$optics]
-			, file_get_contents($root . 'terrain.frag'));
+
+		$ground = str_replace(
+			['// ATMOSPHERE','// OPTICS']
+			, [$atmosphere,$optics]
+			, file_get_contents($root . 'terrain.frag')
+		);
+
 		$this->groundVertexSource = $groundVertex;
 		$this->groundFragmentSource = $ground;
 		$this->selectMaterials($this->regionalMaterials());
@@ -251,13 +291,22 @@ final class Scene
 		);
 
 		$this->starsProgram = new Program(
-			str_replace('// ATMOSPHERE', file_get_contents($root . 'atmosphere.glsl'), file_get_contents($root . 'stars.vert')),
-			file_get_contents($root . 'stars.frag')
+			str_replace(
+				'// ATMOSPHERE'
+				, file_get_contents($root . 'atmosphere.glsl')
+				, file_get_contents($root . 'stars.vert')
+			)
+			, file_get_contents($root . 'stars.frag')
 		);
 
 		$waterVertex = str_replace(['// PATCH','// WATER'], [$grid,$water], file_get_contents($root . 'water.vert'));
-		$surface = str_replace(['// ATMOSPHERE','// WATER','// OPTICS'], [$atmosphere,$water,$optics]
-			, file_get_contents($root . 'water.frag'));
+
+		$surface = str_replace(
+			['// ATMOSPHERE','// WATER','// OPTICS']
+			, [$atmosphere,$water,$optics]
+			, file_get_contents($root . 'water.frag')
+		);
+
 		$this->waterProgram = new Program($waterVertex, str_replace('// SPOT LIGHTS', $dark, $surface));
 		$this->litWaterProgram = new Program($waterVertex, str_replace('// SPOT LIGHTS', $lamps, $surface));
 
@@ -267,7 +316,9 @@ final class Scene
 		$this->terrainShadows = new TerrainShadows;
 		glGenTextures(1, $this->heightTexture);
 		$this->uploadHeightMap();
+
 		if(!$this->clipmap) $this->createGridBuffer();
+
 		$this->craftMesh = $this->makeCraft();
 	}
 
@@ -279,9 +330,9 @@ final class Scene
 	{
 		glGenBuffers(1, $this->gridBuffer);
 		glBindVertexArray($this->vao[0]);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,$this->gridBuffer[0]);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, $this->gridBuffer[0]);
 		$patterns = GpuPatch::stitchPatterns(Lod::CELLS, $this->indices);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER,strlen($patterns),$patterns,GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, strlen($patterns), $patterns, GL_STATIC_DRAW);
 		glBindVertexArray(0);
 	}
 
@@ -412,6 +463,7 @@ final class Scene
 		$candidate = $this->preparing;
 
 		$this->abandonSelection();
+
 		foreach($this->replacements as $patch) $patch['mesh']->close();
 		$this->preparing = null;
 		$this->replacementJobs = $this->replacements = [];
@@ -431,6 +483,7 @@ final class Scene
 	public function surfacePatch(string $key): ?array
 	{
 		$patch = $this->patches[$key] ?? null;
+
 		if($patch === null) return null;
 
 		return ['heights' => $patch['heights'], 'materials' => $patch['materials'] ?? ''];
@@ -464,14 +517,20 @@ final class Scene
 	{
 		$this->clearPatches();
 		$this->clipmap?->invalidate();
-		if($this->appearance === $this->presetAppearance) {
+
+		if($this->appearance === $this->presetAppearance)
+		{
 			$defaults = TerrainAppearance::PRESET_DEFAULTS;
 			$next = $defaults[$landscape->recipe()['preset']] ?? [];
+
 			if($next !== ($defaults[$this->landscape->recipe()['preset']] ?? []))
-				$this->appearance = $this->presetAppearance = new TerrainAppearance($next);
+			$this->appearance = $this->presetAppearance = new TerrainAppearance($next);
 		}
+
 		$this->landscape = $landscape;
-		$this->defaultLayers=null; $this->layerBinding=[]; $this->destinations=[];
+		$this->defaultLayers = null;
+		$this->layerBinding = [];
+		$this->destinations = [];
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);
 		$this->revision = -1;
 		$this->selectionKey = '';
@@ -513,16 +572,29 @@ final class Scene
 		$this->sliceMs = 0;
 		$this->sliceSteps = 0;
 
-		if($this->clipmap !== null) {
-			$lut=$this->atmosphere->transmittanceLut(64,16,24);
-			$lighting=$lut['generation'] !== $this->textureGeneration;
+		if($this->clipmap !== null)
+		{
+			$lut = $this->atmosphere->transmittanceLut(64, 16, 24);
+			$lighting = $lut['generation'] !== $this->textureGeneration;
+
 			if($lighting) $this->createTextures();
-			$this->changed=$this->clipmap->update($this->landscape,$camera,$this->quality,$deadline,$detailFocus) || $lighting;
+
+			$this->changed = $this->clipmap->update(
+				$this->landscape
+				, $camera
+				, $this->quality
+				, $deadline
+				, $detailFocus
+			) || $lighting;
+
 			if($this->revision !== $this->landscape->revision()) $this->heightTextureRevision++;
-			$this->revision=$this->landscape->revision();
-			$this->lastUpdateMs=(microtime(true)-$started)*1000;
+
+			$this->revision = $this->landscape->revision();
+			$this->lastUpdateMs = (microtime(true) - $started) * 1000;
+
 			return $this->changed;
 		}
+
 		$this->checkPreparation();
 		$this->trackMotion($seconds, $camera);
 		$this->clock += max(0, $seconds);
@@ -541,7 +613,12 @@ final class Scene
 			{
 				$id = array_key_first($this->replacementJobs);
 				$job = &$this->replacementJobs[$id];
-				if($this->buildVertex($job, $this->preparing, $this->replacements)) { unset($job); break; }
+
+				if($this->buildVertex($job, $this->preparing, $this->replacements))
+				{
+					unset($job);
+					break;
+				}
 
 				if($job['index'] === 1089)
 				{
@@ -579,7 +656,8 @@ final class Scene
 			, $camera->position
 		)) . ':' . $this->quality . ':' . $this->viewportHeight . ':' . $this->viewportAspect . ':' . $camera->fov
 			. ':' . $this->water->level() . ':' . $this->water->waveScale()
-			. ':' . (int)floor($camera->yaw * 16) . ':' . (int)floor($camera->pitch * 16) . ':' . (int)floor($camera->roll * 16)
+			. ':' . (int)floor($camera->yaw * 16) . ':' . (int)floor($camera->pitch * 16) . ':'
+				. (int)floor($camera->roll * 16)
 			. ':' . ($this->lookahead === null
 				? 'stopped'
 				: implode(':', array_map(
@@ -622,11 +700,17 @@ final class Scene
 		}
 
 		$coverReady = false;
+
 		while($this->jobs !== [] && microtime(true) < $deadline)
 		{
 			$id = array_key_first($this->jobs);
 			$job = &$this->jobs[$id];
-			if($this->buildVertex($job)) { unset($job); break; }
+
+			if($this->buildVertex($job))
+			{
+				unset($job);
+				break;
+			}
 
 			if($job['index'] === (Lod::CELLS + 1) ** 2)
 			{
@@ -645,7 +729,9 @@ final class Scene
 				$parentKey = $this->parentKey($job);
 				unset($this->jobs[$id], $job);
 				$next = reset($this->jobs);
+
 				if($next === false || $this->parentKey($next) !== $parentKey) $coverReady = true;
+
 				break;
 			}
 
@@ -668,6 +754,7 @@ final class Scene
 		$this->lastUpdateMs = (microtime(true) - $started) * 1000;
 
 		if($this->retiring !== [] || $this->clock < $this->transitionUntil) $this->changed = true;
+
 		$this->evict();
 		// The limiter measures its spacing on the scene clock, and that clock stands still while a host skips
 		// updates. Asking for updates until the spacing has passed lets the first changed view after a rest
@@ -736,8 +823,13 @@ final class Scene
 	 */
 	private function selectionSettings(Camera $camera): array
 	{
-		return [$this->quality, $this->viewportHeight, $this->viewportAspect, $camera->fov
-			, $this->water->level(), $this->water->waveScale()];
+		return [
+			$this->quality
+			, $this->viewportHeight
+			, $this->viewportAspect
+			, $camera->fov
+			, $this->water->level(), $this->water->waveScale()
+		];
 	}
 
 	/**
@@ -754,7 +846,9 @@ final class Scene
 	{
 		[$from, $yaw, $pitch, $roll] = $previous;
 		$reach = 600 * $seconds;
+
 		if($reach < 64) $reach = 64;
+
 		$x = $camera->position[0] - $from[0];
 		$y = $camera->position[1] - $from[1];
 		$z = $camera->position[2] - $from[2];
@@ -762,17 +856,22 @@ final class Scene
 		if($x * $x + $y * $y + $z * $z > $reach * $reach) return true;
 
 		$turn = $camera->fov / 2;
-		if(abs(atan2(sin($roll - $camera->roll),cos($roll - $camera->roll))) > $turn) return true;
+
+		if(abs(atan2(sin($roll - $camera->roll), cos($roll - $camera->roll))) > $turn) return true;
+
 		$pitch -= $camera->pitch;
 
 		if($pitch > $turn || -$pitch > $turn) return true;
 
 		$yaw -= $camera->yaw;
+
 		if($yaw < 0) $yaw = -$yaw;
+
 		// A yaw that wraps past a whole turn has not moved the view.
 		if($yaw > M_PI)
 		{
 			$yaw = fmod($yaw, 2 * M_PI);
+
 			if($yaw > M_PI) $yaw = 2 * M_PI - $yaw;
 		}
 
@@ -803,9 +902,11 @@ final class Scene
 		if($distance < $seconds || $distance > max(64, 600 * $seconds)) return;
 
 		$scale = min(1.5 / $seconds, 512 / $distance);
+
 		// The padded current view already requests immediate neighbors. Reserve the
 		// extra corridor traversals for travel beyond a finest patch's diagonal.
 		if($distance * $scale <= M_SQRT2 * Lod::CELLS * $this->landscape->recipe()['spacing']) return;
+
 		$half = $this->lod->extent / 2;
 		$this->lookahead = [
 			max(-$half, min($half, $camera->position[0] + $delta[0] * $scale))
@@ -998,8 +1099,17 @@ final class Scene
 		{
 			[$low, $high] = $this->flight['water'];
 
-			return $this->lod->walk($this->flight['camera']->position, $this->patches, $this->flight['quality']
-				, $this->flight['projection'], null, $this->flight['planes'], $low, $high, $credit);
+			return $this->lod->walk(
+				$this->flight['camera']->position
+				, $this->patches
+				, $this->flight['quality']
+				, $this->flight['projection']
+				, null
+				, $this->flight['planes']
+				, $low
+				, $high
+				, $credit
+			);
 		}
 
 		$eye = $this->flight['lookahead'];
@@ -1012,8 +1122,13 @@ final class Scene
 			for($axis = 0; $axis < 3; $axis++) $eye[] = ($position[$axis] + $this->flight['lookahead'][$axis]) / 2;
 		}
 
-		return $this->lod->walk($eye, $this->patches, $this->flight['quality'], $this->flight['projection']
-			, credit: $credit);
+		return $this->lod->walk(
+			$eye
+			, $this->patches
+			, $this->flight['quality']
+			, $this->flight['projection']
+			, credit: $credit
+		);
 	}
 
 	/**
@@ -1084,6 +1199,7 @@ final class Scene
 		// Each split adds four resident nodes and replaces one leaf with four.
 		$capacity = $this->capacity();
 		$leafLimit = 1 + 3 * intdiv($capacity - 1, 4);
+
 		while(count($desired) > $leafLimit)
 		$desired = $this->balance($this->coarsen($desired));
 		$this->transition($desired);
@@ -1100,6 +1216,7 @@ final class Scene
 		foreach($drawn as $key)
 		{
 			$settles = ($this->activated[$key] ?? -1) + .5;
+
 			if($settles > $until) $until = $settles;
 		}
 
@@ -1110,6 +1227,7 @@ final class Scene
 			$this->changed = true;
 			$this->drawIndex = null;
 			$this->forgetSeamsAround(array_merge(array_diff($old, $drawn), array_diff($drawn, $old)));
+
 			if(count($this->groundCull) + count($this->waterCull) > 4096) $this->groundCull = $this->waterCull = [];
 		}
 
@@ -1117,6 +1235,7 @@ final class Scene
 		{
 			$this->drawnKeys = $drawn;
 			$this->drawnBranches = $this->ancestors($this->draw);
+
 			// Until groups reserves afresh, an update may end and evict. The new cover joins the old reservation so
 			// that neither the patches just drawn nor the work already reserved can go. An unchanged cover is in
 			// the reservation already: every reservation since it was drawn started from it, and the two places
@@ -1150,6 +1269,7 @@ final class Scene
 		// Sorting both lists of keys to compare them took thousands of string comparisons per selection.
 		$this->selectionPending = array_count_values($drawn)
 			!= array_count_values(array_column($this->flight['desired'], 'key'));
+
 		$clock = $this->flight['appliedAt'];
 		unset($this->flight['desired'], $this->flight['drawn']);
 
@@ -1183,6 +1303,7 @@ final class Scene
 			, $this->flight['camera']
 			, $credit
 		);
+
 		// The reservation starts from the drawn cover and its ancestors. It only grows from here, so its size is
 		// counted once and then kept in step.
 		$reservation = $this->drawnBranches;
@@ -1209,6 +1330,7 @@ final class Scene
 			{
 				$key = $n['key'];
 				$reservation[$key] = true;
+
 				if(!isset($this->patches[$key])) $wanted[$key] = $n + ['speculative' => false];
 			}
 		}
@@ -1329,6 +1451,7 @@ final class Scene
 		foreach($wanted as $n)
 		$ordered[$n['key']] = $n + ($this->jobs[$n['key']] ?? ['index' => 0,'bytes' => '', 'heights' => []]);
 		$this->jobs = $ordered;
+
 		// The jobs and the reservation they were queued under change together, before the eviction below.
 		if(!$this->flight['whole']) $this->reserved = $this->flight['reservation'];
 
@@ -1390,6 +1513,7 @@ final class Scene
 			$parent = $parents[$key] ??= self::parentOf($key);
 
 			if(!isset($groups[$parent])) $priority[$parent] = $node['priority'];
+
 			$groups[$parent][] = $node;
 		}
 
@@ -1473,6 +1597,7 @@ final class Scene
 
 			$level = (int)$parent;
 			$byLevel[$level][] = $parent;
+
 			if($level > $deepest) $deepest = $level;
 		}
 
@@ -1521,8 +1646,10 @@ final class Scene
 
 		if($level < 0) return [];
 
-		$x = $node['ix']; $z = $node['iz'];
-		$cx = $x >> 1; $cz = $z >> 1;
+		$x = $node['ix'];
+		$z = $node['iz'];
+		$cx = $x >> 1;
+		$cz = $z >> 1;
 		$last = (1 << $level) - 1;
 		$keys = [];
 
@@ -1543,18 +1670,25 @@ final class Scene
 	private static function neighborsAt(array $node, array $leaves, int $level): array
 	{
 		if($level < 0) return [];
+
 		$shift = $node['level'] - $level;
-		$x = $node['ix']; $z = $node['iz'];
-		$cx = $x >> $shift; $cz = $z >> $shift;
+		$x = $node['ix'];
+		$z = $node['iz'];
+		$cx = $x >> $shift;
+		$cz = $z >> $shift;
 		$last = (1 << $level) - 1;
 		$result = [];
+
 		for($nz = max(0, ($z - 1) >> $shift); $nz <= min($last, ($z + 1) >> $shift); $nz++)
 		for($nx = max(0, ($x - 1) >> $shift); $nx <= min($last, ($x + 1) >> $shift); $nx++)
 		{
 			if($nx === $cx && $nz === $cz) continue;
+
 			$key = "$level:$nx:$nz";
+
 			if(isset($leaves[$key])) $result[$key] = $leaves[$key];
 		}
+
 		return $result;
 	}
 
@@ -1692,9 +1826,11 @@ final class Scene
 	private static function meets(array $a, array $b): bool
 	{
 		$level = max($a['level'], $b['level']);
-		$sa = 1 << ($level - $a['level']); $sb = 1 << ($level - $b['level']);
-		$x = $a['ix']*$sa - $b['ix']*$sb;
-		$z = $a['iz']*$sa - $b['iz']*$sb;
+		$sa = 1 << ($level - $a['level']);
+		$sb = 1 << ($level - $b['level']);
+		$x = $a['ix'] * $sa - $b['ix'] * $sb;
+		$z = $a['iz'] * $sa - $b['iz'] * $sb;
+
 		return $a['key'] !== $b['key'] && $x >= -$sa && $x <= $sb && $z >= -$sa && $z <= $sb;
 	}
 
@@ -1793,6 +1929,7 @@ final class Scene
 	private static function contains(array $outer, array $inner): bool
 	{
 		$shift = $inner['level'] - $outer['level'];
+
 		return $shift >= 0 && ($inner['ix'] >> $shift) === $outer['ix'] && ($inner['iz'] >> $shift) === $outer['iz'];
 	}
 
@@ -1957,6 +2094,7 @@ final class Scene
 	private function morph(array $node): float
 	{
 		$key = $node['key'];
+
 		if($this->morphMemo !== null && isset($this->morphMemo[$key])) return $this->morphMemo[$key];
 
 		// Only a retiring sibling group needs its parent's key, and building that string is the costly part,
@@ -1986,6 +2124,7 @@ final class Scene
 	{
 		$key = $node['key'];
 		$settled = $this->settledBoundary($key);
+
 		if($settled !== null) return $settled;
 
 		$own = $this->morph($node);
@@ -1996,6 +2135,7 @@ final class Scene
 		$mask = 0;
 
 		$neighbors = &$this->neighbors[$key];
+
 		if($neighbors === null)
 		{
 			$this->drawIndex ??= array_column($this->draw, null, 'key');
@@ -2004,25 +2144,28 @@ final class Scene
 			// Where a neighbor meets this patch is fixed for one draw set, so find the edge and corners it
 			// touches once. Only its transition weight changes from frame to frame.
 			foreach(self::neighborsAt($node, $this->drawIndex, $node['level'])
-				+ self::neighborsAt($node, $this->drawIndex, $node['level'] - 1) as $neighbor)
-			{
+				+ self::neighborsAt($node, $this->drawIndex, $node['level'] - 1) as $neighbor
+			){
 				// Locate the neighbor in this patch's integer coordinates. Fractional
 				// world extents must produce the same topology as power-of-two worlds.
 				$span = 1 << ($node['level'] - $neighbor['level']);
-				$x = $neighbor['ix']*$span - $node['ix'];
-				$z = $neighbor['iz']*$span - $node['iz'];
+				$x = $neighbor['ix'] * $span - $node['ix'];
+				$z = $neighbor['iz'] * $span - $node['iz'];
 				$edge = -1;
-				if($z < 1 && $z+$span > 0) $edge = $x < 0 ? 0 : 1;
-				elseif($x < 1 && $x+$span > 0) $edge = $z < 0 ? 2 : 3;
+
+				if($z < 1 && $z + $span > 0) $edge = $x < 0 ? 0 : 1;
+				elseif($x < 1 && $x + $span > 0) $edge = $z < 0 ? 2 : 3;
+
 				$touched = [];
 
 				foreach([[0,0],[1,0],[0,1],[1,1]] as $i => [$px,$pz])
-				if($px >= $x && $px <= $x+$span && $pz >= $z && $pz <= $z+$span) $touched[] = $i;
+				if($px >= $x && $px <= $x + $span && $pz >= $z && $pz <= $z + $span) $touched[] = $i;
 
 				$coarser = $neighbor['level'] < $node['level'];
 				$neighbors[] = [$neighbor, $coarser, $edge, $touched, $this->parentKey($neighbor)];
 			}
 		}
+
 		foreach($neighbors as [$neighbor, $coarser, $edge, $touched, $parent])
 		{
 			$weight = $coarser ? 1.0 : $this->morph($neighbor);
@@ -2031,17 +2174,20 @@ final class Scene
 			if(!$coarser)
 			{
 				$parents[$parent] = true;
+
 				if($weight > 0.0 || isset($this->retiring[$parent])) $settled = false;
 			}
 
 			if($edge >= 0)
 			{
 				if($weight > $edges[$edge]) $edges[$edge] = $weight;
+
 				if($coarser) $mask |= 1 << $edge;
 			}
 
 			foreach($touched as $i) if($weight > $corners[$i]) $corners[$i] = $weight;
 		}
+
 		unset($neighbors);
 
 		if($settled)
@@ -2049,6 +2195,7 @@ final class Scene
 			$this->settledBoundaries[$key] = [$edges,$corners,$mask];
 			$this->settledParents[$key] = array_keys($parents);
 		}
+
 		return [$edges,$corners,$mask];
 	}
 
@@ -2071,7 +2218,9 @@ final class Scene
 		foreach($keys as $key)
 		{
 			[$level, $x, $z] = explode(':', $key);
-			$level = (int)$level; $x = (int)$x; $z = (int)$z;
+			$level = (int)$level;
+			$x = (int)$x;
+			$z = (int)$z;
 
 			for($nx = $x - 1; $nx <= $x + 1; $nx++)
 			{
@@ -2109,6 +2258,7 @@ final class Scene
 	private function settledBoundary(string $key): ?array
 	{
 		if(!isset($this->settledBoundaries[$key])) return null;
+
 		if($this->retiring === []) return $this->settledBoundaries[$key];
 
 		foreach($this->settledParents[$key] as $parent)
@@ -2186,6 +2336,7 @@ final class Scene
 		$half = $source->recipe()['worldSize'] / 2;
 
 		$parentPatch = null;
+
 		if($job['level'] > 0)
 		{
 			$key = $this->parentKey($job);
@@ -2203,14 +2354,17 @@ final class Scene
 			{
 				$x = $sample % $stride;
 				$z = intdiv($sample, $stride);
-				$wx = $job['x'] + $x*$step; $wz = $job['z'] + $z*$step;
-				$px = ($job['ix']%2)*16 + intdiv($x,2);
-				$pz = ($job['iz']%2)*16 + intdiv($z,2);
-				if($parentPatch && !($x%2) && !($z%2)
-					&& $wx === $parentPatch['x'] + $px*($parentPatch['size']/32)
-					&& $wz === $parentPatch['z'] + $pz*($parentPatch['size']/32))
-					$job['heights'][] = $parentPatch['heights'][$pz*33+$px];
-				else $job['heights'][] = $source->meshHeight($wx,$wz,$step);
+				$wx = $job['x'] + $x * $step;
+				$wz = $job['z'] + $z * $step;
+				$px = ($job['ix'] % 2) * 16 + intdiv($x, 2);
+				$pz = ($job['iz'] % 2) * 16 + intdiv($z, 2);
+
+				if($parentPatch && !($x % 2) && !($z % 2)
+					&& $wx === $parentPatch['x'] + $px * ($parentPatch['size'] / 32)
+					&& $wz === $parentPatch['z'] + $pz * ($parentPatch['size'] / 32)
+				)
+				$job['heights'][] = $parentPatch['heights'][$pz * 33 + $px];
+				else $job['heights'][] = $source->meshHeight($wx, $wz, $step);
 			}
 			else
 			{
@@ -2223,7 +2377,8 @@ final class Scene
 
 				$job['halo'][$side][$offset] = $source->meshHeight(
 					max(-$half, min($half, $job['x'] + $x * $step))
-					, max(-$half, min($half, $job['z'] + $z * $step)), $step
+					, max(-$half, min($half, $job['z'] + $z * $step))
+					, $step
 				);
 			}
 
@@ -2277,9 +2432,7 @@ final class Scene
 
 					foreach($indices as $index => $vertex)
 					{
-						$parentVertexNormal = array_values(
-							unpack('f3', $parentPatch['normals'], $vertex * 12)
-						);
+						$parentVertexNormal = array_values(unpack('f3', $parentPatch['normals'], $vertex * 12));
 
 						for($axis = 0; $axis < 3; $axis++)
 						$parentNormal[$axis] += $weights[$index] * $parentVertexNormal[$axis];
@@ -2289,24 +2442,29 @@ final class Scene
 		}
 
 		$material = array_search($source->material($wx, $wz, $offset, $mark), RoadAtlas::MATERIALS, true);
+
 		if($material !== false)
 		{
 			$job['materials'] ??= str_repeat("\0", $vertices);
 			$job['materials'][$i] = chr(1 + $material);
 		}
+
 		$job['geometricError'] = max($job['geometricError'] ?? 0.0, abs($h - $parent));
 
-		if($x>0 && $x<32 && $z>0 && $z<32)
+		if($x > 0 && $x < 32 && $z > 0 && $z < 32)
 		{
-			$axial = abs($left-2*$h+$right) + abs($front-2*$h+$back);
-			$mixed = abs($h-$right-$back+$job['heights'][$i+34]);
-			$job['geometricError'] = max($job['geometricError'], .5*$axial+$mixed);
+			$axial = abs($left - 2 * $h + $right) + abs($front - 2 * $h + $back);
+			$mixed = abs($h - $right - $back + $job['heights'][$i + 34]);
+			$job['geometricError'] = max($job['geometricError'], .5 * $axial + $mixed);
 		}
-		$job['minY'] = min($job['minY'] ?? INF,$h,$parent);
-		$job['maxY'] = max($job['maxY'] ?? -INF,$h,$parent);
+
+		$job['minY'] = min($job['minY'] ?? INF, $h, $parent);
+		$job['maxY'] = max($job['maxY'] ?? -INF, $h, $parent);
 
 		$vertexMaterial = $material === false ? -1 : $material;
-		if($mark !== null) $vertexMaterial = ($material === false ? 1 : -1)*RoadAtlas::markCode($mark);
+
+		if($mark !== null) $vertexMaterial = ($material === false ? 1 : -1) * RoadAtlas::markCode($mark);
+
 		$job['bytes'] .= pack('f*', ...[
 			$x * $step
 			, $h
@@ -2317,6 +2475,7 @@ final class Scene
 		]);
 
 		if($job['index'] === $vertices) unset($job['halo']);
+
 		return false;
 	}
 
@@ -2368,15 +2527,24 @@ final class Scene
 		$half = (1 << $node['level']) * (Lod::CELLS / 2);
 		// A settled seam means the patch itself finished its transition, so its own weight is zero.
 		$boundary = $this->settledBoundary($node['key']);
-		glUniform4f($uPatch, $node['ix']*Lod::CELLS-$half, $node['iz']*Lod::CELLS-$half,
-			$node['size']/Lod::CELLS, $boundary === null ? $this->morph($node) : 0.0);
+
+		glUniform4f(
+			$uPatch
+			, $node['ix'] * Lod::CELLS - $half
+			, $node['iz'] * Lod::CELLS - $half
+			, $node['size'] / Lod::CELLS
+			, $boundary === null ? $this->morph($node) : 0.0
+		);
+
 		$boundary ??= $this->boundaryMorph($node);
+
 		if($lastBoundary !== $boundary)
 		{
 			glUniform4f($uEdges, ...$boundary[0]);
 			glUniform4f($uCorners, ...$boundary[1]);
 			$lastBoundary = $boundary;
 		}
+
 		return $boundary[2];
 	}
 
@@ -2390,8 +2558,14 @@ final class Scene
 	 * @param callable|null $drawOpaque Draw additional depth-tested opaque objects before the water surface.
 	 * @return void Submits draws without presenting the caller-owned framebuffer.
 	 */
-	public function render(Camera $camera, int $width, int $height, float $time, ?array $craftState = null, ?callable $drawOpaque = null): void
-	{
+	public function render(
+		Camera $camera
+		, int $width
+		, int $height
+		, float $time
+		, ?array $craftState = null
+		, ?callable $drawOpaque = null
+	): void {
 		if($this->closed || $width < 1 || $height < 1) return;
 
 		$this->viewportHeight = max(1, $height);
@@ -2402,27 +2576,48 @@ final class Scene
 		$this->atmosphereCache->update($camera->position[1], $this->textures[0], $this->water->level());
 
 		$environment = $this->atmosphere->uniforms();
-		if($this->weather) {
-			$c=$this->weather->controls();
-			if($this->weatherRenderer || $c['coverage']>0 || $c['kind']!=='none' || max($this->weather->ground($time))>0.)
-				($this->weatherRenderer ??= new WeatherRenderer)->prepare($this->weather,$time,$this->water->level(),$environment['sunDirection'][1]);
+
+		if($this->weather)
+		{
+			$c = $this->weather->controls();
+
+			if($this->weatherRenderer || $c['coverage'] > 0 || $c['kind'] !== 'none' || max(
+				$this->weather->ground($time)
+			) > 0.
+			)
+			($this->weatherRenderer ??= new WeatherRenderer)->prepare(
+				$this->weather
+				, $time
+				, $this->water->level()
+				, $environment['sunDirection'][1]
+			);
 		} else $this->weatherRenderer?->clear();
+
 		$bounds = $this->landscape->bounds();
-		$this->clipmap?->updateShadows($camera->position,$environment['sunDirection'],$this->heightTextureRevision);
+		$this->clipmap?->updateShadows($camera->position, $environment['sunDirection'], $this->heightTextureRevision);
+
 		$this->terrainShadows->update(
-			$this->clipmap ? $this->clipmap->overview()[0] : (isset($this->patches['0:0:0']) ? $this->heightTexture[0] : 0)
+			$this->clipmap
+				? $this->clipmap->overview()[0]
+				: (isset($this->patches['0:0:0']) ? $this->heightTexture[0] : 0)
 			, $this->lod->extent
 			, $environment['sunDirection']
-			, $this->heightTextureRevision, $this->clipmap?->packed() ?? false, $bounds['minY'], $bounds['maxY']
+			, $this->heightTextureRevision
+			, $this->clipmap?->packed() ?? false
+			, $bounds['minY']
+			, $bounds['maxY']
 		);
 
 		$materials = $this->regionalMaterials();
 		// On smaller targets and at the detailed setting the material shader runs at native resolution.
-		$this->selectMaterials($materials,$width*$height >= 1280*720 && $this->quality < 2.);
-		if($this->clipmap && count($materials)>1) {
+		$this->selectMaterials($materials, $width * $height >= 1280 * 720 && $this->quality < 2.);
+
+		if($this->clipmap && count($materials) > 1)
+		{
 			$this->materialFields ??= new MaterialFieldCache;
-			$this->materialFields->update($camera->position,$materials,$this->vao[0]);
+			$this->materialFields->update($camera->position, $materials, $this->vao[0]);
 		}
+
 		glViewport(0, 0, $width, $height);
 		glDisable(GL_SCISSOR_TEST);
 		glDisable(GL_BLEND);
@@ -2436,49 +2631,66 @@ final class Scene
 		$lit = ($this->spotLights?->count() ?? 0) > 0;
 		$warm = $this->clipmap !== null || $this->draw !== [];
 		$waterProgram = $lit || $warm && !$this->litDrawn['water'] ? $this->litWaterProgram : $this->waterProgram;
-		$planes = $camera->clipPlanes($width,$height);
+		$planes = $camera->clipPlanes($width, $height);
 		$eye = $camera->position;
 		$this->groundDraws = $this->waterDraws = 0;
 		$groundProgram = $lit || $warm && !$this->litDrawn['ground'] ? $this->litGroundProgram : $this->groundProgram;
 		$groups = [];
-		if($this->clipmap) {
+
+		if($this->clipmap)
+		{
 			$recipe = $this->landscape->recipe();
 			$floor = $bounds['minY'];
 			$ceiling = $bounds['maxY'];
+
 			if($recipe['surround'] === 'sea') $floor = min($floor, $recipe['waterLevel'] - 200);
-			if($recipe['surround'] === 'mountains') {
+
+			if($recipe['surround'] === 'mountains')
+			{
 				$floor = min($floor, -3 * $recipe['heightScale']);
 				$ceiling = max($ceiling, $recipe['heightScale']);
 			}
-			$groups = $this->clipmap->visibleGroups($camera,$planes,[$floor,$ceiling]);
+
+			$groups = $this->clipmap->visibleGroups($camera, $planes, [$floor,$ceiling]);
 			$this->groundGroups = $groups;
-			if($this->surfaceProgram) $this->drawSurfaceSamples($camera,$width,$height,$materials,$groups);
-			elseif($this->ribProgram) $this->drawRibField($camera,$width,$height,$materials,$groups);
+
+			if($this->surfaceProgram) $this->drawSurfaceSamples($camera, $width, $height, $materials, $groups);
+			elseif($this->ribProgram) $this->drawRibField($camera, $width, $height, $materials, $groups);
 		}
+
 		$groundProgram->use();
 		$this->materialFields?->bind($groundProgram);
-		$this->surfaceSamples?->bind($groundProgram,$width,$height);
-		if($this->ribProgram) glUniform1i($groundProgram->location('uRibField'),11);
+		$this->surfaceSamples?->bind($groundProgram, $width, $height);
+
+		if($this->ribProgram) glUniform1i($groundProgram->location('uRibField'), 11);
+
 		[$palette,$form] = $materials[0];
-		$joined = count($materials)>1;
-		if($joined) $this->bindJourney($groundProgram,$materials);
+		$joined = count($materials) > 1;
+
+		if($joined) $this->bindJourney($groundProgram, $materials);
+
 		$this->common($groundProgram, $camera, $width, $height, $environment);
 		$this->water->appearance->bind($groundProgram);
 
 		$id = spl_object_id($groundProgram);
 		$paint = $this->paint ?? $this->appearance;
-		if(($this->boundPaint[$id] ?? null) !== $paint) {
+
+		if(($this->boundPaint[$id] ?? null) !== $paint)
+		{
 			$paint->bindPaint($groundProgram);
 			$this->boundPaint[$id] = $paint;
 		}
-		if(!$joined && ($this->layerBinding[$id] ?? null) !== $palette) {
+
+		if(!$joined && ($this->layerBinding[$id] ?? null) !== $palette)
+		{
 			$palette->bind($groundProgram);
 			$seed = crc32((string)$form['seed']);
-			glUniform3f($groundProgram->location('uMaterialOrigin'),...$materials[0][2]);
-			glUniform2f($groundProgram->location('uPaletteOffset'),$seed & 65535,($seed >> 16) & 65535);
-			$this->scalar($groundProgram, 'uRockSlopeDamping', $form['damping'] / $form['slopeScale']**2);
+			glUniform3f($groundProgram->location('uMaterialOrigin'), ...$materials[0][2]);
+			glUniform2f($groundProgram->location('uPaletteOffset'), $seed & 65535, ($seed >> 16) & 65535);
+			$this->scalar($groundProgram, 'uRockSlopeDamping', $form['damping'] / $form['slopeScale'] ** 2);
 			$this->layerBinding[$id] = $palette;
 		}
+
 		$this->vector($groundProgram, 'uCraftRotation', [0,0,0]);
 		$this->scalar($groundProgram, 'uCraft', 0);
 
@@ -2486,21 +2698,26 @@ final class Scene
 		$uPatch = $groundProgram->location('uPatch');
 		$uEdges = $groundProgram->location('uEdges');
 		$uCorners = $groundProgram->location('uCorners');
-		if($this->clipmap) {
-			$this->groundDraws += $this->clipmap->drawGroups($groundProgram,$camera,$groups);
+
+		if($this->clipmap)
+		{
+			$this->groundDraws += $this->clipmap->drawGroups($groundProgram, $camera, $groups);
 			// The craft shares the terrain program and has its own clipping.
 			glUniform1f($groundProgram->location('uPlayHalf'), 0);
 		}
+
 		foreach($this->draw as $n)
 		{
 			$key = $n['key'];
 			$p = $this->patches[$key];
 			$hidden = Camera::rejectingPlane($planes, $eye, $n, $p['minY'], $p['maxY'], $this->groundCull[$key] ?? -1);
+
 			if($hidden >= 0)
 			{
 				$this->groundCull[$key] = $hidden;
 				continue;
 			}
+
 			unset($this->groundCull[$key]);
 			$this->groundDraws++;
 
@@ -2535,7 +2752,9 @@ final class Scene
 		if($groundProgram === $this->litGroundProgram && $this->groundDraws > 0) $this->litDrawn['ground'] = true;
 
 		glDisable(GL_CULL_FACE);
+
 		if($drawOpaque !== null) $drawOpaque();
+
 		// Opaque depth is complete. Shade the sky only through pixels left at the far depth.
 		glEnable(GL_DEPTH_TEST);
 		glDisable(GL_CULL_FACE);
@@ -2547,34 +2766,57 @@ final class Scene
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 		$stars = $this->atmosphere->stars;
 		$starVisibility = $this->atmosphere->starVisibility();
-		$meteor = $environment['nightVisibility']>0. ? $stars->meteor($time) : null;
-		if($starVisibility > 0. || $meteor!==null)
+		$meteor = $environment['nightVisibility'] > 0. ? $stars->meteor($time) : null;
+
+		if($starVisibility > 0. || $meteor !== null)
 		{
 			$this->starsProgram->use();
-			glUniformMatrix4fv($this->starsProgram->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
+
+			glUniformMatrix4fv(
+				$this->starsProgram->location('uViewProjection')
+				, 1
+				, false
+				, $camera->viewProjection($width, $height)
+			);
+
 			$this->scalar($this->starsProgram, 'uPixelScale', min(3.0, max(.8, $height / 720)));
 			$this->scalar($this->starsProgram, 'uStarVisibility', $starVisibility);
-			$this->scalar($this->starsProgram, 'uStarGain', $stars->brightness*.01);
-			$this->scalar($this->starsProgram, 'uTwinkle', $stars->twinkle*.01);
-			if($stars->twinkle>0.) $this->scalar($this->starsProgram,'uStarTime',fmod($time,1024.));
+			$this->scalar($this->starsProgram, 'uStarGain', $stars->brightness * .01);
+			$this->scalar($this->starsProgram, 'uTwinkle', $stars->twinkle * .01);
+
+			if($stars->twinkle > 0.) $this->scalar($this->starsProgram, 'uStarTime', fmod($time, 1024.));
+
 			$this->scalar($this->starsProgram, 'uExposure', $environment['exposure']);
 			$this->scalar($this->starsProgram, 'uAirLayerCount', $environment['airLayerCount']);
-			if($environment['airLayerCount']) {
-				$this->scalar($this->starsProgram, 'uStarAltitude', $this->atmosphere->samplingAltitude($camera->position[1]));
+
+			if($environment['airLayerCount'])
+			{
+				$this->scalar(
+					$this->starsProgram
+					, 'uStarAltitude'
+					, $this->atmosphere->samplingAltitude($camera->position[1])
+				);
+
 				$this->scalar($this->starsProgram, 'uPlanetRadius', $environment['planetRadius']);
+
 				for($i = 0; $i < $environment['airLayerCount']; $i++)
-					$this->vector($this->starsProgram, "uAirBand[$i]", $environment["airBand[$i]"]);
+				$this->vector($this->starsProgram, "uAirBand[$i]", $environment["airBand[$i]"]);
 			}
+
 			glEnable(GL_BLEND);
 			glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ZERO, GL_ONE);
-			if($starVisibility>0.) glDrawArrays(GL_POINTS, 0, 2400);
-			if($meteor!==null) {
-				$this->scalar($this->starsProgram,'uStarVisibility',$environment['nightVisibility']);
-				glUniform1i($this->starsProgram->location('uMeteorId'),$meteor[0]);
-				$this->scalar($this->starsProgram,'uMeteorAge',$meteor[1]);
-				glDrawArrays(GL_TRIANGLE_STRIP,2400,4);
+
+			if($starVisibility > 0.) glDrawArrays(GL_POINTS, 0, 2400);
+
+			if($meteor !== null)
+			{
+				$this->scalar($this->starsProgram, 'uStarVisibility', $environment['nightVisibility']);
+				glUniform1i($this->starsProgram->location('uMeteorId'), $meteor[0]);
+				$this->scalar($this->starsProgram, 'uMeteorAge', $meteor[1]);
+				glDrawArrays(GL_TRIANGLE_STRIP, 2400, 4);
 			}
 		}
+
 		glDepthMask(true);
 		glDepthFunc(GL_LESS);
 		glEnable(GL_BLEND);
@@ -2590,36 +2832,56 @@ final class Scene
 		$uPatch = $waterProgram->location('uPatch');
 		$uEdges = $waterProgram->location('uEdges');
 		$uCorners = $waterProgram->location('uCorners');
-		if($this->clipmap && ($recipe['surround'] === 'sea' || $waterMax >= $floor)) {
+
+		if($this->clipmap && ($recipe['surround'] === 'sea' || $waterMax >= $floor))
+		{
 			glUniform1i($wakeLocation, $wakeCount);
-			$this->waterDraws = $this->clipmap->draw($waterProgram, $camera, $planes, [$waterMin, $waterMax], water: true);
+
+			$this->waterDraws = $this->clipmap->draw(
+				$waterProgram
+				, $camera
+				, $planes
+				, [$waterMin, $waterMax]
+				, water: true
+			);
 		}
+
 		foreach($this->draw as $n)
 		{
 			$key = $n['key'];
 			$patch = $this->patches[$key];
+
 			if($patch['minY'] > $waterMax) continue;
+
 			$hidden = Camera::rejectingPlane($planes, $eye, $n, $waterMin, $waterMax, $this->waterCull[$key] ?? -1);
+
 			if($hidden >= 0)
 			{
 				$this->waterCull[$key] = $hidden;
 				continue;
 			}
+
 			unset($this->waterCull[$key]);
 			$this->waterDraws++;
 			$count = $wakeCount;
+
 			if($count && ($n['x'] > $wakeBounds[2] || $n['x'] + $n['size'] < $wakeBounds[0]
-				|| $n['z'] > $wakeBounds[3] || $n['z'] + $n['size'] < $wakeBounds[1])) $count = 0;
+				|| $n['z'] > $wakeBounds[3] || $n['z'] + $n['size'] < $wakeBounds[1]
+			)) $count = 0;
+
 			if($count !== $lastCount)
 			{
 				glUniform1i($wakeLocation, $count);
 				$lastCount = $count;
 			}
+
 			$patch['mesh']->draw($this->bindPatch($uPatch, $uEdges, $uCorners, $n, $lastBoundary));
 		}
 
-		$this->weatherRenderer?->draw($camera,$width,$height,$environment['exposure']);
+		$this->weatherRenderer?->draw($camera, $width, $height, $environment['exposure']);
+
 		if($waterProgram === $this->litWaterProgram && $this->waterDraws > 0) $this->litDrawn['water'] = true;
+
 		glDisable(GL_BLEND);
 		glBindVertexArray(0);
 		$this->morphMemo = null;
@@ -2637,6 +2899,7 @@ final class Scene
 	private function common(Program $program, Camera $camera, int $width, int $height, array $environment): void
 	{
 		$this->vector($program, 'uEye', $camera->position);
+
 		if($program === $this->skyProgram)
 		{
 			[$forward,$right,$up] = $camera->basis();
@@ -2645,31 +2908,41 @@ final class Scene
 			$this->vector($program, 'uUp', $up);
 			glUniform2f($program->location('uScreen'), $width / max(1, $height), tan($camera->fov / 2));
 		}
-		else glUniformMatrix4fv($program->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
+		else
+		glUniformMatrix4fv($program->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
+
 		$id = spl_object_id($program);
 		$previous = $this->boundEnvironment[$id] ?? [];
+
 		if($previous !== $environment)
 		{
 			foreach($environment as $name => $value)
 			{
 				if(($previous[$name] ?? null) === $value) continue;
+
 				$key = str_starts_with($name, 'u') ? $name : 'u' . ucfirst($name);
+
 				if(is_array($value) && count($value) === 3) $this->vector($program, $key, $value);
 				elseif(is_array($value) && count($value) === 2) glUniform2f($program->location($key), ...$value);
 				elseif(is_numeric($value)) $this->scalar($program, $key, $value);
 			}
+
 			$this->boundEnvironment[$id] = $environment;
 		}
 
 		if($program !== $this->skyProgram) $this->weatherRenderer?->bind($program);
+
 		if($program !== $this->skyProgram) $this->scalar($program, 'uWaterLevel', $this->water->level());
+
 		if($program === $this->litGroundProgram || $program === $this->litWaterProgram)
-			$this->spotLights?->bind($program, $environment['nightVisibility']);
+		$this->spotLights?->bind($program, $environment['nightVisibility']);
+
 		if($program === $this->groundProgram || $program === $this->litGroundProgram)
 		{
 			$this->terrainShadows->bind($program);
 			$this->clipmap?->bindShadows($program);
 		}
+
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, $this->textures[0]);
 		glUniform1i($program->location('uTransmittance'), 0);
@@ -2688,18 +2961,31 @@ final class Scene
 		$data = $this->water->uniforms();
 		$this->scalar($program, 'uWaterTime', $time);
 		glUniform1i($program->location('uWaveCount'), $data['waveCount']);
+
 		if($data['waveCount'])
 		{
-			glUniform4fv($program->location('uWaveVectors[0]'), $data['waveCount'], array_merge(...$data['waveVectors']));
-			glUniform2fv($program->location('uWaveDynamics[0]'), $data['waveCount'], array_merge(...$data['waveDynamics']));
+			glUniform4fv(
+				$program->location('uWaveVectors[0]')
+				, $data['waveCount']
+				, array_merge(...$data['waveVectors'])
+			);
+
+			glUniform2fv(
+				$program->location('uWaveDynamics[0]')
+				, $data['waveCount']
+				, array_merge(...$data['waveDynamics'])
+			);
 		}
+
 		$count = count($data['frameWakes']);
+
 		if($count)
 		{
 			glUniform4fv($program->location('uFrameWakes[0]'), $count, array_merge(...$data['frameWakes']));
 			glUniform2fv($program->location('uJetVelocities[0]'), $count, array_merge(...$data['jetVelocities']));
 			glUniform4f($program->location('uWakeBounds'), ...$data['wakeBounds']);
 		}
+
 		return [$count, $data['wakeBounds']];
 	}
 
@@ -2783,6 +3069,8 @@ final class Scene
 	}
 
 	/**
+	 * Check whether the last view drew any water.
+	 *
 	 * @return bool Whether the previous view submitted water that can change with time.
 	 */
 	public function showsWater(): bool { return $this->waterDraws > 0; }
@@ -2796,6 +3084,7 @@ final class Scene
 		// A selection the limiter postponed needs later updates even when the camera has stopped. So does the
 		// limiter's own spacing after a selection, which only updates can count.
 		if($this->clipmap) return $this->changed || $this->clipmap->pending || $this->preparing !== null;
+
 		return $this->selectionKey === '' || $this->changed || $this->jobs !== [] || $this->preparing !== null
 			|| $this->selectionPending || $this->selectionDeferred || $this->selectionRecent || $this->flight !== null;
 	}
@@ -2828,7 +3117,8 @@ final class Scene
 			, 'cameraSpacing' => $cameraSpacing
 			, 'finestVisibleSpacing' => $finest
 			, 'visibleCoverage' => $coverage
-			, 'groundDraws' => $this->groundDraws, 'waterDraws' => $this->waterDraws
+			, 'groundDraws' => $this->groundDraws
+			, 'waterDraws' => $this->waterDraws
 			, 'materialFieldTexels' => $this->materialFields?->texelsWritten ?? 0
 			, 'visible' => count($this->draw)
 			, 'pending' => count($this->jobs)
@@ -2876,226 +3166,455 @@ final class Scene
 		];
 	}
 
-	/** Link both lighting variants and the minimap before replacing a committed surface. */
+	/**
+	 * Link both lighting variants and the minimap before replacing a committed surface.
+	 *
+	 * @param SurfaceLayers $stack Ordered surface layers to evaluate.
+	 * @return void No value.
+	 */
 	public function prepareMaterial(SurfaceLayers $stack): void
 	{
-		$this->preparePrograms($this->regionalMaterials($stack),$this->sampleMaterials);
+		$this->preparePrograms($this->regionalMaterials($stack), $this->sampleMaterials);
 	}
 
-	/** Capture this view's ridge relief on the same triangles, including committed edits and LOD morphing. */
+	/**
+	 * Capture this view's ridge relief on the same triangles, including committed edits and LOD morphing.
+	 *
+	 * @param Camera $camera Camera defining the viewpoint and projection.
+	 * @param int $width Render target width in pixels.
+	 * @param int $height Render target height in pixels.
+	 * @param array $materials Bindings for the contributing landscape palettes.
+	 * @param array $groups Visible clipmap strips from the culling pass.
+	 * @return void No value.
+	 */
 	private function drawRibField(Camera $camera, int $width, int $height, array $materials, array $groups): void
 	{
-		glActiveTexture(GL_TEXTURE0+11);
-		$this->ribTarget ??= new RenderTarget($width,$height,GL_NEAREST,true,'Terrain ridge relief');
-		$this->ribTarget->resize($width,$height);
+		glActiveTexture(GL_TEXTURE0 + 11);
+		$this->ribTarget ??= new RenderTarget($width, $height, GL_NEAREST, true, 'Terrain ridge relief');
+		$this->ribTarget->resize($width, $height);
 		// The parent can be multisampled. A pixel touched only at its edge needs a neutral slope.
 		$clearColor = glGetFloatv(GL_COLOR_CLEAR_VALUE);
-		$neutral = 128/255;
+		$neutral = 128 / 255;
 		$this->ribTarget->bind([$neutral,$neutral,$neutral,1.]);
 		glClearColor(...$clearColor);
-		try {
+
+		try
+		{
 			$p = $this->ribProgram;
 			$p->use();
-			$this->bindJourney($p,$materials);
-			$this->vector($p,'uEye',$camera->position);
-			glUniformMatrix4fv($p->location('uViewProjection'),1,false,$camera->viewProjection($width,$height));
-			$this->clipmap->drawGroups($p,$camera,$groups);
-		} finally {
-			$this->ribTarget->unbind($width,$height);
+			$this->bindJourney($p, $materials);
+			$this->vector($p, 'uEye', $camera->position);
+			glUniformMatrix4fv($p->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
+			$this->clipmap->drawGroups($p, $camera, $groups);
+		} finally
+		{
+			$this->ribTarget->unbind($width, $height);
 		}
-		glActiveTexture(GL_TEXTURE0+11);
-		glBindTexture(GL_TEXTURE_2D,$this->ribTarget->texture());
+
+		glActiveTexture(GL_TEXTURE0 + 11);
+		glBindTexture(GL_TEXTURE_2D, $this->ribTarget->texture());
 	}
 
-	/** Capture unlit pigment and relief from the same edited clipmap triangles used by the display pass. */
+	/**
+	 * Capture unlit pigment and relief from the same edited clipmap triangles used by the display pass.
+	 *
+	 * @param Camera $camera Camera defining the viewpoint and projection.
+	 * @param int $width Render target width in pixels.
+	 * @param int $height Render target height in pixels.
+	 * @param array $materials Bindings for the contributing landscape palettes.
+	 * @param array $groups Visible clipmap strips from the culling pass.
+	 * @return void No value.
+	 */
 	private function drawSurfaceSamples(Camera $camera, int $width, int $height, array $materials, array $groups): void
 	{
-		$w = intdiv($width+1,2);
-		$h = intdiv($height+1,2);
-		if(!$this->surfaceSamples || !$this->surfaceSamples->fits($w,$h)) {
+		$w = intdiv($width + 1, 2);
+		$h = intdiv($height + 1, 2);
+
+		if(!$this->surfaceSamples || !$this->surfaceSamples->fits($w, $h))
+		{
 			$this->surfaceSamples?->close();
-			$this->surfaceSamples = new SurfaceSampleBuffer($w,$h);
+			$this->surfaceSamples = new SurfaceSampleBuffer($w, $h);
 		}
+
 		$this->surfaceSamples->begin();
-		try {
+
+		try
+		{
 			$p = $this->surfaceProgram;
 			$p->use();
 			$this->materialFields->bind($p);
-			$this->bindJourney($p,$materials);
-			$this->vector($p,'uEye',$camera->position);
-			$this->scalar($p,'uWaterLevel',$this->water->level());
-			glUniform2f($p->location('uSourceScale'),$w/$width,$h/$height);
-			glUniformMatrix4fv($p->location('uViewProjection'),1,false,$camera->viewProjection($width,$height));
-			$this->clipmap->drawGroups($p,$camera,$groups);
-		} finally {
-			$this->surfaceSamples->end($width,$height);
+			$this->bindJourney($p, $materials);
+			$this->vector($p, 'uEye', $camera->position);
+			$this->scalar($p, 'uWaterLevel', $this->water->level());
+			glUniform2f($p->location('uSourceScale'), $w / $width, $h / $height);
+			glUniformMatrix4fv($p->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
+			$this->clipmap->drawGroups($p, $camera, $groups);
+		} finally
+		{
+			$this->surfaceSamples->end($width, $height);
 		}
 	}
 
+	/**
+	 * Prepare shader variants before drawing with a new combination of materials.
+	 *
+	 * @param array $materials Bindings for the contributing landscape palettes.
+	 * @param bool $sampleMaterials Use the screen-space cache of terrain material samples.
+	 * @return string Cache key for the compiled program set.
+	 */
 	private function preparePrograms(array $materials, bool $sampleMaterials): string
 	{
-		$stacks = array_column($materials,0);
-		$joinedClipmap = $this->useClipmap && count($stacks)>1;
+		$stacks = array_column($materials, 0);
+		$joinedClipmap = $this->useClipmap && count($stacks) > 1;
 		$ribRegion = null;
-		if($joinedClipmap) foreach($stacks as $i=>$stack) {
-			if(in_array('ribs',array_column($stack->layers,'relief'),true)) { $ribRegion = $i; break; }
+
+		if($joinedClipmap)
+		foreach($stacks as $i => $stack)
+		{
+			if(in_array('ribs', array_column($stack->layers, 'relief'), true))
+			{
+				$ribRegion = $i;
+				break;
+			}
 		}
-		$sampled = $sampleMaterials && $ribRegion !== null && !in_array(true,array_column($stacks,'reflective'),true);
-		$key = count($stacks)===1 ? $stacks[0]->structure : 'journey:'.json_encode(array_column($stacks,'structure'),JSON_THROW_ON_ERROR);
-		if($sampled) $key = 'sampled/'.$key;
+
+		$sampled = $sampleMaterials && $ribRegion !== null && !in_array(
+			true
+			, array_column($stacks, 'reflective')
+			, true
+		);
+
+		$key = count($stacks) === 1
+			? $stacks[0]->structure
+			: 'journey:' . json_encode(array_column($stacks, 'structure'), JSON_THROW_ON_ERROR);
+
+		if($sampled) $key = 'sampled/' . $key;
+
 		if(isset($this->materialPrograms[$key])) return $key;
-		$source = MaterialShader::assemble($this->groundFragmentSource,$stacks,clipmap:$this->useClipmap);
+
+		$source = MaterialShader::assemble($this->groundFragmentSource, $stacks, clipmap:$this->useClipmap);
 		$read = $joinedClipmap ? "#define WORLD_MATERIAL_FIELDS\n" : '';
 		$capture = '';
-		if($sampled) {
-			$library = file_get_contents(dirname(__DIR__).'/shaders/surface-samples.glsl');
-			$capture = $read."#define WRITE_SURFACE_SAMPLES\n".$library;
-			$read .= "#define READ_SURFACE_SAMPLES\n".$library;
-		} elseif($ribRegion !== null) {
+
+		if($sampled)
+		{
+			$library = file_get_contents(dirname(__DIR__) . '/shaders/surface-samples.glsl');
+			$capture = $read . "#define WRITE_SURFACE_SAMPLES\n" . $library;
+			$read .= "#define READ_SURFACE_SAMPLES\n" . $library;
+		} elseif($ribRegion !== null)
+		{
 			$region = "#define RIB_FIELD_REGION $ribRegion\n";
-			$read .= $region.'#define READ_RIB_FIELD';
-			$capture = $region.'#define WRITE_RIB_FIELD';
+			$read .= $region . '#define READ_RIB_FIELD';
+			$capture = $region . '#define WRITE_RIB_FIELD';
 		}
-		$ground = str_replace('// MATERIAL PASSES',$read,$source);
+
+		$ground = str_replace('// MATERIAL PASSES', $read, $source);
 		$set = [];
-		try {
+
+		try
+		{
 			foreach([false,true] as $lamps)
-				$set[] = new Program($this->groundVertexSource,str_replace('// SPOT LIGHTS',SpotLights::shaderSource($lamps),$ground));
-			if($this->useClipmap) {
-				$root = dirname(__DIR__).'/shaders/';
-				$set[] = new Program(file_get_contents($root.'shadows.vert'),
-					MaterialShader::assemble(file_get_contents($root.'chart.frag'),$stacks,chart:true));
-				if($capture !== '') {
-					$field = str_replace(['// MATERIAL PASSES','// SPOT LIGHTS'],[$capture,SpotLights::shaderSource(false)],$source);
-					$set[$sampled ? 'samples' : 'ribs'] = new Program($this->groundVertexSource,$field);
+			$set[] = new Program(
+				$this->groundVertexSource
+				, str_replace('// SPOT LIGHTS', SpotLights::shaderSource($lamps), $ground)
+			);
+
+			if($this->useClipmap)
+			{
+				$root = dirname(__DIR__) . '/shaders/';
+
+				$set[] = new Program(
+					file_get_contents($root . 'shadows.vert')
+					, MaterialShader::assemble(file_get_contents($root . 'chart.frag'), $stacks, chart:true)
+				);
+
+				if($capture !== '')
+				{
+					$field = str_replace(
+						['// MATERIAL PASSES','// SPOT LIGHTS']
+						, [$capture,SpotLights::shaderSource(false)]
+						, $source
+					);
+
+					$set[$sampled ? 'samples' : 'ribs'] = new Program($this->groundVertexSource, $field);
 				}
 			}
-		} catch(\Throwable $error) {
+		} catch(\Throwable $error)
+		{
 			foreach($set as $program) $program->close();
 			throw $error;
 		}
+
 		// Bound user-authored program residency; never evict the displayed material during validation.
-		if(count($this->materialPrograms) >= 6) foreach($this->materialPrograms as $old=>$programs) {
+		if(count($this->materialPrograms) >= 6)
+		foreach($this->materialPrograms as $old => $programs)
+		{
 			if($old === $this->materialKey) continue;
-			foreach($programs as $program) {
+
+			foreach($programs as $program)
+			{
 				$id = spl_object_id($program);
-				unset($this->boundEnvironment[$id],$this->layerBinding[$id],$this->boundPaint[$id]);
+				unset($this->boundEnvironment[$id], $this->layerBinding[$id], $this->boundPaint[$id]);
 				$program->close();
 			}
+
 			$this->spotLights?->forget();
 			unset($this->materialPrograms[$old]);
 			break;
 		}
+
 		$this->materialPrograms[$key] = $set;
+
 		return $key;
 	}
 
+	/**
+	 * Select the linked terrain shaders for the active material combination.
+	 *
+	 * @param array $materials Bindings for the contributing landscape palettes.
+	 * @param bool $sampleMaterials Use the screen-space cache of terrain material samples.
+	 * @return void No value.
+	 */
 	private function selectMaterials(array $materials, bool $sampleMaterials = true): void
 	{
 		if($materials === $this->selectedMaterials && $this->sampleMaterials === $sampleMaterials) return;
-		$key = $this->preparePrograms($materials,$sampleMaterials);
+
+		$key = $this->preparePrograms($materials, $sampleMaterials);
 		$this->sampleMaterials = $sampleMaterials;
 		$this->selectedMaterials = $materials;
+
 		if($this->materialKey === $key) return;
+
 		$this->materialKey = $key;
 		[$this->groundProgram,$this->litGroundProgram] = $this->materialPrograms[$key];
 		$this->chartProgram = $this->materialPrograms[$key][2] ?? null;
 		$this->ribProgram = $this->materialPrograms[$key]['ribs'] ?? null;
 		$this->surfaceProgram = $this->materialPrograms[$key]['samples'] ?? null;
-		if(!$this->surfaceProgram) { $this->surfaceSamples?->close(); $this->surfaceSamples = null; }
-		if(!$this->ribProgram) { $this->ribTarget?->close(); $this->ribTarget = null; }
-		if(count($materials) === 1) { $this->materialFields?->close(); $this->materialFields = null; }
+
+		if(!$this->surfaceProgram)
+		{
+			$this->surfaceSamples?->close();
+			$this->surfaceSamples = null;
+		}
+
+		if(!$this->ribProgram)
+		{
+			$this->ribTarget?->close();
+			$this->ribTarget = null;
+		}
+
+		if(count($materials) === 1)
+		{
+			$this->materialFields?->close();
+			$this->materialFields = null;
+		}
+
 		$this->litDrawn['ground'] = false;
 	}
 
+	/**
+	 * Upload each source landscape's palette for the journey blend.
+	 *
+	 * @param Program $program Active GPU program receiving the bindings.
+	 * @param array $materials Bindings for the contributing landscape palettes.
+	 * @return void No value.
+	 */
 	private function bindJourney(Program $program, array $materials): void
 	{
-		if($materials !== $this->uploadedMaterials) {
+		if($materials !== $this->uploadedMaterials)
+		{
 			$bytes = '';
-			foreach($materials as [$palette,$form,$origin]) $bytes .= $palette->journeyBlock($form,$origin);
-			if(!$this->paletteBuffer) {
-				glGenBuffers(1,$this->paletteBuffer);
+
+			foreach($materials as [$palette,$form,$origin]) $bytes .= $palette->journeyBlock($form, $origin);
+
+			if(!$this->paletteBuffer)
+			{
+				glGenBuffers(1, $this->paletteBuffer);
 				self::$journeyBindingOwner = null;
 			}
-			glBindBuffer(GL_UNIFORM_BUFFER,$this->paletteBuffer[0]);
-			glBufferData(GL_UNIFORM_BUFFER,strlen($bytes),$bytes,GL_DYNAMIC_DRAW);
+
+			glBindBuffer(GL_UNIFORM_BUFFER, $this->paletteBuffer[0]);
+			glBufferData(GL_UNIFORM_BUFFER, strlen($bytes), $bytes, GL_DYNAMIC_DRAW);
 			$this->uploadedMaterials = $materials;
 		}
+
 		// All journey programs use binding zero. The WASM binding checks isBuffer() synchronously,
 		// so reuse it for the ground and chart while this scene owns the reserved binding.
 		$owner = spl_object_id($this);
-		if(!$this->retainJourneyBinding || self::$journeyBindingOwner !== $owner) {
-			glBindBufferBase(GL_UNIFORM_BUFFER,0,$this->paletteBuffer[0]);
+
+		if(!$this->retainJourneyBinding || self::$journeyBindingOwner !== $owner)
+		{
+			glBindBufferBase(GL_UNIFORM_BUFFER, 0, $this->paletteBuffer[0]);
 			self::$journeyBindingOwner = $this->retainJourneyBinding ? $owner : null;
 		}
-		glUniform1f($program->location('uJoinWidth'),JoinedTerrain::GAP);
-		glUniform1i($program->location('uBlendProfile'),(int)(($materials[0][1]['join']['version'] ?? 1)>=2));
+
+		glUniform1f($program->location('uJoinWidth'), JoinedTerrain::GAP);
+		glUniform1i($program->location('uBlendProfile'), (int)(($materials[0][1]['join']['version'] ?? 1) >= 2));
 	}
 
+	/**
+	 * Choose the authored surface stack or build the recipe default.
+	 *
+	 * @return SurfaceLayers Surface layers used by this landscape.
+	 */
 	private function palette(): SurfaceLayers
 	{
 		if($this->layers) return $this->layers;
-		if(!$this->defaultLayers || $this->paletteAppearance!==$this->appearance) {
-			$this->defaultLayers=SurfaceLayers::landscape($this->landscape->recipe(),$this->appearance);
-			$this->paletteAppearance=$this->appearance;
+
+		if(!$this->defaultLayers || $this->paletteAppearance !== $this->appearance)
+		{
+			$this->defaultLayers = SurfaceLayers::landscape($this->landscape->recipe(), $this->appearance);
+			$this->paletteAppearance = $this->appearance;
 		}
+
 		return $this->defaultLayers;
 	}
 
-	public function drawChart(array $xz,float $bearing,bool $wide,int $width,int $height,array $waterColor,
-		?int $size = null, ?float $localSpan = null, bool $circular = false, ?float $fixedSpan = null): ?float
-	{
+	/**
+	 * Draw a heading-up terrain chart from the resident clipmap.
+	 *
+	 * @param array $xz World-space X and Z at the center of the chart.
+	 * @param float $bearing Chart rotation in radians.
+	 * @param bool $wide Use the wider map view.
+	 * @param int $width Render target width in pixels.
+	 * @param int $height Render target height in pixels.
+	 * @param array $waterColor Linear RGB used for water in the map.
+	 * @param ?int $size Side length of the requested grid.
+	 * @param ?float $localSpan Optional local map coverage in meters.
+	 * @param bool $circular Clip the map to a circular boundary.
+	 * @param ?float $fixedSpan Optional fixed map width in meters.
+	 * @return ?float Width in world meters or null when no chart was drawn.
+	 */
+	public function drawChart(
+		array $xz
+		, float $bearing
+		, bool $wide
+		, int $width
+		, int $height
+		, array $waterColor
+		, ?int $size = null
+		, ?float $localSpan = null
+		, bool $circular = false
+		, ?float $fixedSpan = null
+	): ?float {
 		if(!$this->clipmap) return null;
-		$materials=$this->regionalMaterials();
+
+		$materials = $this->regionalMaterials();
 		$this->selectMaterials($materials);
-		$joined=count($materials)>1;
-		if($joined) {
+		$joined = count($materials) > 1;
+
+		if($joined)
+		{
 			$this->chartProgram->use();
-			$this->bindJourney($this->chartProgram,$materials);
+			$this->bindJourney($this->chartProgram, $materials);
 		}
-		return $this->clipmap->chart($this->chartProgram,$xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,
-			$materials[0][0],$this->paint ?? $this->appearance,$size,$localSpan,$circular,$fixedSpan,origin:$materials[0][2],sharedPalette:$joined);
+
+		return $this->clipmap->chart(
+			$this->chartProgram
+			, $xz
+			, $bearing
+			, $wide
+			, $width
+			, $height
+			, $this->water->level()
+			, $waterColor
+			, $materials[0][0]
+			, $this->paint ?? $this->appearance
+			, $size
+			, $localSpan
+			, $circular
+			, $fixedSpan
+			, origin:$materials[0][2]
+			, sharedPalette:$joined
+		);
 	}
 
-	/** Draw one full, north-up road-editor map of a draft recipe without switching the playing landscape. */
+	/**
+	 * Draw one full, north-up road-editor map of a draft recipe without switching the playing landscape.
+	 *
+	 * @param Landscape $draft Landscape to survey for the editor map.
+	 * @param int $width Render target width in pixels.
+	 * @param int $height Render target height in pixels.
+	 * @param int $size Side length of the requested grid.
+	 * @param array $waterColor Linear RGB used for water in the map.
+	 * @return ?float World width of the preview or null if the chart could not be drawn.
+	 */
 	public function drawRecipeChart(Landscape $draft, int $width, int $height, int $size, array $waterColor): ?float
 	{
 		$r = $draft->recipe();
 		$appearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$r['preset']] ?? []);
 		$joined = isset($r['join']);
-		$origins = $joined ? JoinedTerrain::origins($r['join']['span'],count($r['join']['destinations'])) : [[0.,0.]];
-		$origin = [$origins[0][0]-$r['noiseOffsetX'],0.,$origins[0][1]-$r['noiseOffsetZ']];
-		$west = SurfaceLayers::landscape($r,$appearance);
+		$origins = $joined ? JoinedTerrain::origins($r['join']['span'], count($r['join']['destinations'])) : [[0.,0.]];
+		$origin = [$origins[0][0] - $r['noiseOffsetX'],0.,$origins[0][1] - $r['noiseOffsetZ']];
+		$west = SurfaceLayers::landscape($r, $appearance);
 		$materials = [[$west,$r,$origin]];
-		if($joined) array_push($materials,...self::destinationMaterials($r,$origins));
-		$stacks = array_column($materials,0);
-		$key = json_encode(array_column($stacks,'structure'),JSON_THROW_ON_ERROR);
-		if(!isset($this->recipeChartPrograms[$key])) {
-			$root = dirname(__DIR__).'/shaders/';
-			$program = new Program(file_get_contents($root.'shadows.vert'),
-				MaterialShader::assemble(file_get_contents($root.'chart.frag'),$stacks,chart:true));
-			if(count($this->recipeChartPrograms)>=3) array_shift($this->recipeChartPrograms)->close();
+
+		if($joined) array_push($materials, ...self::destinationMaterials($r, $origins));
+
+		$stacks = array_column($materials, 0);
+		$key = json_encode(array_column($stacks, 'structure'), JSON_THROW_ON_ERROR);
+
+		if(!isset($this->recipeChartPrograms[$key]))
+		{
+			$root = dirname(__DIR__) . '/shaders/';
+
+			$program = new Program(
+				file_get_contents($root . 'shadows.vert')
+				, MaterialShader::assemble(file_get_contents($root . 'chart.frag'), $stacks, chart:true)
+			);
+
+			if(count($this->recipeChartPrograms) >= 3) array_shift($this->recipeChartPrograms)->close();
+
 			$this->recipeChartPrograms[$key] = $program;
 		}
+
 		$program = $this->recipeChartPrograms[$key];
 		$this->recipeChart ??= new Clipmap;
 		$this->recipeChart->prepareOverview($draft);
-		if($joined) {
+
+		if($joined)
+		{
 			$program->use();
-			$this->bindJourney($program,$materials);
+			$this->bindJourney($program, $materials);
 		}
-		return $this->recipeChart->chart($program,[0.,0.],0.,false,$width,$height,$r['waterLevel'],$waterColor,
-			$west,$appearance,$size,fixedSpan:$r['worldSize'],origin:$origin,sharedPalette:$joined);
+
+		return $this->recipeChart->chart(
+			$program
+			, [0.,0.]
+			, 0.
+			, false
+			, $width
+			, $height
+			, $r['waterLevel']
+			, $waterColor
+			, $west
+			, $appearance
+			, $size
+			, fixedSpan:$r['worldSize']
+			, origin:$origin
+			, sharedPalette:$joined
+		);
 	}
 
+	/**
+	 * Release the independent GPU cache used by the editor preview.
+	 *
+	 * @return void No value.
+	 */
 	private function closeRecipeChart(): void
 	{
 		$this->recipeChart?->close();
 		$this->recipeChart = null;
+
 		foreach($this->recipeChartPrograms as $program) $program->close();
 		$this->recipeChartPrograms = [];
 	}
 
+	/**
+	 * Recreate rendering state after the graphics context is restored.
+	 *
+	 * @return void No value.
+	 */
 	public function restore(): void
 	{
 		if($this->closed) return;
@@ -3109,19 +3628,31 @@ final class Scene
 		$this->surfaceSamples = null;
 		$this->materialFields?->close();
 		$this->materialFields = null;
-		if($this->clipmap) { $this->clipmap->close(); $this->clipmap = new Clipmap; }
-		foreach($this->materialPrograms as $key=>$set) {
+
+		if($this->clipmap)
+		{
+			$this->clipmap->close();
+			$this->clipmap = new Clipmap;
+		}
+
+		foreach($this->materialPrograms as $key => $set)
+		{
 			if($key === $this->materialKey) foreach($set as $program) $program->restore();
-			else {
+			else
+			{
 				foreach($set as $program) $program->close();
 				unset($this->materialPrograms[$key]);
 			}
 		}
-		if($this->paletteBuffer) glDeleteBuffers(1,$this->paletteBuffer);
+
+		if($this->paletteBuffer) glDeleteBuffers(1, $this->paletteBuffer);
+
 		$this->paletteBuffer = $this->uploadedMaterials = $this->selectedMaterials = [];
-		$this->boundPaint = []; $this->layerBinding=[];
+		$this->boundPaint = [];
+		$this->layerBinding = [];
 		$this->boundEnvironment = [];
-		$this->weatherRenderer?->close(); $this->weatherRenderer=null;
+		$this->weatherRenderer?->close();
+		$this->weatherRenderer = null;
 		$this->skyProgram->restore();
 		$this->starsProgram->restore();
 		$this->waterProgram->restore();
@@ -3129,10 +3660,14 @@ final class Scene
 		$this->litDrawn = ['ground' => false, 'water' => false];
 		$this->spotLights?->forget();
 
-		if($this->gridBuffer) glDeleteBuffers(1,$this->gridBuffer);
-		if($this->vao) glDeleteVertexArrays(1,$this->vao);
+		if($this->gridBuffer) glDeleteBuffers(1, $this->gridBuffer);
+
+		if($this->vao) glDeleteVertexArrays(1, $this->vao);
+
 		glGenVertexArrays(1, $this->vao);
+
 		if(!$this->clipmap) $this->createGridBuffer();
+
 		foreach($this->patches as $p) $p['mesh']->restore($this->gridBuffer[0]);
 		$this->craftMesh->restore();
 		$this->atmosphereCache->restore();
@@ -3185,7 +3720,9 @@ final class Scene
 		$this->materialFields?->close();
 		$this->surfaceSamples?->close();
 		$this->ribTarget?->close();
-		if($this->paletteBuffer) glDeleteBuffers(1,$this->paletteBuffer);
+
+		if($this->paletteBuffer) glDeleteBuffers(1, $this->paletteBuffer);
+
 		foreach($this->materialPrograms as $set) foreach($set as $program) $program->close();
 		$this->materialPrograms = [];
 		$this->weatherRenderer?->close();

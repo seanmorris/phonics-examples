@@ -25,9 +25,13 @@ final class CanyonBeds
 		// fmod() returns a height inside one period unchanged, so only a height outside it pays for the call.
 		$period = 10 * $spacing;
 		$level = ($height < $period && $height > -$period ? $height : fmod($height, $period)) / $spacing;
+
 		if($level < -5) $level += 10;
+
 		if($level >= 5) $level -= 10;
+
 		$i = 0;
+
 		while($i < 6 && $level >= self::CONTACTS[$i + 1]) $i++;
 		$width = self::CONTACTS[$i + 1] - self::CONTACTS[$i];
 		$fraction = ($level - self::CONTACTS[$i]) / $width;
@@ -38,10 +42,11 @@ final class CanyonBeds
 		$t = $t >= 1.0 ? 1.0 : ($t > 0.0 ? $t : ($t < 0.0 ? 0.0 : max(0.0, min(1.0, $t))));
 		// Noise::fade() written out, because the call costs more than the polynomial.
 		$displacement = $width * $spacing * ($t * $t * $t * ($t * ($t * 6 - 15) + 10) - $fraction);
+
 		return [
-			$height + $strength * $displacement,
-			1 - $strength + $strength * 30 * $t * $t * ($t - 1) ** 2 / ($end - $start),
-			$displacement
+			$height + $strength * $displacement
+			, 1 - $strength + $strength * 30 * $t * $t * ($t - 1) ** 2 / ($end - $start)
+			, $displacement
 		];
 	}
 }

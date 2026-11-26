@@ -147,11 +147,17 @@ final class Noise
 		$rx += 32 * PHP_FLOAT_EPSILON * (1 + abs($x) + $rx);
 		$rz += 32 * PHP_FLOAT_EPSILON * (1 + abs($z) + $rz);
 		$r = $rx + $rz;
+
 		if($r >= .5) return [-1.42,1.42,7.0,7.0];
+
 		[$value,$dx,$dz] = $this->sample($x, $z);
 		$radius = abs($dx) * $rx + abs($dz) * $rz + 16 * $r * $r + 1e-12;
-		return [max(-1.42, $value - $radius), min(1.42, $value + $radius),
-			min(7.0, abs($dx) + 32 * $r + 1e-12), min(7.0, abs($dz) + 32 * $r + 1e-12)];
+
+		return [
+			max(-1.42, $value - $radius), min(1.42, $value + $radius)
+			, min(7.0, abs($dx) + 32 * $r + 1e-12)
+			, min(7.0, abs($dz) + 32 * $r + 1e-12)
+		];
 	}
 
 	/**

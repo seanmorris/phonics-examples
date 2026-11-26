@@ -470,7 +470,7 @@ final class GrassShells
 
 			glUniform4f(
 				$p->location("uBlades[$index]")
-				, $style['density']*(1.-.9*$snow)
+				, $style['density'] * (1. - .9 * $snow)
 				, .5 * $style['width']
 				, $style['lean']
 				, min($style['height']

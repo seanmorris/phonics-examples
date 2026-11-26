@@ -64,13 +64,20 @@ final class TerrainShadows
 	 * @return bool True if the map was regenerated. The parent framebuffer is restored; the caller resets viewport,
 	 * program, VAO, textures, depth mask and depth/cull/blend/scissor enables before rendering its scene.
 	 */
-	public function update(int $heightTexture, float $extent, array $sunDirection, int $revision, bool $packed = false,
-		float $minHeight = -32768., float $maxHeight = 32767.): bool
-	{
+	public function update(
+		int $heightTexture
+		, float $extent
+		, array $sunDirection
+		, int $revision
+		, bool $packed = false
+		, float $minHeight = -32768.
+		, float $maxHeight = 32767.
+	): bool {
 		if($this->closed) throw new \LogicException('Terrain shadows are closed');
 
 		if($heightTexture < 0 || !is_finite($extent) || $extent <= 0 || count($sunDirection) !== 3)
 		throw new \InvalidArgumentException('Terrain shadows require a valid texture, extent and sun direction');
+
 		if(!is_finite($minHeight) || !is_finite($maxHeight) || $minHeight > $maxHeight)
 		throw new \InvalidArgumentException('Invalid terrain elevation bounds');
 
@@ -95,10 +102,12 @@ final class TerrainShadows
 			return false;
 		}
 
-		$range = [$minHeight,max(1.,$maxHeight-$minHeight)];
-		$key = json_encode([$heightTexture,$extent,$revision,$packed,$range,$sun[1]>0.], JSON_THROW_ON_ERROR);
-		if($key === $this->key && ($sun[1] <= 0. ||
-			$sun[0]*$this->sun[0]+$sun[1]*$this->sun[1]+$sun[2]*$this->sun[2] >= self::SUN_COSINE)) return false;
+		$range = [$minHeight,max(1., $maxHeight - $minHeight)];
+		$key = json_encode([$heightTexture,$extent,$revision,$packed,$range,$sun[1] > 0.], JSON_THROW_ON_ERROR);
+
+		if($key === $this->key && ($sun[1] <= 0.
+			|| $sun[0] * $this->sun[0] + $sun[1] * $this->sun[1] + $sun[2] * $this->sun[2] >= self::SUN_COSINE
+		)) return false;
 
 		$this->key = '';
 		glDisable(GL_DEPTH_TEST);
@@ -112,7 +121,7 @@ final class TerrainShadows
 		glActiveTexture(GL_TEXTURE0 + 1);
 		glBindTexture(GL_TEXTURE_2D, $heightTexture);
 		glUniform1i($this->program->location('uTerrainHeights'), 1);
-		glUniform1i($this->program->location('uPacked'),(int)$packed);
+		glUniform1i($this->program->location('uPacked'), (int)$packed);
 		glUniform1f($this->program->location('uTerrainShadowExtent'), $extent);
 		glUniform1f($this->program->location('uTerrainShadowSize'), $this->resolution);
 		glUniform2f($this->program->location('uShadowHeightRange'), ...$range);
@@ -127,6 +136,7 @@ final class TerrainShadows
 		{
 			$this->target->unbind();
 		}
+
 		// Average distant coverage over the pixel footprint on a fixed world grid.
 		glBindTexture(GL_TEXTURE_2D, $this->target->texture());
 		glGenerateMipmap(GL_TEXTURE_2D);
