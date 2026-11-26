@@ -135,13 +135,24 @@ expect(isset($afterHit['events']['airPatrol']['seeker']['mount']) && !isset($cop
 $copy->restorePatrolSmoke($rewound,$hitTime+.6,$afterHit);
 expect($rewound->smoke?->active()===true && !$rewound->smoke->showsLodgedSeeker(),'The fast car has left its shell in the fading burst, including on a demo seek.');
 
+// Test the framing with the same camera-relative projection as the renderer.
+$inFrame=static function(Camera $eye,array $point,float $margin): bool {
+	[$x,$y,$z]=array_map(static fn($v,$origin)=>$v-$origin,$point,$eye->position);
+	$m=$eye->viewProjection(1600,900);
+	$depth=$m[3]*$x+$m[7]*$y+$m[11]*$z;
+	return $depth>0. && max(abs($m[0]*$x+$m[4]*$y+$m[8]*$z),abs($m[1]*$x+$m[5]*$y+$m[9]*$z))<$margin*$depth;
+};
+$xyz=static fn(array $p)=>[$p['x'],$p['y'],$p['z']];
+[$back]=AirPatrol::interpolateGlance([deg2rad(179.),0.],[deg2rad(-179.),0.],.5);
+expect(abs(abs($back)-M_PI)<1e-8,'Tracking across the rear view takes the short way around.');
+
 // Try the handbrake during the fly-out, the swing down, and from both sides of the rear chase.
 foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,true],[2.65,'KeyD',true,false],[3.25,'KeyD',true,true],[3.,'KeyA',true,true]] as [$delay,$steer,$shakes,$wins]) {
 	$game=new Session($flat);
 	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$releaseTime+$delay],'demo-take-control'] as $action)
 		$game->input(['actions'=>[$action]],0.,16/9);
 	$lockedAt=$wonAt=$previousPose=null; $missed=$followed=$driftedOnApproach=false;
-	$returnSpeeds=[]; $glancedOnReturn=false;
+	$returnSpeeds=[];
 	for($tick=0;$tick<360;$tick++) {
 		if($tick===0 || $tick===24) $game->input(['keys'=>$tick===0 ? ['KeyW'=>1,$steer=>1,'Space'=>1] : ['KeyW'=>1]],0.,16/9);
 		$beforeShot=$game->airPatrol->seeker();
@@ -161,7 +172,11 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 		}
 		if(($shot['phase'] ?? '')==='return') {
 			$at=$shot['pose'];
-			$glancedOnReturn=$glancedOnReturn || isset($patrol['glance']);
+			if($shot['clock']>=.20) {
+				$view=$game->view(1.)[0];
+				expect($inFrame($view,$xyz($at),.75) && $inFrame($view,$xyz($patrol['pose']),.75),
+					'The chase camera keeps the returning seeker and the jet inside the frame on either side of the road.');
+			}
 			if($lockedAt===null) {
 				$lockedAt=$game->demo->duration();
 				$car=$game->car->state(); $body=VehicleModel::basis($car);
@@ -178,6 +193,8 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 			expect($shot['impact']===[$patrol['pose']['x'],$patrol['pose']['y'],$patrol['pose']['z']] &&
 				$patrol['phase']==='departure' && $game->airPatrol->carImpact===null,'The return bursts on the plane and sends the pilot away.');
 		}
+		if($wonAt!==null && isset($shot['impact']) && $shot['clock']<=.40)
+			expect($inFrame($game->view(1.)[0],$shot['impact'],.22),'The camera holds the world-space flash as the car drives on.');
 	}
 	if($delay<1.95) expect($driftedOnApproach && $followed,'An early handbrake slide still leads into the bumper chase.');
 	expect($missed===$shakes,'A slide that ends before the bumper chase cannot shake the lock later.');
@@ -186,7 +203,9 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 		expect(abs($returnSpeeds[1]-1.)<.08 && $returnSpeeds[6]<1.25 && $returnSpeeds[12]>$returnSpeeds[6] &&
 			$returnSpeeds[20]>$returnSpeeds[12] && $returnSpeeds[27]>max(1.4,$returnSpeeds[20]),
 			'The loose seeker carries its drift speed into the switch and visibly builds speed over the next 440 ms.');
-		expect($glancedOnReturn && abs($wonAt-$lockedAt-.79)<.04,'The camera follows the departing seeker through the longer return.');
+		expect(abs($wonAt-$lockedAt-.79)<.04,'The camera move preserves the timing of the return.');
+		[$pan,$tilt]=$game->airPatrol->snapshot()['glance'] ?? [0.,0.];
+		expect(max(abs($pan),abs($tilt))<.02,'The view eases back to the road after the flash.');
 		$won=$game->airPatrol->snapshot();
 		$away=new AirPatrol; $away->resume($won);
 		$fast=$game->car->state(); $fast['speed']=70.;
@@ -202,6 +221,15 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 			$game->input(['actions'=>[$action]],0.,16/9);
 		for($tick=0;$tick<42;$tick++) $game->step(1/60);
 		expect($game->airPatrol->snapshot()['repelled'] ?? false,'Taking control halfway through a recorded return completes the encounter.');
+		foreach([$lockedAt+.25,$wonAt+.17] as $at) {
+			foreach(['demo-stop',['type'=>'demo-open','json'=>$recording],['type'=>'demo-seek','seconds'=>$at],'demo-take-control'] as $action)
+				$game->input(['actions'=>[$action]],0.,16/9);
+			$recorded=$result->frame($game->demo->duration())['camera']; $view=$game->view(1.)[0];
+			expect(abs(atan2(sin($view->yaw-$recorded->yaw),cos($view->yaw-$recorded->yaw)))+abs($view->pitch-$recorded->pitch)<.0001,'Taking control preserves the return or impact framing.');
+			$game->input(['pad'=>[0.,0.,1.,0.,0.,0.,0]],0.,16/9); $game->step(1/60);
+			$view=$game->view(.5)[0]; $base=$game->carView(.5)[0];
+			expect($view->yaw===$base->yaw && $view->pitch===$base->pitch,'The right stick takes over during both the return and the impact hold.');
+		}
 	}
 	$game->close();
 }

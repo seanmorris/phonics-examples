@@ -209,8 +209,20 @@ final class AirPatrol
 
 	public function seeker(float $alpha=1.): ?array { return $this->seeker?->state($alpha); }
 
-	/** A small pan and tilt in the driver's view. The boom continues following the car. */
-	public function advanceGlance(Camera $eye,array $car,bool $manual,float $dt): bool
+	/** Angular offset from the unassisted chase camera to a point in the scene. */
+	private static function lookOffset(Camera $eye,float $x,float $y,float $z): array
+	{
+		$x-=$eye->position[0]; $y-=$eye->position[1]; $z-=$eye->position[2];
+		return [self::angle(atan2($x,-$z)-$eye->yaw),atan2($y,hypot($x,$z))-$eye->pitch];
+	}
+
+	public static function interpolateGlance(array $from,array $to,float $t): array
+	{
+		return [self::angle($from[0]+$t*self::angle($to[0]-$from[0])), $from[1]+$t*($to[1]-$from[1])];
+	}
+
+	/** Pan the driver's view without moving the boom or changing steering. */
+	public function advanceGlance(callable $getEye,array $car,bool $manual,float $dt): bool
 	{
 		$this->previousGlance=$this->glance;
 		if($manual) {
@@ -218,36 +230,43 @@ final class AirPatrol
 			$this->previousGlance=$this->glance=self::NEUTRAL_GLANCE;
 			return $changed;
 		}
-		$point=$this->seeker()['pose'] ?? null;
-		$weight=1.;
-		if($point!==null) {
-			$range=hypot(hypot($point['x']-$car['x'],$point['z']-$car['z']),$point['y']-$car['y']);
-			$weight=max(0.,min(1.,(38.-$range)/30.));
-		} elseif($this->phase==='arrival') $point=$this->pose();
+		$shot=$this->seeker();
+		$point=$shot['pose'] ?? null;
 		$goal=self::NEUTRAL_GLANCE;
-		if($point!==null && $weight>0.) {
-			$x=$point['x']-$eye->position[0]; $y=$point['y']-$eye->position[1]; $z=$point['z']-$eye->position[2];
-			$pan=self::angle(atan2($x,-$z)-$eye->yaw);
-			// Let an approaching wing enter the forward view before inviting a glance.
-			$weight*=max(0.,min(1.,(M_PI/2-abs($pan))/.35));
-			$tilt=atan2($y,hypot($x,$z))-$eye->pitch;
+		$halfLife=$this->repelled ? .22 : .12;
+		if(($shot['phase'] ?? null)==='return' && ($jet=$this->pose())!==null) {
+			$eye=$getEye();
+			// Split the angle on screen so the near seeker and distant jet both get room.
+			$from=self::lookOffset($eye,$point['x'],$point['y'],$point['z']);
+			$to=self::lookOffset($eye,$jet['x'],$jet['y'],$jet['z']);
+			$goal=self::interpolateGlance($from,$to,.5);
+			$halfLife=.075;
+		} elseif($this->repelled && isset($shot['impact']) && $shot['clock']<.45) {
+			// The flash stays at the contact point as the jet climbs away.
+			$goal=self::lookOffset($getEye(),...$shot['impact']);
+			$halfLife=.075;
+		} elseif($point!==null || ($this->phase==='arrival' && ($point=$this->pose())!==null)) {
+			[$pan,$tilt]=self::lookOffset($getEye(),$point['x'],$point['y'],$point['z']);
+			$weight=max(0.,min(1.,(M_PI/2-abs($pan))/.35));
+			if(isset($shot['pose'])) {
+				$range=hypot(hypot($point['x']-$car['x'],$point['z']-$car['z']),$point['y']-$car['y']);
+				$weight*=max(0.,min(1.,(38.-$range)/30.));
+			}
 			$goal=[$weight*max(-deg2rad(5.),min(deg2rad(5.),.18*$pan)),
 				$weight*max(-deg2rad(3.),min(deg2rad(3.),.18*$tilt))];
 		}
 		if($goal===$this->glance) return false;
-		$remaining=2**(-$dt/.12);
-		foreach($goal as $i=>$angle) {
-			$gap=($this->glance[$i]-$angle)*$remaining;
-			$this->glance[$i]=abs($gap)<.00002 ? $angle : $angle+$gap;
-		}
+		$this->glance=self::interpolateGlance($this->glance,$goal,1.-2**(-$dt/$halfLife));
+		if(abs(self::angle($this->glance[0]-$goal[0]))<.00002 && abs($this->glance[1]-$goal[1])<.00002)
+			$this->glance=$goal;
 		return true;
 	}
 
 	public function glanceView(Camera $eye,float $alpha): Camera
 	{
 		if($this->glance===self::NEUTRAL_GLANCE && $this->previousGlance===self::NEUTRAL_GLANCE) return $eye;
-		$view=clone $eye;
-		foreach(['yaw','pitch'] as $i=>$axis) $view->$axis+=$this->previousGlance[$i]+$alpha*($this->glance[$i]-$this->previousGlance[$i]);
+		[$pan,$tilt]=self::interpolateGlance($this->previousGlance,$this->glance,$alpha);
+		$view=clone $eye; $view->yaw+=$pan; $view->pitch+=$tilt;
 		return $view;
 	}
 

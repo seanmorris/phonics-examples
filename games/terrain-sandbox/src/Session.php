@@ -876,7 +876,7 @@ final class Session
 		if($this->settings['airPatrolEnabled'] && $this->mode==='car' && $mode==='car' && !$this->network && !isset($this->landscape->recipe()['join'])) {
 			if($this->airPatrol->step($seconds,$after,fn()=>$this->view(1.)[0],$this->aspect,$this->landscape,$this->water->level(),$before))
 				$this->dirty = true;
-			if($this->airPatrol->advanceGlance($this->camera,$after,$this->manualLook(),$seconds)) $this->dirty=true;
+			if($this->airPatrol->advanceGlance(fn()=>$this->gateView($this->camera,$after),$after,$this->manualLook(),$seconds)) $this->dirty=true;
 			if($this->airPatrol->carImpact!==null) {
 				$this->car->kickFrom($this->airPatrol->carImpact);
 				$after=$this->car->state();
@@ -2547,11 +2547,16 @@ final class Session
 			default => [$this->camera, null]
 		};
 		if($this->mode === 'jet' && $this->jetView === 'cockpit') return [Jet::cockpit($pose),$pose];
-		if($this->mode !== 'fly' && $this->course->count() !== 0)
-			$eye=$this->duck()->apply($eye, $this->chaseTarget($pose), $this->nearGates($eye->position));
+		if($this->mode !== 'fly') $eye=$this->gateView($eye,$pose);
 		if($this->mode==='car' && $this->settings['airPatrolEnabled'] && !$this->manualLook())
 			$eye=$this->airPatrol->glanceView($eye,$this->paused ? 1. : $alpha);
 		return [$eye,$pose];
+	}
+
+	private function gateView(Camera $eye,array $pose): Camera
+	{
+		if($this->course->count()===0) return $eye;
+		return $this->duck()->apply($eye,$this->chaseTarget($pose),$this->nearGates($eye->position));
 	}
 
 	/** Point to keep in view while the chase camera moves around a gate. */

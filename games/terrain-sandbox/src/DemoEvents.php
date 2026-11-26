@@ -67,7 +67,7 @@ final class DemoEvents
 			$next=json_decode($this->changes[$this->cursor][1],true,32,JSON_THROW_ON_ERROR)['airPatrol'] ?? null;
 			if($next!==null && (isset($view['airPatrol']['glance']) || isset($next['glance']))) {
 				$from=$view['airPatrol']['glance'] ?? [0.,0.]; $to=$next['glance'] ?? [0.,0.];
-				foreach($from as $i=>$angle) $view['airPatrol']['glance'][$i]=$angle+$fraction*($to[$i]-$angle);
+				$view['airPatrol']['glance']=AirPatrol::interpolateGlance($from,$to,$fraction);
 			}
 			if(isset($view['airPatrol']['pose'],$next['pose'])) $view['airPatrol']['pose']=AirPatrol::interpolate($view['airPatrol']['pose'],$next['pose'],$fraction);
 			if(isset($view['airPatrol']['seeker']['pose'],$next['seeker']['pose']))
@@ -120,7 +120,7 @@ final class DemoEvents
 			if($v===null) return true;
 			if(!is_array($v) || !array_key_exists('pose',$v)) return false;
 			$legacy=self::vector($v['flight'] ?? null,9);
-			if(isset($v['glance']) && (!self::vector($v['glance'],2) || abs($v['glance'][0])>deg2rad(5.)+.00001 || abs($v['glance'][1])>deg2rad(3.)+.00001)) return false;
+			if(isset($v['glance']) && (!self::vector($v['glance'],2) || max(abs($v['glance'][0]),abs($v['glance'][1]))>M_PI+.00001)) return false;
 			if(isset($v['repelled']) && (!is_bool($v['repelled']) || !in_array($v['phase'] ?? null,['departure','idle'],true))) return false;
 			if(!$legacy && !self::vector($v['flight'] ?? null,6)) return false;
 			$keys=['x','y','z','yaw','pitch','roll'];
