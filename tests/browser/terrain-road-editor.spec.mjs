@@ -2,6 +2,7 @@ import {test, expect} from '@playwright/test';
 import {PNG} from 'pngjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {slow} from './slow.mjs';
 
 const road = {type: 'road', points: [[-46,1,-32],[-8,3,-12],[0,1,35]], width: 12, shoulder: 3};
 const recipe = {preset: 'coast', seed: 'road-lab', worldSize: 256, spacing: 1, heightScale: 0, detailAmplitude: 0};
@@ -26,7 +27,7 @@ test('road eyes, disclosure, deletion and undo are independent', async({page}) =
 	await page.goto('/games/terrain-sandbox/');
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
 	const status = () => canvas.evaluate(el => JSON.parse(el.dataset.terrainSandbox));
-	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	const arc = Array.from({length:7}, (_,i) => [60*(Math.cos(i*Math.PI/12)-1),0,60*Math.sin(i*Math.PI/12)]);
 	const bend = {...road, points:[[0,0,-110],[0,0,-52],...arc,[-115,0,60]]};
 	await page.locator('[data-file]').setInputFiles({
@@ -80,7 +81,7 @@ test('road eyes, disclosure, deletion and undo are independent', async({page}) =
 });
 
 test('a saved road can be inspected, reshaped and reopened on the terrain map', async({page}) => {
-	test.setTimeout(360_000);
+	test.setTimeout(slow(360_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 
@@ -92,7 +93,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 	await page.setViewportSize({width: 960, height: 640});
 	await page.goto('/games/terrain-sandbox/');
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
-	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 
 	const status = () => canvas.evaluate(el => JSON.parse(el.dataset.terrainSandbox));
 
@@ -128,7 +129,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 	if(output)
 	{
 		await fs.mkdir(output, {recursive: true});
-		await expect.poll(async() => (await status()).renderer.pending, {timeout: 90_000}).toBe(0);
+		await expect.poll(async() => (await status()).renderer.pending, {timeout: slow(90_000)}).toBe(0);
 
 		await canvas.screenshot({
 			path: path.join(output, 'road-centerline.jpg')
@@ -259,17 +260,17 @@ test('the canyon remains legible at full extent in the Roads editor', async({pag
 	await page.setViewportSize({width: 1150,height: 760});
 	await page.goto('/games/terrain-sandbox/');
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
-	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await canvas.focus(); await page.keyboard.press('p');
 	await page.locator('[name=preset]').selectOption('canyon');
 	await page.locator('[data-action=generate]').click();
 	await expect.poll(() => canvas.evaluate(el => {
 		const {recipe, renderer} = JSON.parse(el.dataset.terrainSandbox);
 		return recipe.preset === 'canyon' && !renderer.pending;
-	}), {timeout: 90_000}).toBe(true);
+	}), {timeout: slow(90_000)}).toBe(true);
 	await page.getByRole('tab', {name: 'Roads',exact: true}).click();
 	const map = page.locator('[data-road-map]');
-	await expect(map).toHaveAttribute('data-chart', 'ready', {timeout: 90_000});
+	await expect(map).toHaveAttribute('data-chart', 'ready', {timeout: slow(90_000)});
 	await page.locator('[data-map=world]').click();
 	await expect(map).toHaveAttribute('data-chart-span', '32768');
 	const edgeFraction = () => map.evaluate(el => {
@@ -297,11 +298,11 @@ test('the canyon remains legible at full extent in the Roads editor', async({pag
 });
 
 test('draw a manual lap circuit with the editor controls', async({page}) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	await page.setViewportSize({width: 1150,height: 760});
 	await page.goto('/games/terrain-sandbox/');
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
-	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	const doc = structuredClone(fixture);
 	// The west (closing) span crosses a ridge, with both of its hand-placed endpoints on the plain.
 	const ridge = {type:'raise',x:-337,z:0,radius:125,amount:32};
@@ -331,7 +332,7 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 	await expect(point).toHaveValue('1');
 	await expect(page.locator('[data-road-grade]')).toContainText('Ground spans are fitted on Apply');
 	await page.getByRole('button',{name:'Close loop and create circuit'}).click();
-	await expect.poll(async() => (await status()).circuit.active,{timeout:60_000}).toBe('dry');
+	await expect.poll(async() => (await status()).circuit.active,{timeout:slow(60_000)}).toBe('dry');
 	await expect.poll(() => point.locator('option').count()).toBeGreaterThan(6);
 	await expect(page.locator('[data-road-layer="1"]')).toHaveAttribute('open','');
 	expect((await status()).course.gates).toHaveLength(3);
@@ -342,7 +343,7 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 		await width.press('Tab');
 		await page.getByRole('button', {name:'Apply road',exact:true}).click();
 		await expect.poll(async() => Math.min(...(await status()).course.gates.map(gate => gate.width)),
-			{timeout:60_000}).toBeCloseTo(feet*.3048+1.5,1);
+			{timeout:slow(60_000)}).toBeCloseTo(feet*.3048+1.5,1);
 		expect((await status()).circuit.active).toBe('dry');
 	}
 
@@ -360,11 +361,11 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 });
 
 test('a 24 km spline applies and saves as one road through the editor', async({page}) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	await page.setViewportSize({width: 900, height: 540});
 	await page.goto('/games/terrain-sandbox/');
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
-	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	const status = () => canvas.evaluate(el => JSON.parse(el.dataset.terrainSandbox));
 	const generation = (await status()).generation;
 	await canvas.focus();
@@ -392,7 +393,7 @@ test('a 24 km spline applies and saves as one road through the editor', async({p
 		await x.press('Tab');
 	}
 	await page.getByRole('button', {name: 'Apply road'}).click();
-	await expect.poll(async() => (await status()).revision, {timeout: 90_000}).toBe(2);
+	await expect.poll(async() => (await status()).revision, {timeout: slow(90_000)}).toBe(2);
 	await expect(layers.locator('[data-road-layer]')).toHaveCount(2); // New road and the single 24 km highway.
 	await expect(layers.locator('[data-road-layer="0"]')).toHaveAttribute('open','');
 	await page.getByRole('tab', {name: 'Landscape', exact: true}).click();
@@ -408,7 +409,7 @@ test('diagonal road edges stay continuous and only the markings glow in darkness
 	await page.setViewportSize({width:800,height:550});
 	await page.goto('/games/terrain-sandbox/');
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
-	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:slow(60_000)});
 	const status = () => canvas.evaluate(el => el.terrainSandboxDebug.state);
 	await canvas.focus();
 	await page.keyboard.press('p');
@@ -426,7 +427,7 @@ test('diagonal road edges stay continuous and only the markings glow in darkness
 			name:'diagonal-road.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(document)),
 		});
 		await expect.poll(async() => (await status()).generation).toBe(generation+1);
-		await expect.poll(async() => (await status()).renderer.pending,{timeout:70_000}).toBe(0);
+		await expect.poll(async() => (await status()).renderer.pending,{timeout:slow(70_000)}).toBe(0);
 		const {width,height,data} = PNG.sync.read(await canvas.screenshot({
 			style:'.terrain-panel,.terrain-hud{visibility:hidden!important}',
 		}));
@@ -466,11 +467,11 @@ test('diagonal road edges stay continuous and only the markings glow in darkness
 });
 
 test('a fork carries dashed centerlines in both directions and shoulders stay at the pavement edge', async({page}) => {
-	test.setTimeout(150_000);
+	test.setTimeout(slow(150_000));
 	await page.setViewportSize({width:900,height:560});
 	await page.goto('/games/terrain-sandbox/');
 	const canvas=page.locator('canvas[data-terrain-sandbox]');
-	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:slow(60_000)});
 	const origin=[.35,0,-.4], eye=[8,48,2], pitch=-1.52;
 	const endpoints=[[-110,0,-4],[110,0,-32],[110,0,29]];
 	const roads=endpoints.map((end,i)=>({...road,width:20,shoulder:14,crown:0,
@@ -482,7 +483,7 @@ test('a fork carries dashed centerlines in both directions and shoulders stay at
 		buffer:Buffer.from(JSON.stringify(doc))});
 	await expect.poll(() => canvas.evaluate(el=>{const s=el.terrainSandboxDebug.state;
 		return s.recipe.seed==='fork-stripes' && s.renderer.roadTextureBytes>0 && !s.renderer.pending;
-	}),{timeout:85_000}).toBe(true);
+	}),{timeout:slow(85_000)}).toBe(true);
 	const capture=await canvas.screenshot({style:'body *{visibility:hidden!important} canvas[data-terrain-sandbox]{visibility:visible!important}'});
 	if(process.env.TERRAIN_ROAD_CAPTURES) {
 		await fs.mkdir(process.env.TERRAIN_ROAD_CAPTURES,{recursive:true});

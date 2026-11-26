@@ -1,5 +1,6 @@
 import {expect, test} from '@playwright/test';
 import {readFileSync} from 'node:fs';
+import {slow} from './slow.mjs';
 
 const catalog = JSON.parse(readFileSync(new URL('../../games/terrain-sandbox/assets/soundtrack.json', import.meta.url)));
 
@@ -12,7 +13,7 @@ test.beforeEach(async({page}) => {
 });
 
 test('streamed songs show their ID3 credits, clear the minimap, and remember the next title', async({page}, testInfo) => {
-	test.setTimeout(150_000);
+	test.setTimeout(slow(150_000));
 	await page.setViewportSize({width: 760,height: 490});
 	const requested = new Set(), errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -26,7 +27,7 @@ test('streamed songs show their ID3 credits, clear the minimap, and remember the
 	const map = page.locator('canvas.terrain-flight-map');
 	const next = page.locator('[data-music-next]');
 	await page.goto('/games/terrain-sandbox/');
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	// Hosts can already have user activation by the time PHP finishes loading.
 	expect(requested.size).toBeLessThanOrEqual(1);
 	await view.focus();
@@ -39,7 +40,7 @@ test('streamed songs show their ID3 credits, clear the minimap, and remember the
 	await expect(credit.locator('strong')).toHaveCSS('font-size', '28px');
 	expect(requested.size).toBe(1);
 	await view.evaluate(el => el.terrainSandboxDebug.action('car'));
-	await expect(map).toBeVisible({timeout: 45_000});
+	await expect(map).toBeVisible({timeout: slow(45_000)});
 	const explore = page.locator('[aria-controls="terrain-section-explore"]');
 	await explore.click();
 	await next.click();
@@ -79,9 +80,9 @@ test('streamed songs show their ID3 credits, clear the minimap, and remember the
 	const popup = await credit.boundingBox(), dial = await page.locator('.terrain-speedometer').boundingBox();
 	expect((await space()).clearance).toBeGreaterThanOrEqual(6);
 	expect(popup.y+popup.height).toBeLessThanOrEqual(dial.y-4);
-	await expect(credit).toBeHidden({timeout: 10_000});
+	await expect(credit).toBeHidden({timeout: slow(10_000)});
 	await page.reload();
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await view.focus();
 	await page.keyboard.press('Control');
 	await expect(credit).toContainText('Ghost Nova');
@@ -124,17 +125,17 @@ test('the browser buffers one song ahead and plays the prepared media element at
 	await page.goto('/games/terrain-sandbox/');
 	const view = page.locator('canvas[data-terrain-sandbox]');
 	const title = page.locator('[data-music-credit] strong');
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:slow(60_000)});
 	await view.focus();
 	await page.keyboard.press('Control');
 	await expect(title).toHaveText(catalog[0].title);
 	expect(requests.size).toBe(1);
 	// Play through even on a sequential HTTP stream whose server does not advertise seekable byte ranges.
 	await page.evaluate(() => { window.streams[0].playbackRate = 12; });
-	await expect.poll(() => requests.size, {timeout:45_000}).toBe(2);
+	await expect.poll(() => requests.size, {timeout:slow(45_000)}).toBe(2);
 	await expect(title).toHaveText(catalog[0].title);
 	expect(await page.evaluate(() => window.streams[1].paused)).toBe(true);
-	await expect(title).toHaveText(catalog[1].title, {timeout:35_000});
+	await expect(title).toHaveText(catalog[1].title, {timeout:slow(35_000)});
 	expect(await page.evaluate(() => window.streams.length === 2 && !window.streams[1].paused)).toBe(true);
 	expect(requests.size).toBe(2);
 });
@@ -159,7 +160,7 @@ test('the Lab title bar plays, pauses and steps through the soundtrack independe
 	const previous = group.getByRole('button', {name: 'Previous track'});
 	const next = group.getByRole('button', {name: 'Next track'});
 	const title = page.locator('[data-music-credit] strong');
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await play.click();
 	await expect(title).toHaveText(catalog[0].title);
 	await expect.poll(() => page.evaluate(() => window.transportMedia[0].currentTime)).toBeGreaterThan(.1);

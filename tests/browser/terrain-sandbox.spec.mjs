@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {gunzipSync} from 'node:zlib';
+import {slow} from './slow.mjs';
 
 const canvas = page => page.locator('canvas[data-terrain-sandbox]');
 
@@ -103,7 +104,7 @@ async function boot(page)
 {
 	const started = Date.now();
 	await page.goto('/games/terrain-sandbox/');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	const initial = await status(page);
 
 	console.log(
@@ -141,7 +142,7 @@ async function settled(page)
 
 		return !now.preparing && !now.picking && !now.renderer.pending && !now.renderer.pendingEdits
 			&& !now.renderer.selectionPending && !now.renderer.transitions && unchanged;
-	}, {timeout: 90_000, intervals: [400,800,1200]}).toBe(true);
+	}, {timeout: slow(90_000), intervals: [400,800,1200]}).toBe(true);
 
 	return status(page);
 }
@@ -164,7 +165,7 @@ async function stroke(page, tool, x = .5, y = .5)
 	await page.locator('.terrain-panel > summary').click();
 	const box = await canvas(page).boundingBox();
 	await page.mouse.click(box.x + box.width * x, box.y + box.height * y);
-	await expect.poll(async() => (await status(page)).revision, {timeout: 90_000}).toBeGreaterThan(before);
+	await expect.poll(async() => (await status(page)).revision, {timeout: slow(90_000)}).toBeGreaterThan(before);
 	await settled(page);
 }
 
@@ -177,14 +178,14 @@ test.beforeEach(async({page}) => {
 });
 
 test('standing grass textures the ground near the car, follows its setting and is remembered', async({page}) => {
-	test.setTimeout(360_000);
+	test.setTimeout(slow(360_000));
 	// Wide enough that the HUD leaves open ground beside the car.
 	await page.setViewportSize({width: 960, height: 540});
 	await page.goto('/games/terrain-sandbox/');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await page.locator('[name="preset"]').selectOption({label: 'Rolling Prairie'});
 	await press(page, 'generate');
-	await expect.poll(async() => (await status(page)).surfacePreset, {timeout: 90_000}).toBe('rolling-prairie');
+	await expect.poll(async() => (await status(page)).surfacePreset, {timeout: slow(90_000)}).toBe('rolling-prairie');
 
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
@@ -247,17 +248,17 @@ test('standing grass textures the ground near the car, follows its setting and i
 	await level(1);
 	await expect.poll(() => page.evaluate(() => localStorage.getItem('terrain-sandbox.grass'))).toBe('1');
 	await page.reload();
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
-	await expect.poll(async() => (await status(page)).grass, {timeout: 60_000}).toBe(1);
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
+	await expect.poll(async() => (await status(page)).grass, {timeout: slow(60_000)}).toBe(1);
 });
 
 test('the default landscape produces visible terrain while input remains responsive', async({page}, testInfo) => {
-	test.setTimeout(90_000);
+	test.setTimeout(slow(90_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	const started = Date.now();
 	await page.goto('/games/terrain-sandbox/');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 
 	await canvas(page).focus();
 	await page.keyboard.press('p');
@@ -270,7 +271,7 @@ test('the default landscape produces visible terrain while input remains respons
 	await page.keyboard.up('e');
 	await expect.poll(async() => (await status(page)).generationBudgetMs).toBe(8);
 
-	await expect.poll(async() => (await status(page)).renderer.visible, {timeout: 30_000}).toBeGreaterThan(0);
+	await expect.poll(async() => (await status(page)).renderer.visible, {timeout: slow(30_000)}).toBeGreaterThan(0);
 	const now = await status(page);
 
 	console.log(
@@ -288,15 +289,15 @@ test('the default landscape produces visible terrain while input remains respons
 });
 
 test('local terrain shadows follow the sun and reuse stationary probes', async({page}) => {
-	test.setTimeout(120000);
+	test.setTimeout(slow(120000));
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60000)});
 	await view.evaluate(el => el.terrainSandboxDebug.action('pause'));
 	await expect.poll(async() => (await status(page)).paused).toBe(true);
 
 	const generation = async() => (await status(page)).renderer.triangleShadowGeneration;
-	await expect.poll(generation, {timeout: 60000}).toBeGreaterThan(0);
+	await expect.poll(generation, {timeout: slow(60000)}).toBeGreaterThan(0);
 	const first = await generation();
 
 	const values = patch => view.evaluate((el, v) => el.terrainSandboxDebug.values(v), patch);
@@ -323,7 +324,7 @@ test('boarding the craft refines the ground near the camera during cold startup'
 
 	await expect.poll(
 		async() => (await status(page)).renderer.cameraSpacing ?? Infinity
-		, {timeout: 30_000}
+		, {timeout: slow(30_000)}
 	).toBeLessThanOrEqual(32);
 });
 
@@ -346,7 +347,7 @@ test('the jet ski speedometer passes 90 mph on open water', async({page}) => {
 	{
 		await expect.poll(
 			async() => (await status(page)).craft.speed / .44704
-			, {timeout: 90_000}
+			, {timeout: slow(90_000)}
 		).toBeGreaterThanOrEqual(90);
 
 		await page.keyboard.press('p');
@@ -884,7 +885,7 @@ test('F5 underwing models leave and refill on their own wings', async({page}) =>
 });
 
 test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({page}) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	await page.setViewportSize({width: 720, height: 480});
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -981,12 +982,12 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	});
 
 	await setButton(0, true);
-	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: 60_000}).toBe(1);
+	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: slow(60_000)}).toBe(1);
 	await setButton(0, false);
 	await expect.poll(() => canvas(page).evaluate(el => el.sawBurst)).toBe(true);
 	await expect.poll(async() => (await status(page)).balloons.locked).toBe(true);
 	await setButton(2, true);
-	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: 60_000}).toBe(2);
+	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: slow(60_000)}).toBe(2);
 	await setButton(2, false);
 	expect((await status(page)).headlights).toBe('auto');
 	await canvas(page).focus();
@@ -1180,7 +1181,7 @@ test('right-stick recovery keeps rendering with the chase camera beyond the jour
 });
 
 test('tight road bends and checkpoint banners return the headlight beam at night', async({page}, testInfo) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	await page.setViewportSize({width: 720,height: 420});
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -1423,7 +1424,7 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 		await expect.poll(async() => (await status(page)).car.recoveries).toBe(1);
 		await page.evaluate(() => window.testCarButton(11, false));
 		await page.keyboard.down('Shift');
-		await expect(readout).toHaveText(/^Finished in /, {timeout: 90_000});
+		await expect(readout).toHaveText(/^Finished in /, {timeout: slow(90_000)});
 		const {race} = await status(page);
 
 		expect(race.state).toBe('finished');
@@ -1442,7 +1443,7 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 
 	const {race} = await status(page);
 	expect(race.vehicle).toBe('car');
-	await expect(readout).toBeHidden({timeout: 10_000});
+	await expect(readout).toBeHidden({timeout: slow(10_000)});
 	await expect(page.locator('[data-status]')).toBeHidden();
 	expect(race.splits.map(split => split.role)).toEqual(['checkpoint', 'finish']);
 	expect(race.time).toBeGreaterThan(race.splits[0].time);
@@ -1519,7 +1520,7 @@ test('the rendered arrow keeps an outside lane straight past an invisible waypoi
 
 	try
 	{
-		await expect.poll(async() => (await status(page)).car.z, {timeout: 90_000}).toBeGreaterThan(145);
+		await expect.poll(async() => (await status(page)).car.z, {timeout: slow(90_000)}).toBeGreaterThan(145);
 	}
 	finally
 	{
@@ -1666,7 +1667,7 @@ test('a package run marks its terrain-hidden pickup and reveals smoke above the 
 
 	expect(markers).toEqual({pickup: true,depot: true});
 	await page.evaluate(() => window.lookAtPackage());
-	await expect.poll(async() => await count(false), {timeout: 30000}).toBeGreaterThan(12);
+	await expect.poll(async() => await count(false), {timeout: slow(30000)}).toBeGreaterThan(12);
 	expect(errors).toEqual([]);
 });
 
@@ -1736,7 +1737,7 @@ test('a shoreline wipeout restarts the car on its approach', async({page}) => {
 
 	await canvas(page).focus();
 	await page.keyboard.down('w');
-	await expect.poll(async() => (await status(page)).car.recoveries, {timeout: 60_000}).toBeGreaterThan(0);
+	await expect.poll(async() => (await status(page)).car.recoveries, {timeout: slow(60_000)}).toBeGreaterThan(0);
 	await page.keyboard.up('w');
 	const state = await status(page);
 	expect(state.mode).toBe('car');
@@ -1770,8 +1771,8 @@ test('a racing water wipeout restarts on the course road across the dirt from th
 	try
 	{
 		await expect.poll(async() => (await status(page)).race.state).toBe('running');
-		await expect.poll(async() => (await status(page)).car.z, {timeout: 60_000}).toBeGreaterThan(0);
-		await expect.poll(async() => (await status(page)).car.floodedHold, {timeout: 60_000}).toBe(true);
+		await expect.poll(async() => (await status(page)).car.z, {timeout: slow(60_000)}).toBeGreaterThan(0);
+		await expect.poll(async() => (await status(page)).car.floodedHold, {timeout: slow(60_000)}).toBe(true);
 	}
 	finally
 	{
@@ -1790,7 +1791,7 @@ test('a racing water wipeout restarts on the course road across the dirt from th
 });
 
 test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width: 900, height: 600});
@@ -1995,14 +1996,14 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 
 	expect(await renderedFov()).toBeCloseTo(60, 3);
 	await page.keyboard.down('w');
-	await expect.poll(renderedFov, {timeout: 30_000}).toBeGreaterThan(66.5);
+	await expect.poll(renderedFov, {timeout: slow(30_000)}).toBeGreaterThan(66.5);
 	expect((await status(page)).car.nitrous).toBe(1);
 
 	await page.keyboard.down('d');
 	await setButton(4, true);
 	await expect.poll(async() => (await status(page)).car.nitrous).toBeLessThan(.99);
 	await expect(dial).toHaveAttribute('aria-label', /nitrous \d{1,2}%/);
-	await expect.poll(renderedFov, {timeout: 30_000}).toBeGreaterThan(74);
+	await expect.poll(renderedFov, {timeout: slow(30_000)}).toBeGreaterThan(74);
 
 	await setButton(4, false);
 	await expect.poll(chargeMotion).toEqual({draining: true, filling: true});
@@ -2013,7 +2014,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await page.keyboard.up('d');
 	await page.keyboard.up('w');
 	await page.keyboard.down('s');
-	await expect.poll(renderedFov, {timeout: 30_000}).toBeLessThan(67.2);
+	await expect.poll(renderedFov, {timeout: slow(30_000)}).toBeLessThan(67.2);
 	await page.keyboard.up('s');
 
 	const beforeRestore = await view.evaluate(element => element.carDraws);
@@ -2046,7 +2047,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 });
 
 test('the Testarossa lights its lamps and the page keeps the headlight switch', async({page}) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await boot(page);
@@ -2061,7 +2062,7 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 
 	await canvas(page).focus();
 	await page.keyboard.down('w');
-	await expect.poll(async() => (await status(page)).car.speed, {timeout: 60_000}).toBeGreaterThan(12);
+	await expect.poll(async() => (await status(page)).car.speed, {timeout: slow(60_000)}).toBeGreaterThan(12);
 	await page.keyboard.up('w');
 	await page.keyboard.down('s');
 
@@ -2071,8 +2072,8 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 		return car.braking && !car.reversing && lamps.brake;
 	};
 
-	await expect.poll(braking, {intervals: [100], timeout: 60_000}).toBe(1);
-	await expect.poll(async() => (await status(page)).car.reversing, {timeout: 60_000}).toBe(true);
+	await expect.poll(braking, {intervals: [100], timeout: slow(60_000)}).toBe(1);
+	await expect.poll(async() => (await status(page)).car.reversing, {timeout: slow(60_000)}).toBe(true);
 	await page.keyboard.up('s');
 
 	const headlights = page.locator('.terrain-sandbox [data-value="headlights"]');
@@ -2081,9 +2082,9 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 	await expect.poll(async() => (await status(page)).headlights).toBe('on');
 	await expect(headlights).toHaveValue('on');
 	expect((await status(page)).message).toBe('Headlights on.');
-	await expect.poll(async() => (await status(page)).lamps.pods, {timeout: 60_000}).toBe(1);
+	await expect.poll(async() => (await status(page)).lamps.pods, {timeout: slow(60_000)}).toBe(1);
 	// By day the beams keep their physical brightness, so each open headlamp is already a spot light.
-	await expect.poll(async() => (await status(page)).renderer.spotLights, {timeout: 30_000}).toBe(2);
+	await expect.poll(async() => (await status(page)).renderer.spotLights, {timeout: slow(30_000)}).toBe(2);
 	expect(await page.evaluate(() => localStorage.getItem('terrain-sandbox.car'))).toBe('{"headlights":"on"}');
 
 	// After sunset they stay the same two lights; only the night gain changes.
@@ -2092,7 +2093,7 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 		element.dispatchEvent(new Event('input', {bubbles: true}));
 	});
 
-	await expect.poll(async() => (await status(page)).renderer.spotLights, {timeout: 30_000}).toBe(2);
+	await expect.poll(async() => (await status(page)).renderer.spotLights, {timeout: slow(30_000)}).toBe(2);
 
 	// While paused, the switch opens and closes the pods at once.
 	await page.keyboard.press('p');
@@ -2115,7 +2116,7 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 	await expect(headlights).toHaveValue('on');
 
 	await page.reload();
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await expect.poll(async() => (await status(page)).headlights).toBe('on');
 	await expect(headlights).toHaveValue('on');
 	expect((await status(page)).message).not.toContain('Headlights');
@@ -2127,7 +2128,7 @@ test('both taillights brighten visibly in daylight for running lights and brakin
 	await page.setViewportSize({width: 820, height: 510});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	const dry = fixture();
 	Object.assign(dry.landscape.recipe, {worldSize: 256, spacing: 2});
 	Object.assign(dry.settings, {waterLevel: -10, elevation: 30, azimuth: 180, clock: false});
@@ -2180,7 +2181,7 @@ test.describe('on a touchscreen', () => {
 
 	test('a finger drags to look, taps to use the tool, and reads a touch hint', async({page}) => {
 		await page.goto('/games/terrain-sandbox/');
-		await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+		await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 		await (await field(page, '[data-value="tool"]')).selectOption('raise');
 		await page.locator('.terrain-panel > summary').click();
 		const box = await canvas(page).boundingBox();
@@ -2203,7 +2204,10 @@ test.describe('on a touchscreen', () => {
 
 		await touch('touchStart', [{x, y}]);
 		await touch('touchEnd', []);
-		await expect.poll(async() => (await status(page)).revision, {timeout: 90_000}).toBeGreaterThan(before.revision);
+
+		const revised = async() => (await status(page)).revision;
+
+		await expect.poll(revised, {timeout: slow(90_000)}).toBeGreaterThan(before.revision);
 	});
 });
 
@@ -2213,7 +2217,7 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 	await page.setViewportSize({width: 672,height: 420});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60000)});
 	await (await field(page, '[name="preset"]')).selectOption('canyon');
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
@@ -2279,7 +2283,7 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 
 	await view.focus();
 	await page.keyboard.down('w');
-	await expect.poll(() => view.evaluate(el => !!el.landedCar), {timeout: 90000}).toBe(true);
+	await expect.poll(() => view.evaluate(el => !!el.landedCar), {timeout: slow(90000)}).toBe(true);
 	await page.keyboard.up('w');
 
 	const {airborneCar, landedCar, suspensionDraw, airborneFrameError, glError} = await view.evaluate(el => ({
@@ -2301,7 +2305,7 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 test('circuit search controls preserve automatic minima and convert editor units', async({page}) => {
 	await page.setViewportSize({width: 800,height: 600});
 	await page.goto('/games/terrain-sandbox/');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await press(page, 'pause');
 	const lap = await field(page, '[data-value="circuitMinLap"]');
 	await page.getByText('Circuit generator', {exact: true}).click();
@@ -2371,10 +2375,10 @@ test('circuit search controls preserve automatic minima and convert editor units
 });
 
 test('Arctic Meltwater can place an editable causeway circuit at its original water level', async({page}) => {
-	test.setTimeout(480_000);
+	test.setTimeout(slow(480_000));
 	await page.setViewportSize({width: 672, height: 420});
 	await page.goto('/games/terrain-sandbox/');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 
 	await (await field(page, '[name="preset"]')).selectOption('arctic-meltwater');
 	await (await field(page, '[data-value="quality"]')).selectOption('0.5');
@@ -2394,11 +2398,11 @@ test('Arctic Meltwater can place an editable causeway circuit at its original wa
 	await control(page, 'circuit-cancel').click();
 	await expect.poll(async() => (await status(page)).circuit).toMatchObject({searching: false, preview: false});
 	await control(page, 'circuit-find').click();
-	await expect.poll(async() => (await status(page)).circuit.preview, {timeout: 340_000}).toBe(true);
+	await expect.poll(async() => (await status(page)).circuit.preview, {timeout: slow(340_000)}).toBe(true);
 	expect((await status(page)).revision).toBe(0);
 
 	await control(page, 'circuit-dry').click();
-	await expect.poll(async() => (await status(page)).circuit.active, {timeout: 80_000}).toBe('dry');
+	await expect.poll(async() => (await status(page)).circuit.active, {timeout: slow(80_000)}).toBe('dry');
 	const applied = await status(page);
 
 	expect(applied.settings.waterLevel).toBe(water);
@@ -2411,13 +2415,13 @@ test('Arctic Meltwater can place an editable causeway circuit at its original wa
 });
 
 test('preview, apply and switch between dry and flooded canyon circuits', async({page}) => {
-	test.setTimeout(330_000);
+	test.setTimeout(slow(330_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width: 672,height: 420});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await (await field(page, '[name="preset"]')).selectOption('canyon');
 	await (await field(page, '[data-value="quality"]')).selectOption('0.5');
 	await press(page, 'generate');
@@ -2428,7 +2432,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	await page.getByLabel('Minimum feature height difference').fill(String(200/.3048));
 	await page.getByLabel('Start elevation').fill(String(-360/.3048));
 	await control(page, 'circuit-find').click();
-	await expect.poll(async() => (await status(page)).circuit.preview, {timeout: 140_000}).toBe(true);
+	await expect.poll(async() => (await status(page)).circuit.preview, {timeout: slow(140_000)}).toBe(true);
 	const preview = await status(page);
 	expect(preview.course.gates).toHaveLength(0);
 	expect(preview.circuit.length).toBeGreaterThan(12_000);
@@ -2452,8 +2456,12 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	await control(page, 'circuit-dry').click();
 
 	await expect.poll(
-		() => view.evaluate(element => element.terrainSandboxDebug.state.circuit.active, undefined, {timeout: 45_000})
-		, {timeout: 75_000}
+		() => view.evaluate(
+			element => element.terrainSandboxDebug.state.circuit.active
+			, undefined
+			, {timeout: slow(45_000)}
+		)
+		, {timeout: slow(75_000)}
 	).toBe('dry');
 
 	const dry = await status(page);
@@ -2564,7 +2572,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 });
 
 test('a rollover settles on the roof before the Testarossa recovers', async({page}) => {
-	test.setTimeout(360_000);
+	test.setTimeout(slow(360_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width: 672,height: 420});
@@ -2579,12 +2587,12 @@ test('a rollover settles on the roof before the Testarossa recovers', async({pag
 	await canvas(page).focus();
 	await page.keyboard.down('w');
 	// The software renderer simulates well below real time, and slower still on a loaded machine.
-	await expect.poll(async() => (await status(page)).car.motion, {timeout: 60000}).toBe('tumbling');
+	await expect.poll(async() => (await status(page)).car.motion, {timeout: slow(60000)}).toBe('tumbling');
 	await page.keyboard.up('w');
-	await expect.poll(async() => (await status(page)).car.motion, {timeout: 120000}).toBe('overturned');
+	await expect.poll(async() => (await status(page)).car.motion, {timeout: slow(120000)}).toBe('overturned');
 	const landed = (await status(page)).car;
 	expect(Math.cos(landed.pitch)*Math.cos(landed.roll)).toBeLessThan(-.8);
-	await expect.poll(async() => (await status(page)).car.recoveries, {timeout: 60000}).toBe(1);
+	await expect.poll(async() => (await status(page)).car.recoveries, {timeout: slow(60000)}).toBe(1);
 	const righted = (await status(page)).car;
 	expect(righted.motion).toBe('driving');
 	expect(Math.hypot(righted.x-landed.x, righted.z-landed.z)).toBeLessThan(.1);
@@ -2676,7 +2684,7 @@ test('atmospheric layers tint the scene, retain edits and settle while paused', 
 });
 
 test('terrain controls preserve input focus and return paused rendering to idle', async({page}) => {
-	test.setTimeout(240_000);
+	test.setTimeout(slow(240_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await boot(page);
@@ -2829,7 +2837,7 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 });
 
 test('terrain brushes, undo, roads, files, and craft share complete terrain revisions', async({page}) => {
-	test.setTimeout(420_000);
+	test.setTimeout(slow(420_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await boot(page);
@@ -2843,10 +2851,10 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	expect((await status(page)).generation).toBe(initialGeneration);
 
 	await press(page, 'undo');
-	await expect.poll(async() => (await status(page)).surface.operations, {timeout: 90_000}).toBe(0);
+	await expect.poll(async() => (await status(page)).surface.operations, {timeout: slow(90_000)}).toBe(0);
 	await settled(page);
 	await press(page, 'redo');
-	await expect.poll(async() => (await status(page)).surface.operations, {timeout: 90_000}).toBe(1);
+	await expect.poll(async() => (await status(page)).surface.operations, {timeout: slow(90_000)}).toBe(1);
 	await settled(page);
 
 	await stroke(page, 'material', .4, .5);
@@ -2883,7 +2891,7 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 
 	// Points placed on the terrain are the Roads tab's new road, and that tab applies them.
 	await (await field(page, '[data-road-apply]')).click();
-	await expect.poll(async() => (await status(page)).surface.operations, {timeout: 90_000}).toBe(7);
+	await expect.poll(async() => (await status(page)).surface.operations, {timeout: slow(90_000)}).toBe(7);
 	await settled(page);
 
 	saved = await save(page);
@@ -3009,7 +3017,7 @@ test('the Landscape Lab explains each parameter, reflows, and folds to one round
 });
 
 test('surface title-bar eyes toggle the rendered layer independently of its editor', async({page}) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	await page.setViewportSize({width: 860, height: 600});
 	await boot(page);
 	const doc = fixture();
@@ -3067,7 +3075,7 @@ test('surface title-bar eyes toggle the rendered layer independently of its edit
 
 test('sky sliders step and display tenths', async({page}) => {
 	await page.goto('/games/terrain-sandbox/');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 
 	for(const key of ['azimuth','elevation','exposure'])
 	{
@@ -3153,7 +3161,7 @@ test('Surface keeps field help with its control and column widths steady when sc
 
 test('the panel tabs work from the keyboard and the Surface tab changes the ground', async({page}) => {
 	await page.goto('/games/terrain-sandbox/');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 
 	const tab = name => page.locator(`.terrain-sandbox #terrain-tab-${name}`);
 	await expect(page.locator('.terrain-sandbox [role="tab"]')).toHaveCount(8);
@@ -3194,7 +3202,7 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 		frames = now;
 
 		return still;
-	}, {timeout: 120_000, intervals: [1500]}).toBe(true);
+	}, {timeout: slow(120_000), intervals: [1500]}).toBe(true);
 
 	await grass.locator('[data-layer-key="color"]').fill('#ff0000');
 	await expect.poll(async() => (await status(page)).surfaceLayers[0].color).toBe('#ff0000');
@@ -3212,13 +3220,13 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 
 	// The page opens on the tab shown last.
 	await page.reload();
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await expect(tab('surface')).toHaveAttribute('aria-selected', 'true');
 	await expect(page.locator('#terrain-section-surface')).toBeVisible();
 });
 
 test('terrain restores a lost WebGL context and releases page ownership on navigation', async({page}) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await boot(page);
@@ -3248,8 +3256,8 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 test('survey a draft and reopen the same landform and camera from its link', async({page}) => {
 	await page.setViewportSize({width: 640,height: 400});
 	await page.goto('/games/terrain-sandbox/?preset=painted-badlands&seed=survey-test&camera=64,-32,80,40,-9');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 90000});
-	await expect.poll(async() => (await status(page)).recipe.seed, {timeout: 90000}).toBe('survey-test');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(90000)});
+	await expect.poll(async() => (await status(page)).recipe.seed, {timeout: slow(90000)}).toBe('survey-test');
 	const initial = await status(page);
 	expect(initial.camera.position[0]).toBe(64);
 	expect(initial.camera.pitch).toBeCloseTo(-9*Math.PI/180);
@@ -3263,15 +3271,15 @@ test('survey a draft and reopen the same landform and camera from its link', asy
 	await page.locator('.terrain-panel').evaluate(el => el.open = true);
 	await page.locator('[data-survey]').evaluate(el => el.open = true);
 	await page.locator('[data-analyze]').evaluate(el => el.click());
-	await expect(page.locator('[data-survey-note]')).toContainText('steeper than 30°', {timeout: 90000});
+	await expect(page.locator('[data-survey-note]')).toContainText('steeper than 30°', {timeout: slow(90000)});
 	expect((await status(page)).generation).toBe(initial.generation);
 	const url = new URL(await page.locator('[data-view-link]').getAttribute('href'));
 	expect(JSON.parse(url.searchParams.get('landform')).ridgeStretch).toBe(3);
 	await page.locator('[data-fit-water]').evaluate(el => el.click());
 	await expect(page.locator('[data-survey-note]')).toContainText('water level updated');
 	await page.goto(url.href);
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 90000});
-	await expect.poll(async() => (await status(page)).recipe.ridgeStretch, {timeout: 90000}).toBe(3);
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(90000)});
+	await expect.poll(async() => (await status(page)).recipe.ridgeStretch, {timeout: slow(90000)}).toBe(3);
 	const [x,z] = url.searchParams.get('camera').split(',').map(Number);
 	const pose = (await status(page)).camera.position;
 	expect([pose[0],pose[2]]).toEqual([x,z]);
@@ -3280,7 +3288,7 @@ test('survey a draft and reopen the same landform and camera from its link', asy
 test('Limestone Plain generates its skyline and round-trips as a named preset', async({page}) => {
 	await page.setViewportSize({width: 720, height: 460});
 	await page.goto('/games/terrain-sandbox/');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	const preset = page.locator('[name="preset"]');
 	const seed = page.locator('[name="seed"]');
 	await preset.selectOption({label: 'Limestone Plain'});
@@ -3366,7 +3374,7 @@ for(const [first, second] of [
 		, async({page}) => {
 			await page.setViewportSize({width: 700, height: 440});
 			await page.goto('/games/terrain-sandbox/');
-			await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+			await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 			const picker = page.locator('[name="preset"]');
 
 			for(const {label, name, layer} of [first, second])
@@ -3622,11 +3630,11 @@ test('Mountain Ridges shades lichen and custom layers can stipple their interior
 });
 
 test('the distant face in the default canyon stays sunlit at the starting viewpoint', async({page}) => {
-	test.setTimeout(150_000);
+	test.setTimeout(slow(150_000));
 	await page.setViewportSize({width: 960,height: 600});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await (await field(page, '[name="preset"]')).selectOption('canyon');
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
@@ -3649,7 +3657,7 @@ test('the distant face in the default canyon stays sunlit at the starting viewpo
 });
 
 test('the F5 keeps the canyon wall in the fine grid as it flies past clipmap joins', async({page}) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	await page.setViewportSize({width: 720, height: 440});
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -3687,7 +3695,7 @@ test('the F5 keeps the canyon wall in the fine grid as it flies past clipmap joi
 	await expect.poll(async() => (await status(page)).jetView).toBe('cockpit');
 
 	const initial = await status(page);
-	await expect.poll(async() => (await status(page)).jet.z, {timeout: 90_000}).toBeLessThan(initial.jet.z - 65);
+	await expect.poll(async() => (await status(page)).jet.z, {timeout: slow(90_000)}).toBeLessThan(initial.jet.z - 65);
 	const moving = await status(page);
 	expect(moving.renderer.pending).toBe(0);
 	expect(moving.renderer.visible).toBe(before.renderer.visible);
@@ -3697,7 +3705,7 @@ test('the F5 keeps the canyon wall in the fine grid as it flies past clipmap joi
 });
 
 test('the wider landscape can be generated, saved, and flown beyond the original boundary', async({page}) => {
-	test.setTimeout(180_000);
+	test.setTimeout(slow(180_000));
 	await page.setViewportSize({width: 640, height: 420});
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -4148,7 +4156,7 @@ test('record a terrain run, save it, and replay it without moving the live camer
 	await expect.poll(async() => (await status(page)).demo.playhead).not.toBeNull();
 	const replay = await status(page);
 	expect(replay.camera.position).not.toEqual(parked);
-	await expect.poll(async() => (await status(page)).demo.playhead, {timeout: 60_000}).toBeNull();
+	await expect.poll(async() => (await status(page)).demo.playhead, {timeout: slow(60_000)}).toBeNull();
 	expect((await status(page)).camera.position).toEqual(parked);
 	expect((await status(page)).paused).toBe(true);
 	await press(page, 'demo-play');
@@ -4221,7 +4229,7 @@ test('a mid-drive demo can be scrubbed and forked into an independently playable
 });
 
 test('the pause menu opens from Escape, Start and its button and acts through the session', async({page}) => {
-	test.setTimeout(360_000);
+	test.setTimeout(slow(360_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	page.on('console', message => { if(message.type() === 'error') errors.push(message.text()); });
@@ -4257,7 +4265,7 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 		const state = JSON.parse(document.querySelector('canvas[data-terrain-sandbox]').dataset.terrainSandbox);
 
 		return new Function('state', 'arg', 'return ' + check)(state, arg);
-	}, {check, arg}, {polling: 'raf', timeout: 60_000});
+	}, {check, arg}, {polling: 'raf', timeout: slow(60_000)});
 
 	/** Wait until the menu stops redrawing, so the frames have seen the last release before the next press. */
 	const idle = async() => {
@@ -4449,12 +4457,12 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 	await key('ArrowUp', 'quit');
 	await key('Enter', 'leave');
 	await page.keyboard.down('Enter');
-	await page.waitForURL(url => !url.pathname.includes('terrain-sandbox'), {timeout: 30_000});
+	await page.waitForURL(url => !url.pathname.includes('terrain-sandbox'), {timeout: slow(30_000)});
 	expect(new URL(page.url()).pathname).toBe('/');
 });
 
 test('a landscape journey boards the car on the western road and offers signed branches at the fork', async({page}) => {
-	test.setTimeout(420_000);
+	test.setTimeout(slow(420_000));
 
 	await page.addInitScript(() => {
 		const stroke = CanvasRenderingContext2D.prototype.stroke;
@@ -4472,7 +4480,7 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await page.setViewportSize({width: 620, height: 400});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await view.evaluate(el => el.terrainSandboxDebug.values({quality: .5}));
 	const section = await field(page, '[data-journey="fork"]');
 	const worldSize = page.locator('[name="worldSize"]');
@@ -4486,13 +4494,13 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await expect(picker.locator('option')).toHaveCount(6);
 	await expect(page.locator('[data-exit="0"]')).toHaveValue('B');
 	await expect(page.locator('[data-exit="1"]')).toHaveValue('C');
-	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey', {timeout: 60000});
+	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey', {timeout: slow(60000)});
 
 	const image = () => page.locator('[data-journey-map]').evaluate(el => el.toDataURL());
 	const departureMap = await image();
 	await page.getByRole('button', {name: 'Inspect B · Canyon'}).click();
 	await expect(picker).toHaveValue('B');
-	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey', {timeout: 60000});
+	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey', {timeout: slow(60000)});
 	expect(await image()).not.toBe(departureMap);
 	await picker.selectOption('F');
 	const origins = page.locator('[data-stage-origins]');
@@ -4500,12 +4508,12 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await expect(origins.locator('[data-origin]')).toHaveText(['B · Canyon','C · Mountain Ridges']);
 	const canyonOrigin = origins.locator('[data-origin="B"]');
 	await canyonOrigin.scrollIntoViewIfNeeded();
-	await expect(canyonOrigin.locator('canvas')).toHaveCount(1, {timeout: 60000});
+	await expect(canyonOrigin.locator('canvas')).toHaveCount(1, {timeout: slow(60000)});
 	await canyonOrigin.click();
 	await expect(picker).toHaveValue('B');
 	await expect(origins).toBeHidden();
 	await picker.selectOption('F');
-	await expect(page.locator('[data-map-status]')).toHaveText('End of route', {timeout: 60000});
+	await expect(page.locator('[data-map-status]')).toHaveText('End of route', {timeout: slow(60000)});
 	await page.locator('[data-exit="0"]').selectOption('+');
 	await expect(picker.locator('option')).toHaveCount(7);
 	await expect(picker).toHaveValue('D');
@@ -4513,7 +4521,7 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await expect(page.locator('[data-journey-outline]')).toHaveAttribute('open', '');
 	const junctionCard = page.locator('[data-outline] [data-square="C"]');
 	await junctionCard.scrollIntoViewIfNeeded();
-	await expect(junctionCard.locator('canvas')).toHaveCount(1, {timeout: 60000});
+	await expect(junctionCard.locator('canvas')).toHaveCount(1, {timeout: slow(60000)});
 	await page.locator('[data-stage-name]').fill('Lake');
 	await page.locator('[data-rename-stage]').click();
 	await expect(page.locator('[data-journey=network]')).toHaveValue(/F river-valley -> Lake/);
@@ -4542,13 +4550,13 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await control(page, 'journey-build').click();
 	await expect(control(page, 'journey-build')).toBeDisabled();
 	await expect(page.locator('[data-journey-progress]')).toContainText(/survey|following|finding|fitting/i);
-	await expect.poll(async() => (await status(page)).mode, {timeout: 315_000}).toBe('car');
+	await expect.poll(async() => (await status(page)).mode, {timeout: slow(315_000)}).toBe('car');
 	const west = await status(page);
 	expect(west.recipe.join.span).toBe(16_384);
 	expect(west.recipe.worldSize).toBe(36_864);
 	expect(west.recipe.join.version).toBe(2);
 	expect(west.car.x).toBeLessThan(-west.recipe.worldSize / 2 + 55);
-	await expect(page.locator('[data-map-status]')).toHaveText('Current highway', {timeout: 60000});
+	await expect(page.locator('[data-map-status]')).toHaveText('Current highway', {timeout: slow(60000)});
 	await control(page, 'journey-fork').click();
 	await expect.poll(async() => (await status(page)).journeyForkAhead).toBe(true);
 	await expect(page.getByText('Left · River Valley & Floodplain / Right · Coast', {exact: true})).toBeVisible();
@@ -4559,7 +4567,10 @@ test('a landscape journey boards the car on the western road and offers signed b
 	try
 	{
 		const departure = (await status(page)).car.x;
-		await expect.poll(async() => (await status(page)).car.x, {timeout: 90_000}).toBeGreaterThan(departure + 2);
+
+		const position = async() => (await status(page)).car.x;
+
+		await expect.poll(position, {timeout: slow(90_000)}).toBeGreaterThan(departure + 2);
 	}
 	finally
 	{
