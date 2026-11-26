@@ -2889,6 +2889,8 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	await page.mouse.up({button: 'right'});
 	await expect(page.locator('[data-road-marker]')).toHaveCount(2);
 
+	const placed = (await status(page)).roadPoints;
+
 	// Points placed on the terrain are the Roads tab's new road, and that tab applies them.
 	await (await field(page, '[data-road-apply]')).click();
 	await expect.poll(async() => (await status(page)).surface.operations, {timeout: slow(90_000)}).toBe(7);
@@ -2896,7 +2898,19 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 
 	saved = await save(page);
 	expect(saved.landscape.history.at(-1)[0].type).toBe('road');
-	expect(saved.landscape.history.at(-1)[0].points).toHaveLength(2);
+
+	// Grading keeps both placed ends and may add knots between them where the ground leaves a straight ramp.
+	const graded = saved.landscape.history.at(-1)[0].points;
+
+	expect(placed).toHaveLength(2);
+	expect(graded.length).toBeGreaterThanOrEqual(2);
+
+	for(const [point, end] of [[graded[0], placed[0]], [graded.at(-1), placed[1]]])
+	{
+		expect(point[0]).toBeCloseTo(end[0], 3);
+		expect(point[2]).toBeCloseTo(end[2], 3);
+	}
+
 	expect((await status(page)).roadPoints).toEqual([]);
 	await expect(page.locator('[data-road-marker]')).toHaveCount(0);
 	await load(page, saved);
@@ -2977,7 +2991,7 @@ test('the Landscape Lab explains each parameter, reflows, and folds to one round
 		)
 	);
 
-	expect(descriptions).toHaveLength(27);
+	expect(descriptions).toHaveLength(35);
 	expect(descriptions).not.toContain('');
 	expect(new Set(descriptions).size).toBe(descriptions.length);
 
@@ -3164,7 +3178,7 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 
 	const tab = name => page.locator(`.terrain-sandbox #terrain-tab-${name}`);
-	await expect(page.locator('.terrain-sandbox [role="tab"]')).toHaveCount(8);
+	await expect(page.locator('.terrain-sandbox [role="tab"]')).toHaveCount(9);
 	await expect(tab('landscape')).toHaveAttribute('aria-selected', 'true');
 
 	// Arrow keys, Home and End move between tabs and wrap round; Home on a tab does not reset the camera.
