@@ -502,7 +502,8 @@ $engine->start(
 			$session->mode === 'car' ? Car::terrainFocus($vehiclePose) : null);
 		$wavesChanged = $scene->showsWater() && $session->time !== $lastRenderedTime;
 		$statusPending = $statusPending || $work || $wavesChanged || !$session->paused;
-		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged || $session->weather->moving($session->time,$lastRenderedTime);
+		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged || $session->weather->moving($session->time,$lastRenderedTime)
+			|| $session->atmosphere->starsMoving($session->time,$lastRenderedTime);
 		$editor = $session->roadEditor;
 		if(($packet = $editor->packet($session)) !== null) $roadStatus(json_encode($packet, JSON_THROW_ON_ERROR));
 		$mapCamera = $editor->open ? [$viewCamera->position[0], $viewCamera->position[2],

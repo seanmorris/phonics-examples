@@ -3063,6 +3063,11 @@ function markup(journeyMarkup)
 	<p class="terrain-note">Sky color sets the blue overhead and how clear the distance looks. Haze color tints the haze; Haze sets how much. Sky light brightens shaded ground.</p>
 	${range('Night glow', 'nightGlow', 0, 1, .01, .5)}
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
+	<h2>Stars</h2>
+	${range('Star brightness · %', 'starBrightness', 0, 200, 1, 100)}
+	${range('Twinkle · %', 'starTwinkle', 0, 100, 1, 0)}
+	${range('Shooting stars · per min', 'shootingStars', 0, 60, 1, 0)}
+	<p class="terrain-note">Brighter stars appear earlier at dusk. Shooting stars are counted across the whole sky.</p>
 	<h2>Atmospheric layers</h2>
 	<p class="terrain-note">Layers follow the landform preset until you edit them. Use negative heights below sea level. Haze thins at both boundaries and builds with distance through the layer.</p>
 	<div data-air-list></div><div class="terrain-row"><button type="button" data-air-add disabled>Add atmosphere layer</button>

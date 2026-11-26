@@ -21,7 +21,8 @@ final class DemoEvents
 		$dynamics = match($s->mode) {
 			'car'=>$s->car->motion(), 'jet'=>$s->jet->motion(), 'craft'=>$s->craft->angularMotion(), default=>[]
 		};
-		$state = ['weather'=>$s->weather->snapshot(),'motion'=>base64_encode(pack('g*',...$dynamics)),
+		$stars = $s->atmosphere->stars;
+		$state = ['stars'=>[$stars->brightness,$stars->twinkle,$stars->perMinute],'weather'=>$s->weather->snapshot(),'motion'=>base64_encode(pack('g*',...$dynamics)),
 			'airPatrol'=>$s->mode==='car' ? $s->airPatrol->snapshot() : null,
 			'raceDistance'=>$s->race->distanceFromStart(), 'rangeTimers'=>$s->mode==='jet' ? $s->balloons->timers() : null,
 			'race'=>$race,'target'=>$s->navigationTarget($vehicle),
@@ -111,6 +112,12 @@ final class DemoEvents
 
 	private static function valid(string $key, mixed $v): bool
 	{
+		if($key==='stars') {
+			if(!self::vector($v,3)) return false;
+			try { new \TerrainPhonics\Starfield(...$v); }
+			catch(\InvalidArgumentException) { return false; }
+			return true;
+		}
 		if($key==='weather') return \TerrainPhonics\Weather::valid($v);
 		if($key==='motion') {
 			if(!is_string($v) || strlen($v)>144) return false;

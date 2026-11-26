@@ -137,9 +137,11 @@ $s=new Session(['worldSize'=>256]);
 $send=static fn($a)=>$s->input(['actions'=>[$a]],0.,1.);
 $send('demo-record');
 $send(['type'=>'weather','preset'=>'snow']);
+$s->input(['values'=>['starBrightness'=>175,'starTwinkle'=>40,'shootingStars'=>12]],0.,1.);
 for($i=0;$i<12;$i++) { $s->step(1/60); $s->demo->capture($s); }
 $snowSample=$s->demo->duration();
 $send(['type'=>'weather','preset'=>'rain']);
+$s->input(['values'=>['starTwinkle'=>0,'shootingStars'=>0]],0.,1.);
 for($i=0;$i<12;$i++) { $s->step(1/60); $s->demo->capture($s); }
 $send('demo-stop');
 $file=json_decode($s->demo->export(),true);
@@ -152,6 +154,16 @@ check($loaded->frame($loaded->duration())['events']['weather']['controls']['kind
 $send('demo-play');
 $send(['type'=>'demo-seek','seconds'=>$snowSample]);
 $send('demo-take-control');
+check($s->atmosphere->stars->brightness===175. && $s->atmosphere->stars->twinkle===40.
+	&& $s->atmosphere->stars->perMinute===12., 'Rewinding and branching restores all three star controls');
+$copy=new Session;
+$doc=json_decode($s->save(),true);
+$copy->load(json_encode($doc));
+check($copy->atmosphere->stars==$s->atmosphere->stars,'A landscape save restores star controls');
+foreach(\TerrainPhonics\Starfield::DEFAULTS as $key=>$_) unset($doc['settings'][$key]);
+$copy->load(json_encode($doc));
+check($copy->atmosphere->stars==new \TerrainPhonics\Starfield,'Opening a legacy file resets the sky to the original static field');
+$copy->close();
 check($s->weather->controls()['kind']==='snow' && abs($s->weather->ground($s->time)[1]-$snowSample/60.)<.00001,'Branching restores the snow already on the ground at the seek time');
 $s->close();
 

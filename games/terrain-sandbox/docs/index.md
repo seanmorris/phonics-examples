@@ -98,6 +98,8 @@ To shape the air yourself, edit a layer or choose **Add atmosphere layer**. Set 
 
 As the sun drops below the horizon, stars appear and a blue ambient light picks out the terrain, water, and jet ski. **Night glow** sets the strength of the sky glow and this reflected light. At zero you can see the stars against a dark sky. Set **Sun elevation** to −12° for a quick night preview. The glow setting travels with the saved landscape.
 
+In **Sky → Stars**, **Star brightness** also sets when the first stars appear. At 100% they begin fading in at sunset. At 200% the brightest are already visible before sunset. **Twinkle** varies each star’s brightness independently. **Shooting stars** sets the number of streaks per minute across the entire sky after sunset. Look up for a wider view. A value of zero turns either effect off.
+
 ## Change the weather
 
 Open **Landscape Lab → Weather** and choose **Cloudy**, **Rain**, or **Snow**. Cloud cover controls how much sky the deck occupies. Altitude sets its height above sea level. Wind heading is the direction the clouds and precipitation travel, with 0° pointing north. Cloud shadow sets how much direct sunlight the deck blocks.

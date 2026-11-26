@@ -2545,12 +2545,18 @@ final class Scene
 		$this->common($this->skyProgram, $camera, $width, $height, $environment);
 		glBindVertexArray($this->vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
-		if($environment['nightVisibility'] > 0)
+		$stars = $this->atmosphere->stars;
+		$starVisibility = $this->atmosphere->starVisibility();
+		$meteor = $environment['nightVisibility']>0. ? $stars->meteor($time) : null;
+		if($starVisibility > 0. || $meteor!==null)
 		{
 			$this->starsProgram->use();
 			glUniformMatrix4fv($this->starsProgram->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
 			$this->scalar($this->starsProgram, 'uPixelScale', min(3.0, max(.8, $height / 720)));
-			$this->scalar($this->starsProgram, 'uNightVisibility', $environment['nightVisibility']);
+			$this->scalar($this->starsProgram, 'uStarVisibility', $starVisibility);
+			$this->scalar($this->starsProgram, 'uStarGain', $stars->brightness*.01);
+			$this->scalar($this->starsProgram, 'uTwinkle', $stars->twinkle*.01);
+			if($stars->twinkle>0.) $this->scalar($this->starsProgram,'uStarTime',fmod($time,1024.));
 			$this->scalar($this->starsProgram, 'uExposure', $environment['exposure']);
 			$this->scalar($this->starsProgram, 'uAirLayerCount', $environment['airLayerCount']);
 			if($environment['airLayerCount']) {
@@ -2561,7 +2567,13 @@ final class Scene
 			}
 			glEnable(GL_BLEND);
 			glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ZERO, GL_ONE);
-			glDrawArrays(GL_POINTS, 0, 2400);
+			if($starVisibility>0.) glDrawArrays(GL_POINTS, 0, 2400);
+			if($meteor!==null) {
+				$this->scalar($this->starsProgram,'uStarVisibility',$environment['nightVisibility']);
+				glUniform1i($this->starsProgram->location('uMeteorId'),$meteor[0]);
+				$this->scalar($this->starsProgram,'uMeteorAge',$meteor[1]);
+				glDrawArrays(GL_TRIANGLE_STRIP,2400,4);
+			}
 		}
 		glDepthMask(true);
 		glDepthFunc(GL_LESS);

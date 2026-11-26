@@ -29,6 +29,7 @@ final class Atmosphere
 	/** Physical and display parameters, separate from the cached optical-depth integration. */
 	private array $parameters;
 	private AtmosphereLayers $air;
+	public Starfield $stars;
 	/** Most recently requested transmittance texture; bounded to one resolution per instance. */
 	private ?array $lut = null;
 	/** Signature and generation of the last numerical texture. */
@@ -46,6 +47,7 @@ final class Atmosphere
 	 */
 	public function __construct(array $options = [])
 	{
+		$this->stars = new Starfield;
 		$layers = $options['layers'] ?? [];
 		unset($options['layers']);
 		$this->parameters = array_replace([
@@ -304,6 +306,20 @@ final class Atmosphere
 			'transmittanceSize' => [$this->lut['width'] ?? 0,$this->lut['height'] ?? 0]
 			, 'lutGeneration' => $this->lutGeneration
 		];
+	}
+
+	public function starVisibility(): float
+	{
+		return $this->stars->visibility($this->parameters['sunDirection'][1]);
+	}
+
+	/** Repaint the last frame of a meteor as well as each visible animated frame. */
+	public function starsMoving(float $time, float $previous): bool
+	{
+		if($time===$previous || ($this->stars->twinkle<=0. && $this->stars->perMinute<=0.)) return false;
+		if($this->stars->twinkle>0. && $this->starVisibility()>0.) return true;
+		return $this->stars->perMinute>0. && $this->nightVisibility()>0.
+			&& ($this->stars->meteor($time)!==null || $this->stars->meteor($previous)!==null);
 	}
 
 	/**

@@ -58,7 +58,7 @@ final class DemoTape
 
 	private static function worldKey(Session $s): array
 	{
-		$settings = $s->settings;
+		$settings = array_diff_key($s->settings,\TerrainPhonics\Starfield::DEFAULTS);
 		unset($settings['azimuth'],$settings['elevation']);
 		return [$s->generation,$s->landscape->revision(),$s->course,$s->course->revision,$settings,
 			$s->roadEditor->hiddenRoads(),$s->displayedLayers(),$s->atmosphere->layers(),$s->paint];

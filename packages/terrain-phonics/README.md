@@ -226,7 +226,9 @@ Sunlight paths also cross an ozone layer (peak absorption (0.650, 1.881, 0.085) 
 
 Terrain's diffuse sky light comes from the model's own sky. `Atmosphere::skyIrradiance($sine)` integrates single-scattered sky radiance over the hemisphere above level ground, for a sun at that sine of elevation, and divides by π so it multiplies albedo like the shaders' sunlight. Each whole degree is integrated once per atmosphere (12 sky rays, about 3 ms natively) and interpolated between. `uniforms()` returns it as `skyAmbient`, scaled by `Atmosphere::setSkyLight($strength)`; the default 1 is the model's own value. It changes with haze, sky color, haze color and the layers, and it dims and warms as the sun sets.
 
-Use `Atmosphere::setNightGlow($strength)` to set the blue night fill. The default is 0.5. Custom materials can read the linear RGB `nightAmbient` from `Atmosphere::uniforms()`. The glow and stars fade in between sunset and a solar elevation of −10°. The stars keep fixed directions as the camera moves.
+Use `Atmosphere::setNightGlow($strength)` to set the blue night fill. The default is 0.5. Custom materials can read the linear RGB `nightAmbient` from `Atmosphere::uniforms()`. By default the glow and stars fade in between sunset and a solar elevation of −10°. The stars keep fixed directions as the camera moves.
+
+Assign a `TerrainPhonics\Starfield` to `$atmosphere->stars` to tune the sky. For example, `new Starfield(brightness: 150, twinkle: 30, perMinute: 6)` brightens the stars, adds a little twinkle and sends six meteors per minute across the whole sky after sunset. Brightness runs from 0 to 200%, with higher settings bringing stars out earlier at dusk. Twinkle runs from 0 to 100%. The default field is steady and has no meteors. Both effects sample simulation time, so pausing or seeking a demo preserves the view.
 The world shadow map stores the elevation below which a ridge blocks the sun and the sunlit fraction of the
 terrain overview. Nearby ledges compare their own elevation against the ridge. As the mesh loses detail,
 lighting blends into the overview’s visibility, filtered over the area each pixel covers. The map refreshes

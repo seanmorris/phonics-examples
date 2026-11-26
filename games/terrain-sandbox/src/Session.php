@@ -7,6 +7,7 @@ use Phonics\Ecs\Registry;
 use Phonics\Ecs\Scheduler;
 use TerrainPhonics\Weather;
 use TerrainPhonics\Atmosphere;
+use TerrainPhonics\Starfield;
 use TerrainPhonics\Camera;
 use TerrainPhonics\GrassShells;
 use TerrainPhonics\JoinedTerrain;
@@ -101,7 +102,7 @@ final class Session
 	public float $time = 0;
 	private const SKY_DEFAULTS = ['azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0,
 		'skyColor' => Atmosphere::DEFAULT_SKY_COLOR, 'hazeColor' => Atmosphere::DEFAULT_HAZE_COLOR,
-		'skyLight' => Atmosphere::DEFAULT_SKY_LIGHT];
+		'skyLight' => Atmosphere::DEFAULT_SKY_LIGHT] + Starfield::DEFAULTS;
 	private const LIMESTONE_SKY = ['azimuth' => 106.0, 'elevation' => 36.0, 'haze' => .7];
 	/** Editor defaults in feet above sea level and optical depth per mile. */
 	private const PRESET_AIR = [
@@ -1476,7 +1477,7 @@ final class Session
 			'circuitGradePreference'=>[0,100], 'circuitCausewayDepth'=>[0,20000],
 			'circuitStartTolerance'=>[0,20000], 'circuitTurnRadius'=>[1,INF],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
-			'skyLight' => [0.,3.],
+			'skyLight' => [0.,3.], 'starBrightness'=>[0.,200.], 'starTwinkle'=>[0.,100.], 'shootingStars'=>[0.,60.],
 			'quality' => [.5,2],'grass' => [0,2],'speed' => [5,300],'gateAltitude' => [0.0,400.0],
 			'balloonAltitude' => [12.0,1200.0], 'gateWidth' => [0.0,300.0],'gateHeight' => [0.0,150.0],
 			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
@@ -1531,6 +1532,8 @@ final class Session
 		}
 		$this->settings[$name] = $value;
 		if($name === 'haze') $this->atmosphere->setHaze($value);
+		if(isset(Starfield::DEFAULTS[$name]))
+			$this->setStars(new Starfield($this->settings['starBrightness'],$this->settings['starTwinkle'],$this->settings['shootingStars']));
 		if($name === 'nightGlow') $this->atmosphere->setNightGlow($value);
 		if($name === 'skyColor') $this->atmosphere->setSkyColor($value);
 		if($name === 'hazeColor') $this->atmosphere->setHazeColor($value);
@@ -1539,6 +1542,16 @@ final class Session
 		if($name === 'azimuth' || $name === 'elevation') $this->sun();
 		$this->dirty = $this->dirty || in_array($name,['quality','grass','exposure','nightGlow','haze','azimuth','elevation','clock',
 			'skyColor','hazeColor','skyLight'],true);
+	}
+
+	/** Restore all three sky controls at a recorded instant. */
+	public function setStars(Starfield $stars): void
+	{
+		$this->atmosphere->stars = $stars;
+		$this->settings['starBrightness'] = $stars->brightness;
+		$this->settings['starTwinkle'] = $stars->twinkle;
+		$this->settings['shootingStars'] = $stars->perMinute;
+		$this->dirty = true;
 	}
 
 	/**
@@ -3163,6 +3176,7 @@ final class Session
 		finally { $source->playhead=$at; }
 		$this->time=$frame['time']; $this->water->update($this->time);
 		if(isset($events['weather'])) $this->weather->restore($events['weather']);
+		if(isset($events['stars'])) $this->setStars(new Starfield(...$events['stars']));
 		$this->settings['azimuth']=$frame['azimuth']; $this->settings['elevation']=$frame['elevation']; $this->sun();
 		$this->mode=$frame['mode']; $this->boarding++;
 		$this->camera=clone $frame['camera'];

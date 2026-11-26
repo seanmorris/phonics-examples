@@ -90,6 +90,9 @@ final class DemoPlayback
 		$weather=$frame['events']['weather'] ?? null;
 		if($weather !== null && ($weather !== ($before['events']['weather'] ?? null) || $before['world'] !== $frame['world']))
 			$s->weather->restore($weather);
+		$stars=$frame['events']['stars'] ?? null;
+		if($stars !== null && ($stars !== ($before['events']['stars'] ?? null) || $before['world'] !== $frame['world']))
+			$s->setStars(new \TerrainPhonics\Starfield(...$stars));
 		$s->mode = $frame['mode'];
 		$s->camera = $frame['camera'];
 		$s->jetView = ($frame['flags'] & 1) ? 'cockpit' : 'chase';
