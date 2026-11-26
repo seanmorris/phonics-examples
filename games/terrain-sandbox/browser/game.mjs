@@ -215,6 +215,7 @@ export function activate({module, canvas, session, services})
 	module.terrainEyeIcon = eyeIcon;
 
 	const stage = frame.querySelector('.terrain-stage');
+	module.terrainRaceHost = {frame,stage,canvas};
 	shell.mount(frame, {screen: stage});
 	canvas.style.cssText = 'display:block;width:100%;height:100%;max-width:none;max-height:none;border:0;outline:none';
 
@@ -1171,12 +1172,13 @@ export function activate({module, canvas, session, services})
 		const menuPadKey = menuPad.join(',');
 		const padsSame = padKey === previousPad && menuPadKey === previousMenuPad;
 
-		if(viewport === previousViewport && held === previousKeys && padsSame && !actions.length
+		const racing = module.terrainRaceInput?.();
+		if(!racing && viewport === previousViewport && held === previousKeys && padsSame && !actions.length
 			&& !planner.hasRequest() && pendingDraft === null && surveyRequest === null && !clicks.length && !look[0]
 				&& !look[1] && !Object.keys(values).length
 		) return '';
 
-		const packet = {keys,values,actions,clicks,look};
+		const packet = {keys,values,actions,clicks,look,...racing};
 		const mapRequest = planner.takeRequest();
 
 		if(mapRequest) packet.journeyMap = mapRequest;
@@ -1221,6 +1223,7 @@ export function activate({module, canvas, session, services})
 			menuPanel = true;
 			panel.open = true;
 		}
+		else if(command === 'online') void module.terrainRaceLobby?.();
 		else if(command === 'quit') location.assign(new URL('../../', location.href));
 	});
 
@@ -1736,6 +1739,7 @@ export function activate({module, canvas, session, services})
 
 		if(session.terrainSandbox === api) delete session.terrainSandbox;
 
+		delete module.terrainRaceHost;
 		delete module.terrainUnits;
 		delete module.terrainEyeIcon;
 		delete module.terrainMusic;
@@ -3354,6 +3358,7 @@ function markup(journeyMarkup)
 	<fieldset><legend>Ground</legend><div class="terrain-row"><output data-weather-ground>Wetness 0% · Snow cover 0%</output>
 	<button type="button" data-weather-reset>Reset ground</button></div></fieldset></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
+	<button type="button" data-online-race>Online racing</button>
 	<fieldset><legend>Demos</legend><div class="terrain-row"><button data-action="demo-record">Record run</button><button data-action="demo-stop" hidden>Stop recording</button><button data-action="demo-play" disabled>Play last demo</button><button data-action="demo-save" disabled>Save demo</button><button data-action="demo-file">Open demo</button><button data-action="demo-swap" hidden>Switch takes</button><input type="file" data-demo-file accept=".json,application/json" hidden></div>
 	<div data-demo-transport hidden><label class="terrain-field">Timeline<input data-demo-timeline type="range" min="0" max="0" step="any"></label>
 	<label class="terrain-field">Time in seconds<input data-demo-time type="number" min="0" max="0" step="0.01" value="0"></label>

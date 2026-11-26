@@ -162,6 +162,10 @@ final class SandboxMenu
 		$items['controls'] = ['label' => 'Controls', 'text' => $this->controlsPage($session)];
 		$items['audio'] = ['label' => 'Audio', 'children' => $this->audioItems()];
 		$items['settings'] = ['label' => 'Settings', 'children' => $this->settingsItems($session)];
+		$items['online'] = ['label'=>'Online racing','callback'=>function(): void {
+			($this->page)('online');
+			$this->close(true);
+		}];
 		$items['lab'] = [
 			'label' => 'Landscape Lab'
 			, 'callback' => function(): void {

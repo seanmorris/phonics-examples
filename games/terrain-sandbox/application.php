@@ -43,6 +43,15 @@ $app = new Context;
 $music = new BackgroundMusic($app);
 $app->browser(__DIR__ . '/browser/journey-editor.mjs');
 $app->browser(__DIR__ . '/browser/game.mjs');
+$app->lobby([
+	'provider'=>'@matrix/lobby','title'=>'Landscape Race Lobby',
+	'options'=>['homeserver'=>'https://matrix.org','room'=>'#terrain-sandbox:matrix.org','configurationKey'=>'terrain-sandbox'],
+	'game'=>['id'=>'org.seanmorris.phonics.terrain.circuit','protocol'=>'1.0.0','rules'=>TerrainSandbox\CircuitTrial::RULES,
+		'players'=>2,'checkpointMode'=>'history','spectators'=>true,'aspectRatio'=>'auto','actionTypes'=>['race-finish']]
+]);
+$app->browser(__DIR__ . '/browser/race-media.mjs');
+$app->browser(__DIR__ . '/browser/race-live.mjs');
+$app->browser(__DIR__ . '/browser/race-lobby.mjs');
 $app->browser(__DIR__ . '/browser/car-audio.mjs');
 $music->playlist(json_decode(file_get_contents(__DIR__.'/assets/soundtrack.json'), true, flags: JSON_THROW_ON_ERROR),
 	'terrain-sandbox.music.next.v1');
@@ -106,6 +115,9 @@ $carSound = vrzno_env('terrainCarSound');
 // The pause menu reads and sets audio in the page, and asks it to open the Landscape Lab or leave.
 $pauseMenu = new SandboxMenu(vrzno_env('terrainAudioGet'), vrzno_env('terrainAudioSet'), vrzno_env('terrainPage'));
 $lastSound = [0,0,0];
+$replyRace = vrzno_env('terrainRaceReply');
+$publishRace = vrzno_env('terrainRaceFrame');
+$online = new TerrainSandbox\CircuitOnline($session, fn($id,$json) => $replyRace($id,$json), fn($json) => $publishRace($json));
 $roadStatus = vrzno_env('terrainRoadEditor');
 $roadCapture = vrzno_env('terrainRoadCapture');
 $roadCamera = vrzno_env('terrainRoadCamera');
@@ -158,16 +170,36 @@ $survey = null;
 $surveyId = 0;
 $journeyAtlas = new TerrainSandbox\JourneyAtlas;
 $atlasResult = vrzno_env('terrainJourneyMap');
+$verificationTimer = null;
+$advanceVerification = static function() use ($online,$window,&$verificationTimer): void {
+	$online->advanceVerification();
+	if(!$online->verifying() && $verificationTimer !== null) {
+		$window->clearInterval($verificationTimer);
+		$verificationTimer = null;
+	}
+};
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds, &$displayTerrain, &$pendingEdit, &$hiddenGates,
 	&$heldKeys, &$heldPad, &$menuPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastAuthoringFrame,
-	$pauseMenu, &$survey, &$surveyId, $journeyAtlas, $atlasResult
+	$pauseMenu, &$survey, &$surveyId, $journeyAtlas, $atlasResult, $online, $window, $advanceVerification, &$verificationTimer
 ): bool {
 	$frameSeconds = max(0.0, $elapsed);
 	$started = hrtime(true);
 	$packet = (string)$readInput();
 	$input = $packet === '' ? [] : json_decode($packet, true, flags: JSON_THROW_ON_ERROR);
-	if(isset($input['landformSurvey'])) {
+	$online->update($input['onlineCommand'] ?? null);
+	if($online->verifying() && $verificationTimer === null) $verificationTimer = $window->setInterval($advanceVerification,10);
+	if($session->trial !== null && isset($input['onlineFollow']) && count($input['onlineFollow']) === 6) {
+		$session->spectatorPose = array_combine(['x','y','z','yaw','pitch','roll'],$input['onlineFollow']);
+		$session->dirty = true;
+	}
+	if($session->trial !== null && array_key_exists('onlineRival',$input)) {
+		$pose = $input['onlineRival'];
+		$session->rivalPose = is_array($pose) && count($pose) === 6
+			? array_combine(['x','y','z','yaw','pitch','roll'],$pose) : null;
+		$session->dirty = true;
+	}
+	if(isset($input['landformSurvey']) && $session->trial === null) {
 		$survey = null;
 		$request = $input['landformSurvey'];
 		$surveyId = $request['id'];
@@ -324,6 +356,10 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		$model = $models[$name] ??= new VehicleModel(__DIR__ . '/assets/' . $name . '/mesh.bin.gz');
 		$model->draw($vehiclePose,
 			$viewCamera, $session->atmosphere, $session->water, $width, $height);
+	}
+	if($session->trial !== null && $session->rivalPose !== null) {
+		$rival = $models['testarossa'] ??= new VehicleModel(__DIR__ . '/assets/testarossa/mesh.bin.gz');
+		$rival->draw($session->rivalPose,$viewCamera,$session->atmosphere,$session->water,$width,$height);
 	}
 	$projectiles = [];
 	if($session->mode==='car') {
@@ -633,7 +669,8 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, $journeySigns, &$models, &$tracers, &$trailRenderer, &$flightLights, &$beacon, &$arrow, &$shadow, &$grass, $pauseMenu, $journeyAtlas): void {
+	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, $journeySigns, &$models, &$tracers, &$trailRenderer, &$flightLights, &$beacon, &$arrow, &$shadow, &$grass, $pauseMenu, $journeyAtlas, $window, &$verificationTimer): void {
+		if($verificationTimer !== null) $window->clearInterval($verificationTimer);
 		$journeyAtlas->cancel();
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');

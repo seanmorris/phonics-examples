@@ -14,6 +14,7 @@
     "chapters": [
       {"slug": "index", "title": "Landscape Sandbox", "path": "docs/index.md"},
       {"slug": "authoring", "title": "Shape a landscape", "path": "docs/authoring.md"},
+      {"slug": "online-racing", "title": "Race another driver", "path": "docs/online-racing.md"},
       {"slug": "how-it-works", "title": "How it works", "path": "docs/how-it-works.md"}
     ],
     "api": {"namespace": "TerrainSandbox", "description": "Offline authoring session, camera controls, versioned saves, and landscape sandbox composition."},

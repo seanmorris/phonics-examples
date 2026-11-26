@@ -44,6 +44,11 @@ final class Session
 	/** Controllable physical watercraft. */
 	public Watercraft $craft;
 	public Car $car;
+	public ?CircuitTrial $trial = null;
+	public ?array $rivalPose = null, $spectatorPose = null;
+	private bool $trialRecover = false;
+	private ?array $searchOrigin = null;
+	private ?\WeakMap $circuitSources = null;
 	public TireDust $tireDust;
 	public AirPatrol $airPatrol;
 	/** The car's lamp levels and how far its pop-up headlights stand open. */
@@ -644,6 +649,13 @@ final class Session
 		$this->aspect = $aspect;
 		$this->keys = is_array($input['keys'] ?? null) ? $input['keys'] : [];
 		$this->pad = self::readPad($input['pad'] ?? null);
+		if($this->trial !== null) {
+			foreach($input['actions'] ?? [] as $action) {
+				$type = is_array($action) ? ($action['type'] ?? '') : $action;
+				if($type === 'recover-road') $this->trialRecover = true;
+			}
+			return;
+		}
 		$switch = [$this->headlights, $this->headlightsLit()];
 		try
 		{
@@ -765,6 +777,7 @@ final class Session
 
 	private function simulate(float $seconds): void
 	{
+		if($this->trial !== null) { $this->driveTrialStep($seconds); return; }
 		// Input keeps surveying while the car waits on supported pavement for a late window.
 		if($this->paused || ($this->mode==='car' && $this->transfer && $this->onwardWork!==null)) return;
 		$mode = $this->mode;
@@ -1147,6 +1160,80 @@ final class Session
 		return $this->circuit === null ? null : max(320.,$this->circuit->length*1.15);
 	}
 
+	/** Freeze the landscape as raced, including the resolved course and the original search request when available. */
+	public function raceSpec(?int $finiteCopy = null): array
+	{
+		if($this->preparing || $this->draft !== null || $this->findingCircuit() || $this->preparingRoad()
+			|| $this->demo->playhead !== null)
+			throw new \RuntimeException('Finish editing the course and stop demo playback first.');
+		$world = json_decode($this->save(),true,64,JSON_THROW_ON_ERROR);
+		unset($world['camera'],$world['balloons'],$world['beachBalls'],$world['journeyViews']);
+		foreach(['quality','speed','grass','tool','balloonTool','radius','amount','gateRole','material'] as $key)
+			unset($world['settings'][$key]);
+		$laps = CircuitTrial::laps($finiteCopy ?? $this->course->laps());
+		if(isset($world['course']['gates'][0])) $world['course']['gates'][0]['laps'] = $laps;
+		$world['settings']['gateLaps'] = $laps;
+		$world['settings']['airPatrolEnabled'] = false;
+		$spec = ['rules'=>CircuitTrial::RULES,'simulator'=>CircuitTrial::simulator(),'laps'=>$laps,'world'=>$world];
+		CircuitTrial::document($spec);
+		return $spec;
+	}
+
+	public function prepareTrial(array $spec): CircuitTrial
+	{
+		$world = CircuitTrial::document($spec);
+		$this->time = 0.;
+		$this->load(json_encode($world,JSON_THROW_ON_ERROR));
+		return new CircuitTrial($this->landscape,$this->course,$this->water->level(),$this->circuit);
+	}
+
+	public function driveTrial(array $spec): void
+	{
+		$trial = $this->prepareTrial($spec);
+		$this->trial = $trial;
+		$this->car = $trial->car;
+		$this->race = $trial->race;
+		$this->mode = 'car';
+		$this->paused = false;
+		$this->chase->board($this->camera,$this->car->state(),$this->landscape);
+		$this->dirty = true;
+	}
+
+	public function leaveTrial(): void
+	{
+		$this->trial = null;
+		$this->rivalPose = $this->spectatorPose = null;
+		$this->trialRecover = false;
+		$this->car = $this->systems->registry->get($this->vehicles['car'],Car::class);
+		$this->race = $this->systems->registry->get($this->vehicles['car'],Race::class);
+		$this->mode = 'fly';
+		$this->dirty = true;
+	}
+
+	private function driveTrialStep(float $seconds): void
+	{
+		$trial = $this->trial;
+		if(!$trial->running || $trial->dnf !== null || $trial->race->state === 'finished') return;
+		$before = $this->car->state();
+		$buttons = $this->pad['buttons'];
+		$trial->step(CircuitTrial::controls($this->blend('KeyS','KeyW',$this->pad['rt']-$this->pad['lt']),
+			$this->blend('KeyA','KeyD',$this->pad['x']), (bool)($this->held('Space') || ($buttons & self::PAD_A)),
+			(bool)($this->held('ShiftLeft') || $this->held('ShiftRight') || ($buttons & self::PAD_LB)),$this->trialRecover));
+		$this->trialRecover = false;
+		$after = $this->car->state();
+		$this->time = $trial->tick / CircuitTrial::HZ;
+		$this->water->update($this->time);
+		if($this->settings['clock']) {
+			$this->settings['azimuth'] = fmod($this->settings['azimuth'] + $seconds*.2,360);
+			$this->settings['elevation'] = sin($this->time/120)*55+8;
+			$this->sun();
+		}
+		$this->chase->look = $this->lookAngle();
+		$this->chase->advance($this->camera,$before,$after,$this->landscape,$seconds);
+		$this->lamps->step($seconds,$after['braking'],$after['reversing'],$this->headlightsLit());
+		$this->dirty = true;
+	}
+
 	private function findCircuit(): void
 	{
 		if($this->mode !== 'fly') throw new \RuntimeException('Return to free flight to find a circuit.');
@@ -1159,6 +1246,9 @@ final class Session
 		$swell = $water->level()-$water->heightRange()[0];
 		$this->circuitPreview = null;
 		$this->roadEditor->circuitDrafts([]);
+		$this->searchOrigin = ['version'=>1,'origin'=>[$x,$z],'dry'=>$dry,'swell'=>$swell,
+			'settings'=>array_intersect_key($this->settings,CircuitFinder::DEFAULTS +
+				array_flip(['circuitRelief','circuitStartHeight','circuitCauseways','gateLaps','roadWidth','roadShoulder']))];
 		$this->circuitSearch = (new CircuitFinder($this->landscape,$dry,$swell,$this->settings['circuitRelief'],
 			$this->settings['circuitStartHeight'],$this->settings['circuitCauseways'],$this->settings))
 			->find($x,$z,$this->gateShapes,$this->settings['gateLaps']);
@@ -1191,6 +1281,8 @@ final class Session
 				$this->circuitSearch = null;
 				$this->circuitPreview = $job->getReturn();
 				if($this->circuitPreview !== null) {
+					$this->circuitSources ??= new \WeakMap;
+					$this->circuitSources[$this->circuitPreview] = $this->searchOrigin;
 					$sections = $this->circuitPreview->road;
 					if(!$sections) {
 						$grade = CircuitRoad::grade($this->landscape,$this->circuitPreview);
@@ -2578,6 +2670,14 @@ final class Session
 	 */
 	public function view(float $alpha): array
 	{
+		if($this->trial && $this->spectatorPose !== null) {
+			$pose = $this->spectatorPose + $this->car->state();
+			$eye = clone $this->camera;
+			$eye->position = [$pose['x'] - 12*sin($pose['yaw']),$pose['y']+5.,$pose['z']-12*cos($pose['yaw'])];
+			$eye->yaw = M_PI-$pose['yaw'];
+			$eye->pitch = -.27;
+			return [$eye,$pose];
+		}
 		[$eye, $pose] = match($this->mode) {
 			'car' => $this->carView($alpha),
 			'craft' => [$this->camera, $this->craft->state()],
@@ -2923,6 +3023,8 @@ final class Session
 		}
 		if($this->circuit !== null)
 			$document['circuit'] = ['route'=>$this->circuit->export(),'variant'=>$this->circuitVariant];
+		if($this->circuit && isset($this->circuitSources[$this->circuit]))
+			$document['circuit']['generator'] = $this->circuitSources[$this->circuit];
 		return json_encode($document, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
 	}
 
@@ -3127,6 +3229,10 @@ final class Session
 		foreach($settings as $name => $value) $this->setting((string)$name, $value);
 		$this->course = $course;
 		$this->circuit = $circuit; $this->circuitVariant = $variant;
+		if($circuit && is_array($data['circuit']['generator'] ?? null)) {
+			$this->circuitSources ??= new \WeakMap;
+			$this->circuitSources[$circuit] = $data['circuit']['generator'];
+		}
 		if($course->start() !== null) $this->settings['gateLaps'] = $course->start()['laps'];
 		$this->course->float($this->water, $this->time);
 		$this->camera->position = array_map('floatval', $position);
