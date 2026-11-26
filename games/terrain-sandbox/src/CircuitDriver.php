@@ -59,7 +59,7 @@ final class CircuitDriver
 			$heights = $this->profile($landscape);
 		}
 		$this->segment = 0;
-		$braking = [];
+		$braking = $rollingLimits = [];
 		// A short change of heading and a sustained turn have different demands on the tires.
 		$span = max(1, (int)round(12. / $this->spacing));
 		foreach($this->line as $i => [$x, $z]) {
@@ -77,12 +77,13 @@ final class CircuitDriver
 			$this->room[] = $margin;
 			$widthAllowance = max(0., min(1., ($halfWidth - 6.) / 6.));
 			$grip = min(9.2,7.2+.65*$margin);
+			$rollingLimits[] = min(sqrt($grip/$k),self::lockSpeed($k));
 			// A slide wanders more than a gripping car, so a narrow road gets less of it.
 			$share = self::SLIDE_SHARE*($hasPavement ? max(.5,min(1.,.5 + ($halfWidth-4.5)/9.)) : 1.);
 			// A very tight bend is over before the tail has swung out, so the slide gains less there.
 			$slide = self::slideSpeed($k,$share*max(0.,min(1.,(1./$k - 6.)/16.)));
 			// Below 14 m/s a locked rear axle swings the tail less, so the tires alone corner there.
-			$this->speedLimit[] = min(self::TOP_SPEED, max(min(sqrt($grip/$k),self::lockSpeed($k)), $slide >= 14. ? $slide : 0.));
+			$this->speedLimit[] = min(self::TOP_SPEED, max($rollingLimits[$i], $slide >= 14. ? $slide : 0.));
 			// The brakes and the road's resistance slow the car, and the grade adds to that or takes from it.
 			// Plan on a little less than all of it, and less again on a narrow entry.
 			$grade = $heights ? ($heights[$this->wrap($i + 1)] - $heights[$i])/$this->spacing : 0.;
@@ -137,8 +138,15 @@ final class CircuitDriver
 			$speed = $this->speedLimit[$this->wrap($from)];
 			[$first,$last] = $this->clearFlight($this->wrap($from),$to - $from,$speed)
 				?? [-(int)ceil(.5*$speed/$this->spacing),$to - $from];
-			for($n = $first; $n <= $last; $n++) $this->aloft[$this->wrap($from + $n)] = true;
+			// The controller releases the handbrake here. Budget only rolling tire grip through
+			// the bend, including the approach and the landing, then propagate braking upstream.
+			for($n = $first; $n <= $last; $n++) {
+				$j = $this->wrap($from + $n);
+				$this->aloft[$j] = true;
+				$this->speedLimit[$j] = min($this->speedLimit[$j],$rollingLimits[$j]);
+			}
 		}
+		$this->brake($braking);
 		// Keep enough of the bottle for the slides ahead. Driving without the boost refills it between them.
 		$this->reserve = array_fill(0,$this->count,0.);
 		$reserve = 0.;

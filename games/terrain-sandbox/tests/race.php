@@ -331,6 +331,32 @@ $jumpResult = $jumpRace->status($jumpCourse,7);
 expect($jumpResult['state'] === 'finished' && array_column($jumpResult['splits'],'time') === [4.,6.],
 	'A car sailing between the posts above the boards earns the checkpoint and finish at their crossing times');
 
+// An endless circuit reuses one lap and bounds its history even after a long exhibition.
+$loop = new Course;
+$loop->place('start','road',0.,0.,0.,0.,Course::ENDLESS);
+$loop->place('checkpoint','road',0.,0.,80.,0.);
+$loop = Course::import($loop->export(),100.);
+$endless = new Race;
+$cross = static fn(Race $race,float $z,float $t) => $race->advance($loop,[0.,0.,$z-2.],[0.,0.,$z+2.],$t,1.,'car',1);
+$cross($endless,0.,0.);
+for($lap=1; $lap<=101; $lap++) {
+	$cross($endless,80.,2.*$lap-1.);
+	$status=$endless->status($loop,2.*$lap);
+	expect($status['state']==='running' && $status['lap']===$lap && $status['remaining']===null
+		&& end($status['splits'])['lapTime']===1. && count($status['splits'])<=2,'Endless checkpoint uses the current lap clock');
+	if($lap===91) {
+		$resumed = new Race;
+		$resumed->resume($loop,$status,2.*$lap,'car',1,$endless->distanceFromStart());
+		$endless = $resumed;
+	}
+	$cross($endless,0.,2.*$lap);
+}
+$status=$endless->status($loop,203.);
+expect($status['lap']===102 && $status['lapTimes']===[2.] && $status['best']===null && count($loop->route())===2,
+	'Endless laps resume from a demo and retain a bounded lap history without recording a finish');
+$loop->place('finish','road',0.,0.,160.,0.);
+expect($loop->laps()===1,'A separate finish is still point-to-point with an endless start gate');
+
 // One 60 m step of a jet passes the start gate, a checkpoint and the finish gate, each timed where the step meets it.
 // The finish gate stands one air gate width beyond the start gate, the nearest it can stand without merging.
 $course = new Course;
@@ -998,7 +1024,7 @@ $malformed = [
 	'an extra gate key' => ['gates' => [$gate[1] + ['color' => 'red']]],
 	'a start gate without laps' => ['gates' => [array_diff_key($gate[0], ['laps' => 0])]],
 	'laps on a checkpoint' => ['gates' => [$gate[1] + ['laps' => 2]]],
-	'no laps' => ['gates' => [['laps' => 0] + $gate[0]]],
+	'negative laps' => ['gates' => [['laps' => -1] + $gate[0]]],
 	'too many laps' => ['gates' => [['laps' => 21] + $gate[0]]],
 	'fractional laps' => ['gates' => [['laps' => 2.5] + $gate[0]]],
 	'a string coordinate' => ['gates' => [['x' => '1'] + $gate[1]]],
@@ -1036,7 +1062,7 @@ catch(InvalidArgumentException) { expect($copy->save() === $intact, 'A file from
 $bad = $data;
 $bad['course']['gates'][0]['laps'] = 99;
 input($copy, ['actions' => [['type' => 'load', 'json' => json_encode($bad)]]]);
-expect($copy->message === 'Invalid saved course: laps must be a whole number from 1 to 20.' && $copy->save() === $intact,
+expect($copy->message === 'Invalid saved course: laps must be a whole number from 1 to 20 or zero for continuous laps.' && $copy->save() === $intact,
 	'A refused course says why');
 // Loading in the middle of a race stops it, and a best time follows the course into the file and back.
 input($copy, ['actions' => ['gates-clear']]);

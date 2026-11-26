@@ -494,7 +494,8 @@ $engine->start(
 		if(($hadVisibleSmoke || $visibleSites) && $session->time !== $lastRenderedTime) $dirty = true;
 		$signTerrain = $sample ? $playback->terrain : $displayTerrain;
 		$dirty = $curveSigns->update($signTerrain) || $dirty;
-		$dirty = $journeySigns->update($signTerrain,$session->journeyEndpoints()) || $dirty;
+		$dirty = $journeySigns->update($signTerrain,$session->journeyEndpoints(),
+			$signTerrain === $session->landscape ? $session->journeySigns : null) || $dirty;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
@@ -614,6 +615,7 @@ $engine->start(
 				$status['menuRow'] = $liveSession->menuRow;
 				$status['message'] = 'Playing demo';
 				$status['race'] = ($events['race'] ?? []) + $status['race'];
+				$status['journeySplit'] = $events['journeyClock']['split'] ?? null;
 				$status['delivery'] = $events['delivery'] ?? null;
 				$status['balloons'] = ($events['range'] ?? []) + $status['balloons'];
 				$status['airPatrol'] = $events['airPatrol'] ?? null;

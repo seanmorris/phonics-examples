@@ -11,8 +11,7 @@ final class JourneySignModel
 	private const ASSETS=__DIR__.'/../assets/roads/';
 	private ?Landscape $land=null;
 	private int $revision=-1;
-	private ?array $endpoints=null;
-	private ?\Generator $build=null;
+	private ?JourneySigns $layout=null, $preview=null;
 	private array $sites=[], $art=[], $mileMarkers=[];
 	private ?Program $program=null;
 	private ?BakedMesh $mesh=null;
@@ -21,22 +20,14 @@ final class JourneySignModel
 
 	public function __construct() { $this->lamps=new SpotLights; }
 
-	public function update(Landscape $land,?array $endpoints=null): bool
+	public function update(Landscape $land,?array $endpoints=null,?JourneySigns $layout=null): bool
 	{
-		$changed=false;
-		if($land!==$this->land || $land->revision()!==$this->revision || $endpoints!==$this->endpoints) {
-			$changed=$this->count>0;
-			$this->sites=$this->mileMarkers=[]; $this->count=$this->drawn=0;
-			$this->land=$land; $this->revision=$land->revision(); $this->endpoints=$endpoints;
-			$this->build=JourneySigns::layout($land,$endpoints);
-		}
-		if($this->build===null) return $changed;
-		$until=hrtime(true)+800_000;
-		while($this->build->valid()) {
-			$this->build->next();
-			if(hrtime(true)>=$until) return $changed;
-		}
-		$this->sites=$this->build->getReturn(); $this->build=null;
+		$layout ??= $this->preview ??= new JourneySigns;
+		$layout->update($land,$endpoints);
+		if($layout === $this->layout && $this->revision === $layout->version) return false;
+		$changed = $this->count > 0;
+		$this->layout=$layout; $this->land=$land; $this->revision=$layout->version;
+		$this->sites=$layout->sites; $this->mileMarkers=[]; $this->drawn=0;
 		$this->count=count($this->sites);
 		foreach($this->sites as $site) if($site['kind']==='mile') {
 			[$x,,$z]=$site['position'];
@@ -135,6 +126,6 @@ final class JourneySignModel
 		$this->mesh?->close(); $this->mesh=null;
 		$this->program?->close(); $this->program=null;
 		$this->lamps->forget();
-		$this->land=$this->build=null; $this->sites=$this->art=$this->mileMarkers=[]; $this->count=$this->drawn=0;
+		$this->land=$this->layout=$this->preview=null; $this->sites=$this->art=$this->mileMarkers=[]; $this->count=$this->drawn=0;
 	}
 }

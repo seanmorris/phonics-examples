@@ -4,7 +4,7 @@ require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
 
 use TerrainPhonics\{Edits,JoinedTerrain,Landscape};
-use TerrainSandbox\{JourneyNetwork,JourneySignModel,JourneySigns};
+use TerrainSandbox\{JourneyClock,JourneyNetwork,JourneySignModel,JourneySigns};
 
 function expectSign(bool $test, string $why): void { if(!$test) throw new RuntimeException($why); }
 function layout(Landscape $land,?array $endpoints=null): array
@@ -210,3 +210,22 @@ expectSign(JourneySigns::legend(JourneySigns::MILE)===['1','MILE']
 	&& JourneySigns::legend(0.46*JourneySigns::MILE)===['0.5','MILES']
 	&& JourneySigns::legend(19.6*JourneySigns::MILE)===['20','MILES'],'Mileage lettering handles sub-mile values, rounding and singular units.');
 echo "Journey highway sign placement and lifecycle passed.\n";
+
+
+$clock = new JourneyClock(10.);
+$cross = static function(array $gate,float $time,bool $forward=true,float $side=0.,array $stages=['A','B','C']) use($clock): void {
+	[$x,,$z]=$gate['position']; [$hx,$hz]=$gate['heading'];
+	$x+=$side*$hz; $z-=$side*$hx;
+	$d=$forward ? 2. : -2.;
+	$clock->advance([$gate],$stages,['x'=>$x-$d*$hx,'z'=>$z-$d*$hz],['x'=>$x+$d*$hx,'z'=>$z+$d*$hz],$time,1.);
+};
+$cross(kinds($opening,'start')[0],12.);
+$mile=kinds($opening,'mile')[0];
+$cross($mile,15.,false); $cross($mile,16.,true,$mile['width']);
+expectSign($clock->split === null,'A backwards or roadside pass earns no journey split');
+$cross($mile,20.);
+expectSign($clock->split['label']==='Journey split' && abs($clock->split['seconds']-8.)<1e-8,'The mileage sign times the forward crossing from the start banner');
+$saved=$clock->split; $cross($mile,25.);
+expectSign($clock->split===$saved,'Recrossing the same mileage marker keeps the original time');
+$cross(kinds($opening,'finish')[0],40.);
+expectSign($clock->split['label']==='Journey finish' && abs($clock->split['seconds']-28.)<1e-8,'The journey finish shows elapsed driving time');

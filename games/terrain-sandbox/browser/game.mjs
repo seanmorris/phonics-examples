@@ -222,6 +222,7 @@ export function activate({module, canvas, session, services})
 	const pending = frame.querySelector('[data-pending]');
 	const roadPreview = frame.querySelector('[data-road-preview]');
 	const race = frame.querySelector('[data-race]');
+	const splitTime = frame.querySelector('[data-split-time]');
 	let finishTimer = null;
 
 	const credit = frame.querySelector('[data-music-credit]');
@@ -295,7 +296,9 @@ export function activate({module, canvas, session, services})
 		updateRace(race, latest);
 	};
 
-	const controls = new Map([...frame.querySelectorAll('[data-value]')].map(field => [field.dataset.value, field]));
+	const fields = [...frame.querySelectorAll('[data-value]')];
+	const lapFields = fields.filter(field => field.dataset.value === 'gateLaps');
+	const controls = new Map(fields.map(field => [field.dataset.value, field]));
 
 	// The controls shown are for the device used last: the keyboard and mouse, a touchscreen, or a pad by its maker.
 	let inputTheme = globalThis.matchMedia?.('(pointer: coarse)').matches ? 'touch' : 'keyboard';
@@ -356,7 +359,6 @@ export function activate({module, canvas, session, services})
 
 	// These fields send nothing while their text is out of range, and return to the last value sent when left so.
 	const checked = new Set(['waterLevel'
-		, 'gateLaps'
 		, 'gateAltitude'
 		, 'gateWidth'
 		, 'gateHeight'
@@ -417,6 +419,8 @@ export function activate({module, canvas, session, services})
 
 			if(output) output.textContent = readout(field.value, field.step);
 
+			if(field.dataset.value === 'gateLaps') for(const other of lapFields) other.value = field.value;
+
 			if(field.dataset.value === 'tool') showToolControls();
 
 			if(field.dataset.value === 'circuitCauseways' || field.dataset.value === 'circuitStartHeight')
@@ -430,7 +434,7 @@ export function activate({module, canvas, session, services})
 		}, {signal});
 	};
 
-	for(const field of controls.values()) listen(field);
+	for(const field of fields) listen(field);
 
 	// Tabs: a click or the arrow, Home and End keys select one, and the page remembers the last for next time.
 	const tabs = [...frame.querySelectorAll('[role="tab"]')];
@@ -1469,11 +1473,11 @@ export function activate({module, canvas, session, services})
 					, state.recipe[key] === defaults[key]
 				);
 
-				for(const [name, value] of Object.entries(state.settings))
+				for(const field of fields)
 				{
-					const field = controls.get(name);
-
-					if(!field) continue;
+					const name = field.dataset.value;
+					if(!(name in state.settings)) continue;
+					const value = state.settings[name];
 
 					if(field.type === 'checkbox') field.checked = value;
 					else setFieldValue(field, value, name === 'waterLevel' && value === defaults.waterLevel);
@@ -1495,6 +1499,13 @@ export function activate({module, canvas, session, services})
 			planner.sync(state,activeNetwork,journeyRequest);
 
 			updateRace(race, state, finishTimer !== null);
+			const crossing = state.mode === state.race.vehicle ? state.race.splits.at(-1) : null;
+			const split = crossing ? {
+				at: crossing.at, seconds: crossing.lapTime,
+				label: crossing.role === 'checkpoint' ? `Lap ${crossing.lap} · Checkpoint ${crossing.number}` : `Lap ${crossing.lap}`
+			} : state.journeySplit;
+			splitTime.hidden = !(split && state.time >= split.at && state.time - split.at < 4);
+			if(!splitTime.hidden) splitTime.textContent = split.label + ' · ' + raceClock(split.seconds);
 			updateGateTool(gateTool, state);
 		}
 	});
@@ -1671,8 +1682,9 @@ function updateRace(line, state, showFinish = false)
 
 	const parts = [];
 
-	if(race.state === 'running') parts.push(raceClock(race.time, 1), `Lap ${race.lap} of ${race.laps}`);
+	if(race.state === 'running') parts.push(raceClock(race.time, 1), `Lap ${race.lap} of ${race.laps || '∞'}`);
 	else if(race.laps === null) parts.push('Place a start gate to race');
+	else if(race.laps === 0) parts.push('Endless laps');
 	else parts.push(race.laps === 1 ? '1 lap' : `${race.laps} laps`);
 
 	const next = race.next && course.gates.find(gate => gate.id === race.next.id);
@@ -1757,6 +1769,8 @@ function lapNote(course)
 	const finish = gates.some(gate => gate.role === 'finish');
 
 	if(finish) return 'This course runs once, from its start gate to its finish gate.';
+
+	if(course.laps === 0) return 'This circuit repeats until you stop driving.';
 
 	return `This course runs ${course.laps} ${course.laps === 1 ? 'lap' : 'laps'} through its start / finish gate.`;
 }
@@ -2610,6 +2624,8 @@ function markup(journeyMarkup)
 
 	const precipitationControl = weatherRange('Intensity · %', 'intensity', 0, 100, 1, 0);
 
+	const lapSelector = '<select data-value="gateLaps">' + Array.from({length: 20}, (_, i) =>
+		`<option value="${i+1}">${i+1}</option>`).join('') + '<option value="0">∞ · Endless</option></select>';
 	const hintPrefix = `landform-${++labCount}`;
 	const circuitNumber = (key, label, unit, initial, bounds, automatic = '') => {
 		const hint = `${hintPrefix}-${key}`;
@@ -2672,6 +2688,7 @@ function markup(journeyMarkup)
 	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #658271;border-radius:6px;min-height:34px;padding:5px 9px;font:inherit}
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}@media(pointer:coarse){.terrain-sandbox input[type=range]{min-height:32px}}
 	.terrain-note{color:#bdd2c7}.terrain-check{display:flex;align-items:center;gap:8px}.terrain-hud{position:absolute;left:16px;bottom:16px;box-sizing:border-box;max-width:calc(100% - 32px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sizes{white-space:pre-line}.terrain-sandbox [hidden]{display:none!important}
+	.terrain-split-time{position:absolute;z-index:1;top:calc(12px + min(166px,18.2vh,27.2vw));left:50%;transform:translateX(-50%);white-space:nowrap;pointer-events:none;color:white;background:#102822d9;border-radius:5px;padding:4px 9px;font:600 clamp(14px,2.4vh,23px)/1.3 system-ui;font-variant-numeric:tabular-nums;text-shadow:0 1px 2px #000}
 	[data-journey-sign]{color:#ffe1a2;font-weight:600}
 	[data-journey-progress]:empty,[data-journey-error]:empty{display:none}
 	.terrain-panel{
@@ -2703,7 +2720,7 @@ function markup(journeyMarkup)
 	.terrain-menu-button i{width:4px;height:15px;border-radius:1px;background:#fff7de}
 	.terrain-sandbox:has(.terrain-panel[open]) .terrain-menu-button{right:calc(var(--lab-inset) + var(--lab-width) + 8px)}
 	.terrain-menu-open .terrain-panel,
-	.terrain-menu-open:not(.terrain-screenshot-view) :is(.terrain-demo-status,.terrain-road-preview,.terrain-hud,.terrain-control-hints,.terrain-speedometer,.terrain-flight-map,.terrain-instruments,.terrain-race,.terrain-menu-button,.terrain-credit-space){visibility:hidden}
+	.terrain-menu-open:not(.terrain-screenshot-view) :is(.terrain-split-time,.terrain-demo-status,.terrain-road-preview,.terrain-hud,.terrain-control-hints,.terrain-speedometer,.terrain-flight-map,.terrain-instruments,.terrain-race,.terrain-menu-button,.terrain-credit-space){visibility:hidden}
 	.terrain-panel:not([open])>summary{height:42px;padding:0;justify-content:center}
 	.terrain-panel:not([open]) .lab-title{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 	.terrain-panel>summary:focus-visible{outline-offset:-4px;border-radius:inherit}
@@ -2946,7 +2963,7 @@ function markup(journeyMarkup)
 	<div class="terrain-grid" data-balloon-tool hidden><label class="terrain-field">Balloon tool<select data-value="balloonTool"><option value="place">Place</option><option value="remove">Remove</option></select></label>
 	<label class="terrain-field">Height above surface · ft<input data-unit="ft" data-value="balloonAltitude" type="number" min="12" max="1200" value="${325 * FOOT}"></label></div>
 	<div class="terrain-grid" data-gate-tool hidden><label class="terrain-field">Gate role<select data-value="gateRole"><option value="start" selected>Start</option><option value="checkpoint">Checkpoint</option><option value="finish">Finish</option><option value="remove">Remove</option></select></label>
-	<label class="terrain-field">Laps · start / finish courses only<input data-value="gateLaps" type="number" min="1" max="20" step="1" value="1"></label>
+	<label class="terrain-field">Laps · start / finish courses only${lapSelector}</label>
 	<p class="terrain-note" data-gate-laps>Laps count when the start gate is also the finish.</p>
 	<label class="terrain-field">Height above ground · ft<input data-unit="ft" data-value="gateAltitude" data-increment=".1" type="number" min="0" max="400" step="any" value="0"></label>
 	<label class="terrain-field">Opening width · ft<input data-unit="ft" data-value="gateWidth" data-increment=".1" type="number" min="0" max="300" step="any" value="0"></label>
@@ -2981,6 +2998,7 @@ function markup(journeyMarkup)
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-roads" aria-labelledby="terrain-tab-roads" data-tab-panel="roads" hidden>
 	<details><summary>Circuit generator</summary><div class="terrain-grid">
+	<label class="terrain-field">Race laps${lapSelector}</label>
 	${circuitNumber('circuitRelief','Minimum feature height difference','ft',400*FOOT,'min="-2000" max="2000" step="1"')}
 	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
 	${circuitNumber('circuitMinLap','Minimum lap length','mi',null,'min="120" step="any"')}
@@ -3122,5 +3140,5 @@ function markup(journeyMarkup)
 	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles targets. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Hold Back and tap L1/LB for the previous track or R1/RB for the next. Click the right stick to return to the road during a race or landscape journey. Start opens the pause menu.</p>
 	</details><details><summary>Credits</summary><p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Adapted from <a href="https://sketchfab.com/3d-models/beach-ball-low-poly-609035202d29492bba35e1103ba27580" target="_blank" rel="noopener">Beach Ball Low-poly by MaX3Dd</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p></details>
 	</section>
-	</div></div></details><p class="terrain-menu-live" data-menu-live aria-live="polite"></p><output class="terrain-demo-status" data-demo-status aria-live="off" hidden></output><div class="terrain-hud"><p data-journey-sign hidden></p><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
+	</div></div></details><p class="terrain-menu-live" data-menu-live aria-live="polite"></p><output class="terrain-demo-status" data-demo-status aria-live="off" hidden></output><output class="terrain-split-time" data-split-time hidden></output><div class="terrain-hud"><p data-journey-sign hidden></p><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

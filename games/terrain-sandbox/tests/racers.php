@@ -458,3 +458,21 @@ foreach([[28,false],[14,false],[36,true]] as [$width,$painted]) {
 	$table->close();
 }
 echo "Open, narrow and repainted serpentine race checks passed.\n";
+
+// A crest followed by a bend on this seed used to carry the CPU outside checkpoint six on every lap.
+$canyon = new Session;
+$input = static fn(array $actions) => $canyon->input(['actions'=>$actions],1/60,16/9,8.);
+$input([['type'=>'generate','preset'=>'canyon','seed'=>'first-light-227']]);
+$canyon->input(['values'=>['gateLaps'=>2]],1/60,16/9);
+$input(['circuit-find']);
+while($canyon->findingCircuit()) $input([]);
+$input(['circuit-dry']);
+while($canyon->preparingRoad()) $input([]);
+if($graded=$canyon->takeCandidate()) $canyon->publishLandscape($graded);
+check($canyon->canWatchDriver() && $canyon->course->laps()===2,'The generator applies the selected lap count.');
+$input(['cpu-demo']);
+for($tick=0; $tick<18000 && $canyon->race->state!=='finished'; $tick++) $canyon->step(1/60);
+$result=$canyon->race->status($canyon->course,$canyon->time);
+check($result['state']==='finished' && array_column($result['splits'],'gate')===array_column($canyon->course->route(),'id'),
+	'The CPU must score every gate in order on both laps of first-light-227.');
+echo "Two generated canyon laps passed.\n";

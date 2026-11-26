@@ -159,13 +159,21 @@ final class Race
 		$gate = $course->gate($step['id']);
 		$elapsed = $at - $this->startedAt;
 		$this->splits[] = ['gate' => $gate['id'], 'role' => $gate['role'], 'number' => $gate['number'] ?? null,
-			'lap' => $step['lap'], 'time' => $elapsed];
+			'lap' => $step['lap'], 'time' => $elapsed, 'at' => $at, 'lapTime' => $at-$this->lapStartedAt];
 		$this->index++;
 		if(!$step['lapEnd'])
 			return ucfirst($this->describe($course, $step)) . ' at ' . self::clock($elapsed) . '. Next: '
 				. $this->describe($course, $this->route[$this->index]) . '.';
 		$this->lapTimes[] = $at - $this->lapStartedAt;
 		$this->lapStartedAt = $at;
+		if($this->laps === Course::ENDLESS) {
+			// Retain the last crossing as the next lap's time origin, keeping long exhibitions bounded.
+			$this->splits = [end($this->splits)];
+			$this->lapTimes = [end($this->lapTimes)];
+			$this->repeatLap($step['lap'] + 1);
+			return 'Lap ' . ($step['lap'] + 1) . ' after ' . self::clock($elapsed) . '. Next: '
+				. $this->describe($course,$this->route[0]) . '.';
+		}
 		if($this->index < count($this->route))
 			return 'Lap ' . ($step['lap'] + 1) . " of {$this->laps} after " . self::clock($elapsed) . '. Next: '
 				. $this->describe($course, $this->route[$this->index]) . '.';
@@ -178,6 +186,12 @@ final class Race
 		return $elapsed < $previous ? 'Finished in ' . self::clock($elapsed) . ', a new best by '
 			. self::clock($previous - $elapsed) . '.'
 			: 'Finished in ' . self::clock($elapsed) . '. Best ' . self::clock($previous) . '.';
+	}
+
+	private function repeatLap(int $lap): void
+	{
+		foreach($this->route as &$step) $step['lap'] = $lap;
+		$this->index = 0;
 	}
 
 	/**
@@ -223,8 +237,10 @@ final class Race
 	{
 		if($this->state !== 'running') return;
 		$seen = [];
-		for($i = $this->index-1; $i >= -1; $i--) {
-			$id = $i < 0 ? $this->startGate : $this->route[$i]['id'];
+		$repeat = $this->laps === Course::ENDLESS && $this->route[0]['lap'] > 1;
+		$count = count($this->route);
+		for($i = $this->index-1; $i >= ($repeat ? $this->index-$count : -1); $i--) {
+			$id = $i < 0 && !$repeat ? $this->startGate : $this->route[($i+$count)%$count]['id'];
 			if(isset($seen[$id])) break;
 			$seen[$id] = true;
 			yield $course->gate($id);
@@ -242,12 +258,21 @@ final class Race
 	{
 		$this->reset();
 		$start=$course->start();
-		if(!$start || !$course->route() || ($state['state'] ?? 'idle')==='idle') return;
+		if(!$start || ($state['state'] ?? 'idle')==='idle') return;
 		$this->begin($course,$now-max(0.,(float)$state['time']),$vehicle,$boarding);
 		$this->splits=is_array($state['splits'] ?? null) ? $state['splits'] : [];
 		$this->lapTimes=array_values(array_filter((array)($state['lapTimes'] ?? []),'is_numeric'));
 		$this->index=count($this->splits);
 		$this->lapStartedAt=$this->startedAt+array_sum($this->lapTimes);
+		if($this->laps === Course::ENDLESS) {
+			$lap = max(1,(int)($state['lap'] ?? 1));
+			$this->repeatLap($lap);
+			$this->lapStartedAt = $this->startedAt;
+			foreach($this->splits as $split) {
+				if(($split['lap'] ?? null) === $lap) $this->index++;
+				elseif($split['gate'] === $start['id']) $this->lapStartedAt += $split['time'];
+			}
+		}
 		$this->startGate=$start['id']; $this->startX=$start['x']; $this->startZ=$start['z']; $this->farthest=$distance;
 		$this->message=(string)($state['message'] ?? '');
 		foreach(['last'=>'latest','best'=>'best'] as $key=>$record) {
@@ -294,7 +319,7 @@ final class Race
 			'vehicle' => $this->state === 'idle' ? null : $this->vehicle,
 			'next' => $next !== null ? $this->summary($course, $course->gate($next['id']))
 				: ($start !== null ? $this->summary($course, $start) : null),
-			'remaining' => $running ? count($this->route) - $this->index : null,
+			'remaining' => $running && $this->laps !== Course::ENDLESS ? count($this->route) - $this->index : null,
 			'splits' => $this->splits, 'lastSplit' => $this->splits ? end($this->splits)['time'] : null,
 			'lapTimes' => $this->lapTimes,
 			'last' => $this->records->latest[$signature] ?? null, 'best' => $this->records->best[$signature] ?? null,

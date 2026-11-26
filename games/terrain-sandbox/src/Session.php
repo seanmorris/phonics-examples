@@ -70,6 +70,8 @@ final class Session
 	private array $vehicles = [];
 	private ?int $demoEntity = null;
 	private ?CircuitDriver $driver = null;
+	public JourneySigns $journeySigns;
+	public ?JourneyClock $journeyClock = null;
 	private ?JourneyDriver $journeyDriver = null;
 	public ?DeliveryRun $delivery = null;
 	private float $aspect = 16/9;
@@ -578,6 +580,7 @@ final class Session
 	public function __construct(array $recipe = [], ?GateShapes $gateShapes = null, ?Scheduler $systems = null,
 		array $movementSystems = [])
 	{
+		$this->journeySigns = new JourneySigns;
 		$this->demo = new DemoTape;
 		$this->roadEditor = new RoadEditor;
 		$this->terrainAppearance = new TerrainAppearance;
@@ -816,6 +819,12 @@ final class Session
 			else
 			{
 				$after = $this->car->state();
+				if(!$flooded && !$racing && !$this->delivery && $this->journeyEntrances && $before['recoveries'] === $after['recoveries']) {
+					$this->journeyClock ??= new JourneyClock($this->time);
+					$this->journeySigns->update($this->landscape,$this->journeyEndpoints());
+					$stages = $this->square === null ? [] : [$this->square,...$this->network->nodes[$this->square]['exits']];
+					$this->journeyClock->advance($this->journeySigns->timingGates,$stages,$before,$after,$this->time,$seconds);
+				}
 				if(!empty($this->network->nodes[$this->square]['exits']) && !$this->preparing && !$racing && !$this->delivery) $this->approachSquare($after);
 				$hadDust = $this->tireDust->active();
 				$this->tireDust->step($seconds,$this->car->dustContacts,$after);
@@ -1229,6 +1238,7 @@ final class Session
 
 	private function activateCircuit(Circuit $circuit, Course $course, bool $flooded): void
 	{
+		$course->setLaps($this->settings['gateLaps']);
 		$this->course = $course;
 		$this->resetCourseRaces();
 		$this->circuit = $circuit; $this->circuitPreview = null; $this->circuitSearch = null;
@@ -1509,11 +1519,11 @@ final class Session
 		{
 			if(!is_numeric($value) || !is_finite((float)$value))
 				throw new \InvalidArgumentException('Invalid control value');
-			$value = (int)max(1, min(Course::MAX_LAPS, round((float)$value)));
+			$value = (float)$value === 0. ? Course::ENDLESS : (int)max(1,min(Course::MAX_LAPS,round((float)$value)));
 			if($this->course->setLaps($value))
 				$this->message = $this->course->finish() !== null
 					? 'Laps apply to a course that finishes at its start gate. This course runs once to its finish gate.'
-					: ($value === 1 ? 'The race runs one lap.' : "The race runs $value laps.");
+					: match($value) { Course::ENDLESS => 'The circuit runs continuously.', 1 => 'The race runs one lap.', default => "The race runs $value laps." };
 		}
 		if($name === 'waterLevel' || $name === 'waterChoppiness')
 		{
@@ -2436,7 +2446,9 @@ final class Session
 		}
 		$cpu=$this->journeyDriver!==null;
 		$props=$this->balloons->beachBalls->translated($shift,$next->recipe()['worldSize']/2);
+		$clock=$this->journeyClock;
 		$this->replace($next,$this->driveHighways);
+		$this->journeyClock=$clock;
 		$this->balloons->beachBalls->restore($props);
 		$this->journeyViews=$views;
 		$this->network=$network; $this->square=$child; $this->mode='car';
@@ -2463,6 +2475,7 @@ final class Session
 		$this->stopDemo();
 		$this->cancelPick(); $this->carSearch = null; $this->delivery = null;
 		$this->releasePin();
+		$this->journeyClock = null;
 		$this->car->spawn($site,$this->landscape,$this->water->level());
 		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
@@ -2540,6 +2553,7 @@ final class Session
 			return;
 		}
 		$this->releasePin();
+		$this->journeyClock = null;
 		$this->car->spawn($site, $this->landscape, $this->water->level());
 		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
@@ -2703,6 +2717,8 @@ final class Session
 	{
 		if($this->highways===$this->driveHighways) $this->highways=$highways;
 		$this->driveHighways=$highways;
+		$this->journeySigns = new JourneySigns;
+		$this->journeyClock = null;
 		$this->discardOnward(); $this->network=null; $this->square=null; $this->journeyViews=[];
 		$this->cancelPick(); $this->carSearch = null;
 		$this->draft?->close(); $this->draft = null;
@@ -3207,6 +3223,13 @@ final class Session
 			if(!$motion && $p['speed'] && !$p['vx'] && !$p['vz']) $v=[$p['speed']*sin($p['yaw']),0.,$p['speed']*cos($p['yaw'])];
 			$this->craft->resume($p,$v,$motion ?: [0.,0.,0.]);
 		}
+		$this->journeyClock = null;
+		if(isset($events['journeyClock'])) {
+			$clock = $events['journeyClock'];
+			$this->journeyClock = new JourneyClock($clock['start']);
+			$this->journeyClock->passed = $clock['passed'];
+			$this->journeyClock->split = $clock['split'] ?? null;
+		}
 		$this->balloons->resume($events);
 		$this->guardRace();
 		if($this->mode!=='fly' && isset($events['race']))
@@ -3250,7 +3273,8 @@ final class Session
 				if($branch!==null && $branch===$this->nextSquare && !$this->network->nodes[$branch]['exits']) $arrival=$branch;
 			}
 		}
-		return ['journeyBuildProgress'=>$this->journeyBuildProgress,'journeyBuildPhase'=>$this->journeyBuildPhase,'journeySurveying'=>$this->onwardWork ? $this->nextSquare : null,
+		return ['journeySplit'=>$this->mode === 'car' && !$this->delivery && !$this->course->count() ? $this->journeyClock?->split : null,
+			'journeyBuildProgress'=>$this->journeyBuildProgress,'journeyBuildPhase'=>$this->journeyBuildPhase,'journeySurveying'=>$this->onwardWork ? $this->nextSquare : null,
 			'journeyWaiting'=>$this->transfer && $this->onwardWork!==null,'journeyReady'=>$this->onwardReady ? $this->nextSquare : null,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyHasFork'=>$junction!==null,'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,
 			'demo'=>$this->demoStatus(),'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,

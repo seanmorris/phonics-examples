@@ -25,6 +25,7 @@ final class DemoEvents
 		$state = ['stars'=>[$stars->brightness,$stars->twinkle,$stars->perMinute],'weather'=>$s->weather->snapshot(),'motion'=>base64_encode(pack('g*',...$dynamics)),
 			'airPatrol'=>$s->mode==='car' ? $s->airPatrol->snapshot() : null,
 			'raceDistance'=>$s->race->distanceFromStart(), 'rangeTimers'=>$s->mode==='jet' ? $s->balloons->timers() : null,
+			'journeyClock'=>$s->journeyClock ? get_object_vars($s->journeyClock) : null,
 			'race'=>$race,'target'=>$s->navigationTarget($vehicle),
 			'sites'=>$s->delivery?->beacons($s->time) ?? [],
 			'delivery'=>$s->delivery ? ['delivered'=>$s->delivery->delivered,'carrying'=>$s->delivery->carrying,'target'=>$s->delivery->target()] : null,
@@ -189,6 +190,14 @@ final class DemoEvents
 			if($v['kind'] !== 'checkpoint') return !isset($v['waypoint']);
 			$a = $v['waypoint'] ?? $v;
 			return is_array($a) && self::vector([$a['x']??null,$a['z']??null,$a['yaw']??null,$a['halfWidth']??null],4);
+		}
+		if($key==='journeyClock') {
+			if($v===null) return true;
+			if(!is_array($v) || !self::vector([$v['start'] ?? null],1) || !is_array($v['passed'] ?? null)) return false;
+			foreach($v['passed'] as $flag) if($flag !== true) return false;
+			$split=$v['split'] ?? null;
+			return $split===null || (is_array($split) && in_array($split['label'] ?? '', ['Journey split','Journey finish'],true)
+				&& self::vector([$split['at'] ?? null,$split['seconds'] ?? null],2));
 		}
 		if($key==='race') {
 			if(!is_array($v) || !is_array($v['splits'] ?? null) || !is_array($v['lapTimes'] ?? null)

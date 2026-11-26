@@ -18,7 +18,7 @@ use TerrainPhonics\WaterSurface;
 final class Course
 {
 	public const ROLES = ['start', 'checkpoint', 'finish'];
-	public const MAX_CHECKPOINTS = 32, MAX_LAPS = 20;
+	public const MAX_CHECKPOINTS = 32, MAX_LAPS = 20, ENDLESS = 0;
 	/** Keys a saved gate may carry, beyond laps on the start gate, number on a checkpoint and its size. */
 	private const SAVED = ['role', 'kind', 'x', 'y', 'z', 'yaw'];
 	/**
@@ -87,7 +87,7 @@ final class Course
 	 * placed with $ground stands on the highest ground across its span instead.
 	 * @param float $z World Z of the gate origin in meters.
 	 * @param float $yaw Heading of travel through the gate in radians, from -pi to pi.
-	 * @param int $laps Laps a new start gate carries, from 1 to 20.
+	 * @param int $laps Laps a new start gate carries, from 1 to 20, or zero for continuous laps.
 	 * @param float|null $width Opening width in meters, or null for the kind's own. It must lie in the kind's range.
 	 * @param float|null $height Opening height in meters, or null for the kind's own. It must lie in the kind's range,
 	 * and a water arch's within its stretch, as GateShapes::fit() leaves it.
@@ -140,7 +140,7 @@ final class Course
 			$this->remove($this->finish['id']);
 		}
 		$gate['id'] = $existing['id'] ?? $this->nextId++;
-		if($role === 'start') $gate['laps'] = $existing['laps'] ?? max(1, min(self::MAX_LAPS, $laps));
+		if($role === 'start') $gate['laps'] = $existing['laps'] ?? self::lapCount($laps);
 		if($role === 'checkpoint') $gate['number'] = count($this->checkpoints) + 1;
 		unset($this->afloat[$gate['id']], $this->floating[$gate['id']]);
 		if($role === 'start') $this->start = $gate;
@@ -325,17 +325,22 @@ final class Course
 
 	/**
 	 * Set the lap count on the start gate. A course with a finish gate keeps it for when that gate goes.
-	 * @param int $laps Laps from 1 to 20.
+	 * @param int $laps Laps from 1 to 20, or zero for continuous laps.
 	 * @return bool Whether a start gate exists and its lap count changed.
 	 */
 	public function setLaps(int $laps): bool
 	{
-		$laps = max(1, min(self::MAX_LAPS, $laps));
+		$laps = self::lapCount($laps);
 		if($this->start === null || $this->start['laps'] === $laps) return false;
 		$this->start['laps'] = $laps;
 		// A course with a finish gate runs once, so its route and a race on it stay as they were.
 		if($this->finish === null) $this->revision++;
 		return true;
+	}
+
+	public static function lapCount(int $laps): int
+	{
+		return $laps === self::ENDLESS ? self::ENDLESS : max(1,min(self::MAX_LAPS,$laps));
 	}
 
 	/** Laps a race runs: the start gate's laps without a finish gate, one with it, or null without a start gate. */
@@ -413,7 +418,7 @@ final class Course
 	/**
 	 * List the gates a race passes after its start, in order. Without a finish gate, every lap passes the
 	 * checkpoints by number and returns through the start gate. With one, the race passes the checkpoints once and
-	 * ends at the finish gate.
+	 * ends at the finish gate. An endless circuit returns one repeating lap.
 	 * @return list<array{id:int,lap:int,lapEnd:bool}> Gate ids with the lap each belongs to, or an empty list
 	 * without a start gate.
 	 */
@@ -422,7 +427,7 @@ final class Course
 		if($this->start === null) return [];
 		$route = [];
 		$laps = $this->laps();
-		for($lap = 1; $lap <= $laps; $lap++)
+		for($lap = 1; $lap <= max(1,$laps); $lap++)
 		{
 			foreach($this->checkpoints as $gate) $route[] = ['id' => $gate['id'], 'lap' => $lap, 'lapEnd' => false];
 			$route[] = ['id' => ($this->finish ?? $this->start)['id'], 'lap' => $lap, 'lapEnd' => true];
@@ -775,8 +780,8 @@ final class Course
 				if(($pavementSpan && $course->shapes->fits($kind,$width,$height))
 					|| !$course->shapes->fits($kind, $width, $height, $pavementSpan)) throw $fail("a $kind gate's size is out of range");
 			}
-			if($role === 'start' && (!is_int($gate['laps']) || $gate['laps'] < 1 || $gate['laps'] > self::MAX_LAPS))
-				throw $fail('laps must be a whole number from 1 to 20');
+			if($role === 'start' && (!is_int($gate['laps']) || $gate['laps'] < self::ENDLESS || $gate['laps'] > self::MAX_LAPS))
+				throw $fail('laps must be a whole number from 1 to 20 or zero for continuous laps');
 			if($role === 'checkpoint' && !is_int($gate['number']))
 				throw $fail('a checkpoint number must be a whole number');
 			if($role === 'start' && $course->start !== null || $role === 'finish' && $course->finish !== null)

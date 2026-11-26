@@ -13,6 +13,34 @@ final class JourneySigns
 	private const FORK_STEP = 4.;      // Spacing between cross sections of the two departing roads, in meters.
 	private const FORK_CLEARANCE = 2.; // Room for the 2.65 m sign face and a margin at both ends.
 
+	private ?Landscape $land = null;
+	private int $revision = -1;
+	private ?array $endpoints = null;
+	private ?\Generator $build = null;
+	public array $sites = [], $timingGates = [];
+	public int $version = 0;
+
+	/** Share one incremental survey between timing, signs and the minimap. */
+	public function update(Landscape $land, ?array $endpoints): void
+	{
+		if($this->land !== $land || $this->revision !== $land->revision() || $this->endpoints !== $endpoints) {
+			$this->land = $land; $this->revision = $land->revision(); $this->endpoints = $endpoints;
+			$this->sites = $this->timingGates = [];
+			$this->build = self::layout($land,$endpoints);
+			$this->version++;
+		}
+		if($this->build === null) return;
+		$until = hrtime(true)+800_000;
+		while($this->build->valid()) {
+			$this->build->next();
+			if(hrtime(true) >= $until) return;
+		}
+		$this->sites = $this->build->getReturn(); $this->build = null;
+		foreach($this->sites as $site)
+			if(in_array($site['kind'],['start','mile','finish'],true)) $this->timingGates[] = $site;
+		$this->version++;
+	}
+
 	public static function node(array $point): string
 	{
 		// A square handoff clips and translates the same spline in two coordinate systems.
