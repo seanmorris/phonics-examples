@@ -187,7 +187,7 @@
     "browser/cockpit.mjs": "sha256-FOfv5YSQnBQZhswdbZSXXUxzENZobU3DrU2w+miOnrs=",
     "browser/control-hints.mjs": "sha256-Cz5c3dvF1kVKlSFNc1LQAY1GA9Fvw3fPWCL9XoY//dE=",
     "browser/flight-map.mjs": "sha256-lUA/AQ7GYVU1aQfZqfsI02d/5H8T7oOtE7zneStsvoo=",
-    "browser/game.mjs": "sha256-ZFaK30mVw6+ZB/f2pi60XSJnQGrv125Kd+FSL5QNkJ0=",
+    "browser/game.mjs": "sha256-vG5i7Ixm+Lrug/6QLAfGV5EPg9ciZTbR3lZUGZ8e5PA=",
     "browser/journey-editor.mjs": "sha256-S8NzgTTOmw5z/yX6ZBqQYlLnMoVfVHTzzaxir5XxFyA=",
     "browser/road-editor.mjs": "sha256-1ynQu56PzYSVmYSVG5UKAEMSCgxP1LWecnGbziqu6+k=",
     "browser/screen-awake.mjs": "sha256-g+CdRS2UqKtPfuG+y20Jlo0dt27ap7IZ8VDGE+oD4Sg=",

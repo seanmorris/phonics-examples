@@ -332,14 +332,22 @@ export function activate({module, canvas, session, services})
 	const push = action => { actions.push(typeof action === 'string' ? {type: action} : action); };
 
 	const weatherFields = [...frame.querySelectorAll('[data-weather]')];
-	for(const field of weatherFields) field.addEventListener('input', () => {
+
+	for(const field of weatherFields)
+	field.addEventListener('input', () => {
 		const value = field.type === 'range' ? field.valueAsNumber : field.value;
+
 		if(field.type === 'range') field.nextElementSibling.value = value;
-		push({type:'weather',controls:{[field.dataset.weather]:value}});
+
+		push({type: 'weather',controls: {[field.dataset.weather]: value}});
 	}, {signal});
-	for(const button of frame.querySelectorAll('[data-weather-preset]')) button.addEventListener('click', () =>
-		push({type:'weather',preset:button.dataset.weatherPreset}), {signal});
-	frame.querySelector('[data-weather-reset]').addEventListener('click', () => push({type:'weather',resetGround:true}), {signal});
+
+	for(const preset of frame.querySelectorAll('[data-weather-preset]'))
+	preset.addEventListener('click', () => push({type: 'weather',preset: preset.dataset.weatherPreset}), {signal});
+
+	const resetWeatherGround = frame.querySelector('[data-weather-reset]');
+	resetWeatherGround.addEventListener('click', () => push({type: 'weather', resetGround: true}), {signal});
+
 	const groundReadout = frame.querySelector('[data-weather-ground]');
 
 	const focus = () => canvas.focus({preventScroll: true});
@@ -1193,13 +1201,20 @@ export function activate({module, canvas, session, services})
 
 			materials.show(state);
 			air.show(state);
-			if(state.weather) {
-				for(const field of weatherFields) {
+
+			if(state.weather)
+			{
+				for(const field of weatherFields)
+				{
 					const value = state.weather.controls[field.dataset.weather];
+
 					if(field.matches(':active')) continue;
+
 					if(field.value !== String(value)) field.value = value;
+
 					if(field.type === 'range') field.nextElementSibling.value = value;
 				}
+
 				const [wet,snow] = state.weather.ground.map(v => Math.round(v*100));
 				groundReadout.value = `Wetness ${wet}% · Snow cover ${snow}%`;
 			}
@@ -2568,15 +2583,33 @@ function range(label, key, min, max, step, value, unit = '')
 			+ `<output data-output="${key}">${value}</output></label>`;
 }
 
-function weatherRange(label,key,min,max,step,value)
+function weatherRange(label, key, min, max, step, value)
 {
-	return `<label class="terrain-control"><span>${label}</span><input type="range" data-weather="${key}" min="${min}" max="${max}" step="${step}" value="${value}"><output>${value}</output></label>`;
+	return `<label class="terrain-control"><span>${label}</span><input type="range" data-weather="${key}"`
+		+ ` min="${min}" max="${max}" step="${step}" value="${value}"><output>${value}</output></label>`;
+}
+
+function weatherButton(name)
+{
+	return `<button type="button" data-weather-preset="${name.toLowerCase()}">${name}</button>`;
 }
 
 let labCount = 0;
 
 function markup(journeyMarkup)
 {
+	const weatherPresets = ['Clear', 'Cloudy', 'Rain', 'Snow'].map(weatherButton).join('');
+
+	const cloudControls = [
+		weatherRange('Cloud cover · %', 'coverage', 0, 100, 1, 0)
+		, weatherRange('Altitude above sea level · ft', 'altitude', 100, 30000, 100, 3500)
+		, weatherRange('Cloud shadow · %', 'shadow', 0, 100, 1, 45)
+		, weatherRange('Wind speed · mph', 'wind', 0, 150, 1, 12)
+		, weatherRange('Wind heading · °', 'heading', 0, 360, 1, 90)
+	].join('');
+
+	const precipitationControl = weatherRange('Intensity · %', 'intensity', 0, 100, 1, 0);
+
 	const hintPrefix = `landform-${++labCount}`;
 	const circuitNumber = (key, label, unit, initial, bounds, automatic = '') => {
 		const hint = `${hintPrefix}-${key}`;
@@ -3048,18 +3081,14 @@ function markup(journeyMarkup)
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-weather" aria-labelledby="terrain-tab-weather" data-tab-panel="weather" hidden>
 	<fieldset><legend>Weather presets</legend><div class="terrain-row">
-	${['Clear','Cloudy','Rain','Snow'].map(p => `<button type="button" data-weather-preset="${p.toLowerCase()}">${p}</button>`).join('')}
+	${weatherPresets}
 	</div></fieldset>
 	<fieldset><legend>Cloud deck</legend>
-	${weatherRange('Cloud cover · %','coverage',0,100,1,0)}
-	${weatherRange('Altitude above sea level · ft','altitude',100,30000,100,3500)}
-	${weatherRange('Cloud shadow · %','shadow',0,100,1,45)}
-	${weatherRange('Wind speed · mph','wind',0,150,1,12)}
-	${weatherRange('Wind heading · °','heading',0,360,1,90)}
+	${cloudControls}
 	</fieldset>
 	<fieldset><legend>Precipitation</legend>
 	<label class="terrain-control"><span>Type</span><select data-weather="kind"><option value="none">None</option><option value="rain">Rain</option><option value="snow">Snow</option></select></label>
-	${weatherRange('Intensity · %','intensity',0,100,1,0)}
+	${precipitationControl}
 	</fieldset>
 	<fieldset><legend>Ground</legend><div class="terrain-row"><output data-weather-ground>Wetness 0% · Snow cover 0%</output>
 	<button type="button" data-weather-reset>Reset ground</button></div></fieldset></section>
