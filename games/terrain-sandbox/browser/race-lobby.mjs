@@ -270,6 +270,19 @@ export function activate({module,session,canvas,signal})
 	async function go()
 	{
 		stopClocks();
+
+		if(liveState?.storageKey)
+		{
+			try
+			{
+				localStorage.setItem(liveState.storageKey, 'started');
+			}
+			catch
+			{
+				/* The live peer still has the transcript. */
+			}
+		}
+
 		await rpc('start');
 		announce('Go!');
 		canvas.focus();
@@ -683,7 +696,7 @@ export function activate({module,session,canvas,signal})
 
 	function launchLinks(state)
 	{
-		if(live || !liveState || state.scores.size===2) return;
+		if(live || !liveState || state.restoring || state.scores.size===2) return;
 
 		live = new LiveCircuit(
 			lobby
@@ -771,7 +784,42 @@ export function activate({module,session,canvas,signal})
 			attempt = detail.role==='player' ? 'live' : 'spectator';
 			bar.hidden = false;
 
-			if(detail.role==='player') await port.reportReady(id);
+			if(detail.role==='player')
+			{
+				state.storageKey = 'terrain.live.v1/' + detail.root + '/' + detail.localPlayer;
+				let saved;
+
+				try {saved = localStorage.getItem(state.storageKey);} catch { /* Storage may be unavailable. */ }
+
+				if(state.scores.has(detail.localPlayer))
+				{
+					state.restoring = true;
+					announce('Your verified time is on the table. Waiting for the other driver…');
+
+					return;
+				}
+
+				if(saved)
+				{
+					state.restoring = true;
+
+					if(saved==='started')
+					{
+						await port.resign('DNF · the page closed during the drive');
+					}
+					else
+					{
+						run = JSON.parse(saved);
+						await rpc('verify', {spec,run});
+						retained.hidden = false;
+						void submitDrive(state);
+					}
+
+					return;
+				}
+
+				await port.reportReady(id);
+			}
 
 			if(detail.role==='spectator'||detail.sequence) launchLinks(state);
 		})
@@ -836,7 +884,9 @@ export function activate({module,session,canvas,signal})
 		try
 		{
 			const ref = publishRef ?? await media.put({race: state.detail.root,course: state.id,run});
+
 			if(state !== liveState) return;
+
 			publishRef = ref;
 			await enqueue(tryFinish);
 		}
@@ -892,6 +942,16 @@ export function activate({module,session,canvas,signal})
 		if(liveState)
 		{
 			const state = liveState;
+
+			try
+			{
+				localStorage.setItem(state.storageKey, JSON.stringify(run));
+			}
+			catch
+			{
+				/* The upload can proceed without a local copy. */
+			}
+
 			announce('Finished · ' + format(run.ticks) + ' · submitting drive…');
 
 			void submitDrive(state);
