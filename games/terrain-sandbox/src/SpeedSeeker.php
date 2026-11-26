@@ -74,7 +74,7 @@ final class SpeedSeeker
 			if($this->clock>=6. || $hit!==null) return $this->finish($hit);
 			if($this->rearPassGap!==null && $plane!==null && $patrol==='escort') {
 				$gap=$this->planeGap($plane);
-				if($this->clock>=.10 && $gap<=self::RETURN_RADIUS && $gap<$this->rearPassGap && $this->behindBumper($car)) {
+				if($this->clock>=.10 && $gap<=self::RETURN_RADIUS && $gap<$this->rearPassGap) {
 					$this->phase='return'; $this->clock=0.;
 					$this->start=[$this->pose['x']-$plane['x'],$this->pose['y']-$plane['y'],$this->pose['z']-$plane['z'],
 						$this->pose['yaw'],$this->pose['pitch'],$this->pose['roll'],

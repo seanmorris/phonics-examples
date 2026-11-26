@@ -179,9 +179,7 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 			}
 			if($lockedAt===null) {
 				$lockedAt=$game->demo->duration();
-				$car=$game->car->state(); $body=VehicleModel::basis($car);
-				$along=($at['x']-$car['x'])*$body[6]+($at['y']-$car['y'])*$body[7]+($at['z']-$car['z'])*$body[8];
-				expect($followed && $missed && $along<=-Car::BODY_REAR,'The lock switches from behind the actual rear bumper after tailing the car.');
+				expect($followed && $missed,'The lock switches only after a drift has released the seeker.');
 			} else {
 				$speed=60.*hypot(hypot($at['x']-$previousPose['x'],$at['z']-$previousPose['z']),$at['y']-$previousPose['y']);
 				$returnSpeeds[(int)round(60*$shot['clock'])]=$speed/$shot['passSpeed'];
@@ -234,17 +232,24 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 	$game->close();
 }
 
-// Rotating the car rotates the eligibility plane. An old wing-side pass cannot arm itself after scrubbing.
-foreach([[-4.,true,true],[4.,true,false],[-4.,false,false]] as [$x,$releasedFromRear,$locks]) {
-	$prop=new SpeedSeeker;
-	$pose=['x'=>$x,'y'=>4.,'z'=>0.,'yaw'=>M_PI/2,'pitch'=>0.,'roll'=>0.];
-	$prop->resume(['phase'=>'missed','clock'=>.2,'start'=>array_fill(0,6,0.),'pose'=>$pose,'velocity'=>[1.,0.,0.],'passSpeed'=>1.,
-		($releasedFromRear ? 'rearPassGap' : 'passGap')=>25.]);
-	$car=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>M_PI/2,'speed'=>50.,'drift'=>0.];
-	$plane=array_replace($pose,['x'=>10.,'y'=>8.,'vx'=>0.,'vy'=>0.,'vz'=>0.]);
-	$prop->step(1/60,$car,$plane,'escort',$land,-10.);
-	expect(($prop->state()['phase']==='return')===$locks,'Only a rear release still behind the rotated car can switch to the F5.');
-}
+// Release behind the bumper, then turn the car so the coasting seeker is ahead of it.
+$prop=new SpeedSeeker;
+$pose=['x'=>-4.,'y'=>4.,'z'=>0.,'yaw'=>M_PI/2,'pitch'=>0.,'roll'=>0.];
+$prop->resume(['phase'=>'chase','clock'=>0.,'start'=>array_fill(0,6,0.),'pose'=>$pose,'velocity'=>[1.,0.,0.],'passSpeed'=>1.]);
+$car=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>M_PI/2,'speed'=>50.,'drift'=>.3];
+$plane=array_replace($pose,['x'=>10.,'y'=>8.,'vx'=>0.,'vy'=>0.,'vz'=>0.]);
+$prop->step(1/60,$car,$plane,'escort',$land,-10.);
+$released=$prop->state();
+expect($released['phase']==='missed' && isset($released['rearPassGap']),'A drift behind the bumper earns a retarget opportunity.');
+$car['yaw']=-M_PI/2; $car['drift']=0.;
+for($i=0;$i<8;$i++) $prop->step(1/60,$car,$plane,'escort',$land,-10.);
+expect($prop->state()['phase']==='return','Turning the car after a rear release keeps the converging seeker eligible for the F5.');
+
+// Early takes used passGap for releases that could happen beside the wing.
+unset($released['rearPassGap']);
+$released['passGap']=25.; $released['clock']=.2;
+$prop->resume($released); $prop->step(1/60,$car,$plane,'escort',$land,-10.);
+expect($prop->state()['phase']==='missed','Resuming an old wing-side release does not grant a rear release.');
 // Cross the 80 ms release between two ticks. Inspect the endpoints and times actually consumed by the shader.
 foreach([30,60,120] as $hz) {
 	$effects=new FlightTrails; $mount=[0.,.6,-1.7,0.,0.]; $base=['x'=>5.,'y'=>0.,'z'=>0.,'yaw'=>0.,'pitch'=>0.,'roll'=>0.];
