@@ -18,6 +18,10 @@ void main()
 	vec3 radiance;
 	// Integrate scattering only: a tiny bright solar disk cannot be resolved faithfully in this map.
 	terrainIntegrateAtmosphere(ray, uSkyCacheAltitude, 1e20, false, transmittance, radiance);
-	// Log RGBA8 stores [0,4095.9375] linear radiance, with finer steps near black. Alpha is unused.
-	outColor = vec4(clamp(log2(1.0 + max(vec3(0.0), radiance) * 16.0) / 16.0, 0.0, 1.0), 1.0);
+	// Share an exponent among the RGB channels so twilight uses the same relative precision as daylight.
+	radiance = max(radiance, vec3(0.0));
+	float peak = max(radiance.r, max(radiance.g, radiance.b));
+	float exponent = ceil(log2(max(peak, exp2(-32.0))));
+	// A square-root mantissa also preserves the faint blue in a red sunset.
+	outColor = vec4(sqrt(radiance * exp2(-exponent)), (exponent + 64.0) / 255.0);
 }

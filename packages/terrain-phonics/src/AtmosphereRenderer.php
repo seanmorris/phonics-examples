@@ -8,7 +8,7 @@ use Phonics\Render\RenderTarget;
 /**
  * Optional GPU sky-view cache for the spherical single-scattering atmosphere.
  *
- * Two latitude/longitude maps retain linear HDR scattering at the eye and water altitudes. Logarithmic RGBA8
+ * Two latitude/longitude maps retain linear HDR scattering at the eye and water altitudes. Shared-exponent RGBA8
  * storage needs no float render-target extension. The solar disk is evaluated separately at display resolution.
  * Two additional RGBA8 atlases cache directional aerial perspective at sixteen distances up to 90 km. The
  * angular and distance interpolation approximate the same single-scattering model; no multiple scattering is added.
