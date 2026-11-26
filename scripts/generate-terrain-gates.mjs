@@ -455,14 +455,23 @@ const signs = ['curve-hazard','curve','hairpin','swerve','kink','merge','hill','
 const roads = new URL('../roads/', assets);
 const cellWidth = 264, cellHeight = 328, atlasWidth = cellWidth*4, atlasHeight = cellHeight*2;
 const pixels = Buffer.alloc(atlasWidth*atlasHeight*4);
-for(const [i, name] of signs.entries()) {
-	const face = new Resvg(await fs.readFile(new URL(name+'-sign.svg', roads)), {fitTo: {mode: 'width', value: 256}}).render();
-	if(face.height !== (i === 0 ? 320 : 256)) throw Error('Unexpected sign proportions: '+name);
+
+for(const [i, name] of signs.entries())
+{
+	const face = new Resvg(
+		await fs.readFile(new URL(name + '-sign.svg', roads))
+		, {fitTo: {mode: 'width', value: 256}}
+	).render();
+
+	if(face.height !== (i === 0 ? 320 : 256)) throw Error('Unexpected sign proportions: ' + name);
+
 	const rgba = Buffer.from(face.pixels);
 	const x = (i%4)*cellWidth+4, y = Math.floor(i/4)*cellHeight+4;
-	for(let row=0; row<face.height; row++)
+
+	for(let row = 0; row<face.height; row++)
 		rgba.copy(pixels, 4*((y+row)*atlasWidth+x), row*face.width*4, (row+1)*face.width*4);
 }
+
 const header = Buffer.alloc(8);
 header.writeUInt32LE(atlasWidth);
 header.writeUInt32LE(atlasHeight, 4);

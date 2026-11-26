@@ -331,8 +331,10 @@ export function activate({module, canvas})
 			}
 		}
 
-		for(const [kind, x, z] of frame.traffic ?? []) {
+		for(const [kind, x, z] of frame.traffic ?? [])
+		{
 			if(kind !== 'missile') continue;
+
 			const dx = x-jet.x, dz = z-jet.z;
 			const factor = radius/Math.max(scale, Math.hypot(dx, dz)*1.09);
 			ctx.beginPath();

@@ -77,23 +77,33 @@ export function activate({module, canvas, session})
 			ctx.transform(c*scale, -s*scale, s*scale, c*scale, 0, 0);
 			ctx.translate(-centerX, -centerZ);
 			ctx.lineJoin = 'round';
-			for(const [width, color] of [[4, '#162a23'], [2, '#ffd272']]) {
+
+			for(const [width, color] of [[4, '#162a23'], [2, '#ffd272']])
+			{
 				ctx.strokeStyle = color;
 				ctx.lineWidth = width/scale;
 				ctx.stroke(module.journeyMap.path);
 			}
+
 			ctx.restore();
-			for(const [x, z] of state.journeyViews ?? []) {
+
+			for(const [x, z] of state.journeyViews ?? [])
+			{
 				const [px, py] = offset(x, z);
+
 				if(edgeDistance(px, py) > mid-5) continue;
+
 				ctx.beginPath();
 				ctx.moveTo(mid+px, mid+py-4);
 				ctx.lineTo(mid+px+4, mid+py);
 				ctx.lineTo(mid+px, mid+py+4);
 				ctx.lineTo(mid+px-4, mid+py);
 				ctx.closePath();
-				ctx.fillStyle = '#eff8e6'; ctx.fill();
-				ctx.lineWidth = 1; ctx.strokeStyle = '#162a23'; ctx.stroke();
+				ctx.fillStyle = '#eff8e6';
+				ctx.fill();
+				ctx.lineWidth = 1;
+				ctx.strokeStyle = '#162a23';
+				ctx.stroke();
 			}
 		}
 
@@ -122,7 +132,9 @@ export function activate({module, canvas, session})
 		for(const [x, z] of chart.mileMarkers ?? [])
 		{
 			const [dx, dy] = offset(x, z);
+
 			if(edgeDistance(dx, dy) > mid-5) continue;
+
 			ctx.beginPath();
 			ctx.arc(mid+dx, mid+dy, 3.5, 0, 2*Math.PI);
 			ctx.fillStyle = '#80edaf';
@@ -243,13 +255,16 @@ export function activate({module, canvas, session})
 		ctx.translate(mid, mid);
 
 		ctx.beginPath();
+
 		if(data.vehicle === 'car') ctx.rect(-5, -5, 10, 10);
-		else {
+		else
+		{
 			ctx.moveTo(0, -7);
 			ctx.lineTo(4.5, 5);
 			ctx.lineTo(0, 3);
 			ctx.lineTo(-4.5, 5);
 		}
+
 		ctx.closePath();
 		ctx.fillStyle = '#fffce4';
 		ctx.strokeStyle = '#1b2824';
@@ -260,21 +275,27 @@ export function activate({module, canvas, session})
 		ctx.restore();
 
 		// Paint small airborne contacts last so a seeker over the bumper remains visible inside the car square.
-		for(const [kind, x, z] of data.traffic ?? []) {
+		for(const [kind, x, z] of data.traffic ?? [])
+		{
 			const [dx, dy] = offset(x, z);
 			const fit = Math.min(1, (mid-7)/Math.max(1, edgeDistance(dx, dy)));
 			const px = mid+dx*fit, py = mid+dy*fit;
 			ctx.beginPath();
-			if(kind === 'plane') {
+
+			if(kind === 'plane')
+			{
 				ctx.moveTo(px, py-6);
 				ctx.lineTo(px+5, py+4);
 				ctx.lineTo(px-5, py+4);
 				ctx.closePath();
 				ctx.fillStyle = '#82e6ff';
-			} else {
+			}
+			else
+			{
 				ctx.arc(px, py, 2.6, 0, 2*Math.PI);
 				ctx.fillStyle = '#ff9354';
 			}
+
 			ctx.fill();
 			ctx.lineWidth = 1.25;
 			ctx.strokeStyle = '#192326';

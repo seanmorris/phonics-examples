@@ -1072,16 +1072,20 @@ test('Back and the shoulders step the soundtrack without using nitrous or changi
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await canvas(page).focus();
 	const title = page.locator('[data-music-credit] strong');
+
 	const buttons = (...changes) => page.evaluate(changes => {
 		for(const [index, pressed] of changes) window.testCarButton(index, pressed);
-	}, changes);
+	}, changes
+	);
+
 	// Wait for multiple input polls even on a slow renderer.
+
 	const drive = async() => {
 		const {time} = await status(page);
 		await expect.poll(async() => (await status(page)).time).toBeGreaterThan(time + .25);
 	};
 
-	await buttons([8,true],[5,true]);
+	await buttons([8,true], [5,true]);
 	await expect(title).toHaveText('Dimension');
 	await drive();
 	await expect(title).toHaveText('Dimension');
@@ -1089,7 +1093,7 @@ test('Back and the shoulders step the soundtrack without using nitrous or changi
 	await drive();
 	await buttons([5,true]);
 	await expect(title).toHaveText('Tokyo Drift 東京ドリフト');
-	await buttons([5,false],[4,true]);
+	await buttons([5,false], [4,true]);
 	await expect(title).toHaveText('Dimension');
 	await buttons([8,false]);
 	await drive();
@@ -1101,7 +1105,7 @@ test('Back and the shoulders step the soundtrack without using nitrous or changi
 	await drive();
 	await buttons([4,true]);
 	await expect.poll(async() => (await status(page)).car.nitrous).toBeLessThan(1);
-	await buttons([4,false],[8,true]);
+	await buttons([4,false], [8,true]);
 	await drive();
 	await buttons([8,false]);
 	await expect.poll(async() => (await status(page)).jetControls).toBe('expert');
@@ -1147,9 +1151,19 @@ test('right-stick recovery keeps rendering with the chase camera beyond the jour
 	recipe.join = {version: 2,span: 16384,destinations: [{...recipe}]};
 	await load(page, doc);
 	const edge = (await status(page)).recipe.worldSize / 2;
-	doc.landscape.history = [[{type:'road',points:[[edge,0,0],[edge-110,0,0]],width:12,shoulder:2,material:'road'}]];
+	doc.landscape.history = [[{
+		type: 'road'
+		, points: [[edge,0,0],[edge
+		-110
+		, 0,0
+		]]
+		, width: 12
+		, shoulder: 2
+		, material: 'road'
+	}]];
+
 	doc.landscape.cursor = doc.landscape.revision = 1;
-	doc.camera = {position:[edge-4,12,24],yaw:Math.PI,pitch:-.35};
+	doc.camera = {position: [edge-4,12,24],yaw: Math.PI,pitch: -.35};
 	await load(page, doc);
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
@@ -1261,22 +1275,34 @@ test('tight road bends and checkpoint banners return the headlight beam at night
 
 test('a narrow headlight beam crosses the interior and diagonal of a journey sign', async({page}) => {
 	const roads = new URL('../../games/terrain-sandbox/assets/roads/', import.meta.url);
+
 	const [vertex, fragment, reflection] = await Promise.all(
-		['journey-sign.vert','journey-sign.frag','retroreflection.glsl'].map(name => fs.readFile(new URL(name, roads), 'utf8'))
+		['journey-sign.vert','journey-sign.frag','retroreflection.glsl'].map(
+			name => fs.readFile(new URL(name, roads), 'utf8')
+		)
 	);
+
 	const samples = await page.evaluate(({vertex, fragment}) => {
 		const gl = new OffscreenCanvas(64, 64).getContext('webgl2', {antialias: false});
 		const program = gl.createProgram();
-		for(const [type, source] of [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragment]]) {
+
+		for(const [type, source] of [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragment]])
+		{
 			const shader = gl.createShader(type);
 			gl.shaderSource(shader, source);
 			gl.compileShader(shader);
+
 			if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(shader));
+
 			gl.attachShader(program, shader);
 		}
+
 		gl.linkProgram(program);
+
 		if(!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
+
 		gl.useProgram(program);
+
 		const loc = name => gl.getUniformLocation(program, name);
 		// A ten-meter printed face fills the viewport. Both triangles have all three vertices outside the beam.
 		gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
@@ -1293,25 +1319,37 @@ test('a narrow headlight beam crosses the interior and diagonal of a journey sig
 		gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 		const cone = 1/(Math.cos(.06)-Math.cos(.20));
-		function aim(offset) {
+
+		function aim(offset)
+		{
 			const length = Math.hypot(offset, 10);
-			gl.uniform4fv(loc('uSpotLights[0]'), [0,0,-10,.0001, offset/length,0,10/length,cone, 20,20,20,-Math.cos(.20)*cone]);
+
+			gl.uniform4fv(
+				loc('uSpotLights[0]')
+				, [0,0,-10,.0001, offset/length,0,10/length,cone, 20,20,20,-Math.cos(.20)*cone]
+			);
 		}
-		function draw(ink, lamps) {
+
+		function draw(ink, lamps)
+		{
 			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([...ink,255]));
 			gl.uniform1i(loc('uSpotLightCount'), lamps);
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 			const row = new Uint8Array(64*4);
 			gl.readPixels(0, 32, 64, 1, gl.RGBA, gl.UNSIGNED_BYTE, row);
-			return [12,23,31,32,44,54].map(x => Array.from(row.subarray(4*x,4*x+3)));
+
+			return [12,23,31,32,44,54].map(x => Array.from(row.subarray(4*x, 4*x+3)));
 		}
+
 		const green = [0,111,81];
 		aim(0);
 		const dark = draw(green, 0), lit = draw(green, 1);
 		const colors = [[239,20,40],[252,209,22],[249,249,249],[0,0,0]].map(ink => draw(ink, 1)[2]);
 		aim(2);
+
 		return {dark, lit, colors, steered: draw(green, 1)};
 	}, {vertex, fragment: fragment.replace('// RETROREFLECTION', reflection)});
+
 	const green = samples.lit.map(rgb => rgb[1]);
 	expect(green[0]).toBe(samples.dark[0][1]);
 	expect(green[2]).toBeGreaterThan(170);
@@ -2304,19 +2342,29 @@ test('circuit search controls preserve automatic minima and convert editor units
 	await expect(lap).toHaveAccessibleDescription('Default 0.25 mi (local), then 1.86 mi (regional)');
 	await expect(radius).toHaveAccessibleDescription('Default 19.69 ft');
 	await depth.fill('0');
+
 	await expect.poll(async() => (await status(page)).settings).toMatchObject({
-		circuitMinLap: 4828.032, circuitMinArea: 404685.64224, circuitGradePreference: 16,
-		circuitTurnRadius: 12.192, circuitStartTolerance: 1.524, circuitCausewayDepth: 0
+		circuitMinLap: 4828.032
+		, circuitMinArea: 404685.64224
+		, circuitGradePreference: 16
+		, circuitTurnRadius: 12.192
+		, circuitStartTolerance: 1.524
+		, circuitCausewayDepth: 0
 	});
+
 	await lap.fill('');
 	await area.fill('');
 	await start.fill('');
 	await causeways.uncheck();
 	await expect(tolerance).toBeDisabled();
 	await expect(depth).toBeDisabled();
+
 	await expect.poll(async() => (await status(page)).settings).toMatchObject({
-		circuitMinLap: null, circuitMinArea: null, circuitStartHeight: null
+		circuitMinLap: null
+		, circuitMinArea: null
+		, circuitStartHeight: null
 	});
+
 	await load(page, fixture());
 	await expect(lap).toHaveAccessibleDescription('Default 0.11 mi (local)');
 	await expect(area).toHaveAccessibleDescription('Default 0.06 acres (local)');
@@ -2392,7 +2440,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	await expect(page.getByRole('img', {name: 'Circuit route and gates'})).toBeVisible();
 
 	const sections = page.locator('[data-road-layers]');
-	await expect(sections.locator('[data-road-layer="-1"]')).toHaveAttribute('open','');
+	await expect(sections.locator('[data-road-layer="-1"]')).toHaveAttribute('open', '');
 	const options = await sections.locator('[data-road-layer] > summary').allTextContents();
 	const counts = options.filter(s => s.startsWith('Circuit section')).map(s => Number(/(\d+) points/.exec(s)[1]));
 	expect(counts.reduce((a, b) => a+b, 0)).toBeLessThan(253); // This lap previously displayed 506 points.
@@ -2411,7 +2459,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	const dry = await status(page);
 	expect(dry.revision).toBe(1);
 	expect(dry.course.gates).toHaveLength(preview.circuit.gates.length);
-	await expect(sections.locator('[data-road-layer="1"]')).toHaveAttribute('open','');
+	await expect(sections.locator('[data-road-layer="1"]')).toHaveAttribute('open', '');
 	await expect(controls).toHaveCount(counts[1]);
 
 
@@ -2969,24 +3017,31 @@ test('surface title-bar eyes toggle the rendered layer independently of its edit
 	await load(page, doc);
 	await page.getByRole('tab', {name: 'Surface', exact: true}).click();
 	const view = canvas(page);
+
 	const pixel = async() => {
 		const png = PNG.sync.read(await view.screenshot({style: '.terrain-panel{visibility:hidden!important}'}));
 		const i = 4*(Math.floor(png.height/2)*png.width + Math.floor(png.width/2));
+
 		return [...png.data.subarray(i, i+3)];
 	};
+
 	const top = page.getByRole('button', {name: 'Leaves visibility'});
 	const base = page.getByRole('button', {name: 'Earth visibility'});
-	for(const channel of ['color','both']) {
-		const rows = [{id:'earth', name:'Earth', color:'#ff0000', channel},
-			{id:'leaves', name:'Leaves', color:'#00ff00', parent:'earth'}];
-		await view.evaluate((el, layers) => el.terrainSandboxDebug.action({type:'surface-layers',layers}),rows);
+
+	for(const channel of ['color','both'])
+	{
+		const rows = [{id: 'earth', name: 'Earth', color: '#ff0000', channel}
+			, {id: 'leaves', name: 'Leaves', color: '#00ff00', parent: 'earth'}
+		];
+
+		await view.evaluate((el, layers) => el.terrainSandboxDebug.action({type: 'surface-layers',layers}), rows);
 		await expect.poll(async() => (await status(page)).surfaceLayers[0].channel).toBe(channel);
-		await expect(top).toHaveAttribute('aria-pressed','true');
+		await expect(top).toHaveAttribute('aria-pressed', 'true');
 		const green = await pixel();
 		expect(green[1]).toBeGreaterThan(green[0]);
 		await top.click();
 		await expect.poll(async() => (await status(page)).hiddenSurfaceLayers).toEqual(['leaves']);
-		await expect(page.locator('[data-layer="leaves"]')).not.toHaveAttribute('open','');
+		await expect(page.locator('[data-layer="leaves"]')).not.toHaveAttribute('open', '');
 		const red = await pixel();
 		expect(red[0]).toBeGreaterThan(red[1]);
 		await base.click();
@@ -3002,18 +3057,20 @@ test('surface title-bar eyes toggle the rendered layer independently of its edit
 
 	const row = page.locator('[data-layer="leaves"]');
 	await row.locator('summary').click();
-	await row.getByRole('textbox', {name:'Layer name'}).fill('Unsaved name');
+	await row.getByRole('textbox', {name: 'Layer name'}).fill('Unsaved name');
 	await top.click();
 	await expect.poll(async() => (await status(page)).hiddenSurfaceLayers).toEqual(['leaves']);
-	await expect(row).toHaveAttribute('open','');
-	await expect(row.getByRole('textbox', {name:'Layer name'})).toHaveValue('Unsaved name');
-	await expect(page.getByRole('button',{name:'Apply layers',exact:true})).toBeEnabled();
+	await expect(row).toHaveAttribute('open', '');
+	await expect(row.getByRole('textbox', {name: 'Layer name'})).toHaveValue('Unsaved name');
+	await expect(page.getByRole('button', {name: 'Apply layers',exact: true})).toBeEnabled();
 });
 
 test('sky sliders step and display tenths', async({page}) => {
 	await page.goto('/games/terrain-sandbox/');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
-	for(const key of ['azimuth','elevation','exposure']) {
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+
+	for(const key of ['azimuth','elevation','exposure'])
+	{
 		const slider = await field(page, `[data-value="${key}"]`);
 		const value = Number(await slider.inputValue());
 		await slider.focus();
@@ -3189,28 +3246,32 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 });
 
 test('survey a draft and reopen the same landform and camera from its link', async({page}) => {
-	await page.setViewportSize({width:640,height:400});
+	await page.setViewportSize({width: 640,height: 400});
 	await page.goto('/games/terrain-sandbox/?preset=painted-badlands&seed=survey-test&camera=64,-32,80,40,-9');
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:90000});
-	await expect.poll(async()=>(await status(page)).recipe.seed,{timeout:90000}).toBe('survey-test');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 90000});
+	await expect.poll(async() => (await status(page)).recipe.seed, {timeout: 90000}).toBe('survey-test');
 	const initial = await status(page);
 	expect(initial.camera.position[0]).toBe(64);
 	expect(initial.camera.pitch).toBeCloseTo(-9*Math.PI/180);
 	// The draft works while simulation is paused and never regenerates the live world.
-	await canvas(page).evaluate(el=>el.terrainSandboxDebug.action('pause'));
-	await page.locator('[name="ridgeStretch"]').evaluate(el=>{ el.value='3'; el.dispatchEvent(new Event('input',{bubbles:true})); });
-	await page.locator('.terrain-panel').evaluate(el=>el.open=true);
-	await page.locator('[data-survey]').evaluate(el=>el.open=true);
-	await page.locator('[data-analyze]').evaluate(el=>el.click());
-	await expect(page.locator('[data-survey-note]')).toContainText('steeper than 30°',{timeout:90000});
+	await canvas(page).evaluate(el => el.terrainSandboxDebug.action('pause'));
+
+	await page.locator('[name="ridgeStretch"]').evaluate(
+		el => { el.value = '3'; el.dispatchEvent(new Event('input', {bubbles: true})); }
+	);
+
+	await page.locator('.terrain-panel').evaluate(el => el.open = true);
+	await page.locator('[data-survey]').evaluate(el => el.open = true);
+	await page.locator('[data-analyze]').evaluate(el => el.click());
+	await expect(page.locator('[data-survey-note]')).toContainText('steeper than 30°', {timeout: 90000});
 	expect((await status(page)).generation).toBe(initial.generation);
 	const url = new URL(await page.locator('[data-view-link]').getAttribute('href'));
 	expect(JSON.parse(url.searchParams.get('landform')).ridgeStretch).toBe(3);
-	await page.locator('[data-fit-water]').evaluate(el=>el.click());
+	await page.locator('[data-fit-water]').evaluate(el => el.click());
 	await expect(page.locator('[data-survey-note]')).toContainText('water level updated');
 	await page.goto(url.href);
-	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:90000});
-	await expect.poll(async()=>(await status(page)).recipe.ridgeStretch,{timeout:90000}).toBe(3);
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 90000});
+	await expect.poll(async() => (await status(page)).recipe.ridgeStretch, {timeout: 90000}).toBe(3);
 	const [x,z] = url.searchParams.get('camera').split(',').map(Number);
 	const pose = (await status(page)).camera.position;
 	expect([pose[0],pose[2]]).toEqual([x,z]);
@@ -4054,20 +4115,25 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 test('record a terrain run, save it, and replay it without moving the live camera', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
-	page.on('console', msg => { if(/PHP Fatal error|Uncaught RuntimeException/.test(msg.text())) errors.push(msg.text()); });
-	await page.setViewportSize({width:720,height:480});
+
+	page.on(
+		'console'
+		, msg => { if(/PHP Fatal error|Uncaught RuntimeException/.test(msg.text())) errors.push(msg.text()); }
+	);
+
+	await page.setViewportSize({width: 720,height: 480});
 	await boot(page);
-	await press(page,'demo-record');
+	await press(page, 'demo-record');
 	await expect.poll(async() => (await status(page)).demo.recording).toBe(true);
 	const view = canvas(page);
 	await view.focus();
 	await page.keyboard.down('w');
 	await expect.poll(async() => (await status(page)).demo.duration).toBeGreaterThan(1.5);
 	await page.keyboard.up('w');
-	await press(page,'demo-stop');
+	await press(page, 'demo-stop');
 	await expect.poll(async() => (await status(page)).demo.recording).toBe(false);
 	const download = page.waitForEvent('download');
-	await press(page,'demo-save');
+	await press(page, 'demo-save');
 	const saved = await download;
 	expect(saved.suggestedFilename()).toBe('terrain-demo.json');
 	const file = await fs.readFile(await saved.path());
@@ -4076,18 +4142,18 @@ test('record a terrain run, save it, and replay it without moving the live camer
 	await page.keyboard.down('a');
 	await page.waitForTimeout(600);
 	await page.keyboard.up('a');
-	await press(page,'pause');
+	await press(page, 'pause');
 	const parked = (await status(page)).camera.position;
-	await page.locator('[data-demo-file]').setInputFiles({name:'take.json',mimeType:'application/json',buffer:file});
+	await page.locator('[data-demo-file]').setInputFiles({name: 'take.json',mimeType: 'application/json',buffer: file});
 	await expect.poll(async() => (await status(page)).demo.playhead).not.toBeNull();
 	const replay = await status(page);
 	expect(replay.camera.position).not.toEqual(parked);
-	await expect.poll(async() => (await status(page)).demo.playhead, {timeout:60_000}).toBeNull();
+	await expect.poll(async() => (await status(page)).demo.playhead, {timeout: 60_000}).toBeNull();
 	expect((await status(page)).camera.position).toEqual(parked);
 	expect((await status(page)).paused).toBe(true);
-	await press(page,'demo-play');
+	await press(page, 'demo-play');
 	await expect.poll(async() => (await status(page)).demo.playhead).not.toBeNull();
-	await press(page,'demo-stop');
+	await press(page, 'demo-stop');
 	await expect.poll(async() => (await status(page)).demo.playhead).toBeNull();
 	expect(errors).toEqual([]);
 });
@@ -4095,57 +4161,62 @@ test('record a terrain run, save it, and replay it without moving the live camer
 test('a mid-drive demo can be scrubbed and forked into an independently playable take', async({page}) => {
 	const errors = [];
 	page.on('pageerror', e => errors.push(e.message));
-	page.on('console', msg => { if(/PHP Fatal error|Uncaught RuntimeException/.test(msg.text())) errors.push(msg.text()); });
-	await page.setViewportSize({width:480,height:320});
+
+	page.on(
+		'console'
+		, msg => { if(/PHP Fatal error|Uncaught RuntimeException/.test(msg.text())) errors.push(msg.text()); }
+	);
+
+	await page.setViewportSize({width: 480,height: 320});
 	await boot(page);
 	const dry = fixture();
 	dry.landscape.recipe.worldSize = 1024;
 	dry.settings.waterLevel = -8;
-	await load(page,dry);
-	await press(page,'car');
+	await load(page, dry);
+	await press(page, 'car');
 	const view = canvas(page);
 	await view.focus();
 	await page.keyboard.down('w');
-	await expect.poll(async()=>(await status(page)).car?.speed ?? 0).toBeGreaterThan(2);
+	await expect.poll(async() => (await status(page)).car?.speed ?? 0).toBeGreaterThan(2);
 	await page.keyboard.up('w');
-	await press(page,'demo-record');
-	await expect.poll(async()=>(await status(page)).demo.duration).toBeGreaterThan(.25);
-	await press(page,'jet');
-	await expect.poll(async()=>(await status(page)).mode).toBe('jet');
-	await press(page,'demo-stop');
-	const duration=(await status(page)).demo.duration;
-	await press(page,'demo-back');
-	await expect.poll(async()=>(await status(page)).demo.held).toBe(true);
+	await press(page, 'demo-record');
+	await expect.poll(async() => (await status(page)).demo.duration).toBeGreaterThan(.25);
+	await press(page, 'jet');
+	await expect.poll(async() => (await status(page)).mode).toBe('jet');
+	await press(page, 'demo-stop');
+	const duration = (await status(page)).demo.duration;
+	await press(page, 'demo-back');
+	await expect.poll(async() => (await status(page)).demo.held).toBe(true);
 	await expect(page.locator('.terrain-speedometer')).toBeVisible();
-	await press(page,'demo-forward');
-	await expect.poll(async()=>(await status(page)).mode).toBe('jet');
+	await press(page, 'demo-forward');
+	await expect.poll(async() => (await status(page)).mode).toBe('jet');
 	await expect(page.locator('.terrain-instruments')).toBeVisible();
-	const time=page.locator('[data-demo-time]');
+	const time = page.locator('[data-demo-time]');
 	await time.fill('0.10');
 	await time.press('Enter');
-	await expect.poll(async()=>(await status(page)).demo.playhead).toBeCloseTo(.1,3);
-	await press(page,'demo-step-back');
-	await expect.poll(async()=>(await status(page)).demo.playhead).toBeLessThan(.1);
-	const selected=await status(page);
+	await expect.poll(async() => (await status(page)).demo.playhead).toBeCloseTo(.1, 3);
+	await press(page, 'demo-step-back');
+	await expect.poll(async() => (await status(page)).demo.playhead).toBeLessThan(.1);
+	const selected = await status(page);
 	// The narrow layout puts the menu button behind the open Lab panel.
 	await page.locator('.terrain-panel > summary').click();
-	await control(page,'menu').click();
-	await expect.poll(async()=>(await status(page)).menu).toBe(true);
+	await control(page, 'menu').click();
+	await expect.poll(async() => (await status(page)).menu).toBe(true);
 	await view.focus();
 	await page.keyboard.down('Escape');
-	await expect.poll(async()=>(await status(page)).menu).toBe(false);
+	await expect.poll(async() => (await status(page)).menu).toBe(false);
 	await page.keyboard.up('Escape');
 	expect((await status(page)).demo.playhead).toBe(selected.demo.playhead);
-	await press(page,'demo-take-control');
-	await expect.poll(async()=>(await status(page)).demo.recording).toBe(true);
+	await press(page, 'demo-take-control');
+	await expect.poll(async() => (await status(page)).demo.recording).toBe(true);
 	expect((await status(page)).mode).toBe('car');
-	await press(page,'demo-stop');
-	await press(page,'demo-swap');
-	await expect.poll(async()=>(await status(page)).demo.held).toBe(true);
-	expect((await status(page)).demo.duration).toBeCloseTo(duration,3);
-	await press(page,'demo-forward');
-	await expect.poll(async()=>(await status(page)).mode).toBe('jet');
-	await press(page,'demo-stop');
+	await press(page, 'demo-stop');
+	await press(page, 'demo-swap');
+	await expect.poll(async() => (await status(page)).demo.held).toBe(true);
+	expect((await status(page)).demo.duration).toBeCloseTo(duration, 3);
+	await press(page, 'demo-forward');
+	await expect.poll(async() => (await status(page)).mode).toBe('jet');
+	await press(page, 'demo-stop');
 	expect(errors).toEqual([]);
 });
 
@@ -4384,14 +4455,20 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 
 test('a landscape journey boards the car on the western road and offers signed branches at the fork', async({page}) => {
 	test.setTimeout(420_000);
+
 	await page.addInitScript(() => {
 		const stroke = CanvasRenderingContext2D.prototype.stroke;
+
 		CanvasRenderingContext2D.prototype.stroke = function(...args) {
-			if(this.canvas.classList.contains('terrain-flight-map') && this.strokeStyle === '#ffd272' && args[0] instanceof Path2D)
+			if(this.canvas.classList.contains('terrain-flight-map') && this.strokeStyle === '#ffd272'
+				&& args[0] instanceof Path2D
+			)
 				window.journeyRoadDrawn = true;
+
 			return stroke.apply(this, args);
 		};
 	});
+
 	await page.setViewportSize({width: 620, height: 400});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
@@ -4401,41 +4478,42 @@ test('a landscape journey boards the car on the western road and offers signed b
 	const worldSize = page.locator('[name="worldSize"]');
 	await expect(worldSize).toHaveValue('32768');
 	await expect(worldSize.locator('option[value="16384"]')).toHaveText('10.2 mi per side');
-	await expect(page.getByRole('tab',{name:'Journey',exact:true})).toHaveAttribute('aria-selected','true');
+	await expect(page.getByRole('tab', {name: 'Journey',exact: true})).toHaveAttribute('aria-selected', 'true');
 	await expect(page.locator('[data-journey="span"]')).toHaveValue('16384');
 	await expect(section).toHaveValue('network');
 	await expect(section.locator('option[value="rejoin"]')).toHaveCount(0);
-	const picker=page.locator('[data-stage-picker]');
+	const picker = page.locator('[data-stage-picker]');
 	await expect(picker.locator('option')).toHaveCount(6);
 	await expect(page.locator('[data-exit="0"]')).toHaveValue('B');
 	await expect(page.locator('[data-exit="1"]')).toHaveValue('C');
-	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey',{timeout:60000});
-	const image=()=>page.locator('[data-journey-map]').evaluate(el=>el.toDataURL());
-	const departureMap=await image();
-	await page.getByRole('button',{name:'Inspect B · Canyon'}).click();
+	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey', {timeout: 60000});
+
+	const image = () => page.locator('[data-journey-map]').evaluate(el => el.toDataURL());
+	const departureMap = await image();
+	await page.getByRole('button', {name: 'Inspect B · Canyon'}).click();
 	await expect(picker).toHaveValue('B');
-	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey',{timeout:60000});
+	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey', {timeout: 60000});
 	expect(await image()).not.toBe(departureMap);
 	await picker.selectOption('F');
-	const origins=page.locator('[data-stage-origins]');
+	const origins = page.locator('[data-stage-origins]');
 	await expect(origins).toContainText('Rejoin from');
 	await expect(origins.locator('[data-origin]')).toHaveText(['B · Canyon','C · Mountain Ridges']);
-	const canyonOrigin=origins.locator('[data-origin="B"]');
+	const canyonOrigin = origins.locator('[data-origin="B"]');
 	await canyonOrigin.scrollIntoViewIfNeeded();
-	await expect(canyonOrigin.locator('canvas')).toHaveCount(1,{timeout:60000});
+	await expect(canyonOrigin.locator('canvas')).toHaveCount(1, {timeout: 60000});
 	await canyonOrigin.click();
 	await expect(picker).toHaveValue('B');
 	await expect(origins).toBeHidden();
 	await picker.selectOption('F');
-	await expect(page.locator('[data-map-status]')).toHaveText('End of route',{timeout:60000});
+	await expect(page.locator('[data-map-status]')).toHaveText('End of route', {timeout: 60000});
 	await page.locator('[data-exit="0"]').selectOption('+');
 	await expect(picker.locator('option')).toHaveCount(7);
 	await expect(picker).toHaveValue('D');
-	await expect(control(page,'journey-build')).toBeEnabled();
-	await expect(page.locator('[data-journey-outline]')).toHaveAttribute('open','');
-	const junctionCard=page.locator('[data-outline] [data-square="C"]');
+	await expect(control(page, 'journey-build')).toBeEnabled();
+	await expect(page.locator('[data-journey-outline]')).toHaveAttribute('open', '');
+	const junctionCard = page.locator('[data-outline] [data-square="C"]');
 	await junctionCard.scrollIntoViewIfNeeded();
-	await expect(junctionCard.locator('canvas')).toHaveCount(1,{timeout:60000});
+	await expect(junctionCard.locator('canvas')).toHaveCount(1, {timeout: 60000});
 	await page.locator('[data-stage-name]').fill('Lake');
 	await page.locator('[data-rename-stage]').click();
 	await expect(page.locator('[data-journey=network]')).toHaveValue(/F river-valley -> Lake/);
@@ -4443,18 +4521,18 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await expect(picker).toHaveValue('D');
 	await page.locator('[data-undo-edit]').click();
 	await expect(picker.locator('option')).toHaveCount(6);
-	const originalPlan=await page.locator('[data-journey=network]').inputValue();
+	const originalPlan = await page.locator('[data-journey=network]').inputValue();
 	await page.locator('[data-add-layer]').click();
-	const board=page.locator('.journey-level');
+	const board = page.locator('.journey-level');
 	await expect(board).toHaveCount(4);
-	const fourth=board.nth(3).locator('[data-square]');
+	const fourth = board.nth(3).locator('[data-square]');
 	await expect(fourth).toHaveCount(4);
-	const middle=await fourth.nth(1).getAttribute('data-square');
+	const middle = await fourth.nth(1).getAttribute('data-square');
 	await fourth.nth(1).click();
 	await expect(picker).toHaveValue(middle);
 	await expect(origins.locator('[data-origin]')).toHaveCount(2);
 	await page.locator('[data-stage-preset]').selectOption('salt-pans');
-	await expect(page.locator('[data-journey=network]')).toHaveValue(new RegExp(middle+' salt-pans'));
+	await expect(page.locator('[data-journey=network]')).toHaveValue(new RegExp(middle + ' salt-pans'));
 	await page.locator('[data-undo-edit]').click();
 	await page.locator('[data-undo-edit]').click();
 	await expect(page.locator('[data-journey=network]')).toHaveValue(originalPlan);
@@ -4470,27 +4548,39 @@ test('a landscape journey boards the car on the western road and offers signed b
 	expect(west.recipe.worldSize).toBe(36_864);
 	expect(west.recipe.join.version).toBe(2);
 	expect(west.car.x).toBeLessThan(-west.recipe.worldSize / 2 + 55);
-	await expect(page.locator('[data-map-status]')).toHaveText('Current highway',{timeout:60000});
+	await expect(page.locator('[data-map-status]')).toHaveText('Current highway', {timeout: 60000});
 	await control(page, 'journey-fork').click();
 	await expect.poll(async() => (await status(page)).journeyForkAhead).toBe(true);
 	await expect(page.getByText('Left · River Valley & Floodplain / Right · Coast', {exact: true})).toBeVisible();
 	await page.locator('.terrain-panel > summary').click();
 	await view.focus();
 	await page.keyboard.down('w');
-	try {
+
+	try
+	{
 		const departure = (await status(page)).car.x;
 		await expect.poll(async() => (await status(page)).car.x, {timeout: 90_000}).toBeGreaterThan(departure + 2);
-	} finally {
+	}
+	finally
+	{
 		await page.keyboard.up('w');
 	}
+
 	await expect.poll(() => page.evaluate(() => window.journeyRoadDrawn)).toBe(true);
+
 	await expect.poll(() => page.locator('canvas.terrain-flight-map').evaluate(map => {
 		const {data} = map.getContext('2d').getImageData(0, 0, map.width, map.height);
 		let pixels = 0;
+
 		for(let i = 0; i < data.length; i += 4)
-			if(data[i] > 245 && data[i+1] >= 200 && data[i+1] <= 218 && data[i+2] >= 100 && data[i+2] <= 125 && data[i+3] > 220) pixels++;
+			if(data[i] > 245 && data[i+1] >= 200 && data[i+1] <= 218 && data[i+2] >= 100 && data[i+2] <= 125
+				&& data[i+3] > 220
+			)
+			pixels++;
+
 		return pixels;
 	})).toBeGreaterThan(12);
+
 	expect((await status(page)).journeyViews).toHaveLength(3);
 	expect(await view.evaluate(el => el.getContext('webgl2').getError())).toBe(0);
 });

@@ -1,6 +1,16 @@
 // Internal terrain coordinates and saved files use SI. These conversions apply at the UI boundary.
 const FOOT = .3048, YARD = 3 * FOOT, MILE = 5280 * FOOT, MPH = .44704, KNOT = 1852 / 3600;
-const metricPerUnit = {ft: FOOT, mi: MILE, acres: 43560*FOOT*FOOT, gradeCostAt20: .25, mph: MPH, kts: KNOT, cyclesPerMile: 1/MILE, densityPerMile: 1000/MILE};
+const metricPerUnit = {
+	ft: FOOT
+	, mi: MILE
+	, acres: 43560*FOOT*FOOT
+	, gradeCostAt20: .25
+	, mph: MPH
+	, kts: KNOT
+	, cyclesPerMile: 1/MILE
+	, densityPerMile: 1000/MILE
+};
+
 const exactValues = new WeakMap();
 const fieldBounds = new WeakMap();
 
@@ -54,7 +64,9 @@ function setFieldValue(field, value, preset = false)
 
 	const imperial = displayNumber(value, unit);
 	field.value = field.hasAttribute('data-circuit-initial') && Number(field.dataset.circuitInitial) === value
-		? circuitDisplay(value, unit) : imperial;
+		? circuitDisplay(value, unit)
+		: imperial;
+
 	field.removeAttribute('title');
 
 	if(preset)
@@ -285,6 +297,7 @@ export function activate({module, canvas, session, services})
 
 	const skipTrack = skip => {
 		const track = skip();
+
 		if(music.playbackPaused && track && track.credit !== false) showCredit(track);
 	};
 
@@ -364,7 +377,10 @@ export function activate({module, canvas, session, services})
 		, 'gateHeight'
 		, 'balloonAltitude'
 		, 'circuitRelief', 'circuitStartHeight', 'circuitMinLap', 'circuitMinArea'
-		, 'circuitGradePreference', 'circuitCausewayDepth', 'circuitStartTolerance', 'circuitTurnRadius'
+		, 'circuitGradePreference'
+		, 'circuitCausewayDepth'
+		, 'circuitStartTolerance'
+		, 'circuitTurnRadius'
 	]);
 
 	const gateTool = frame.querySelector('[data-gate-tool]');
@@ -387,12 +403,16 @@ export function activate({module, canvas, session, services})
 		for(const [control, key] of [['circuitMinLap','minLap'], ['circuitMinArea','minArea']])
 		{
 			const field = controls.get(control);
+
 			const limits = Object.entries(windows).map(([kind, values]) => ({
-				kind, value: circuitDisplay(values[key], field.dataset.unit)
+				kind
+				, value: circuitDisplay(values[key], field.dataset.unit)
 			}));
+
 			field.placeholder = String(limits[0].value);
 			const note = frame.querySelector(`[data-circuit-default="${control}"]`);
-			note.textContent = 'Default ' + limits.map(({kind, value}) => `${value} ${field.dataset.unit} (${kind})`).join(', then ');
+			note.textContent = 'Default '
+				+ limits.map(({kind, value}) => `${value} ${field.dataset.unit} (${kind})`).join(', then ');
 		}
 	};
 
@@ -463,7 +483,10 @@ export function activate({module, canvas, session, services})
 		}
 	};
 
-	frame.querySelector('[data-open-journey]').addEventListener('click',()=>selectTab(frame.querySelector('[data-tab=journey]'),true),{signal});
+	const journeyTab = frame.querySelector('[data-tab=journey]');
+	const openJourney = frame.querySelector('[data-open-journey]');
+	openJourney.addEventListener('click', () => selectTab(journeyTab, true), {signal});
+
 	for(const tab of tabs) tab.addEventListener('click', () => selectTab(tab), {signal});
 
 	frame.querySelector('[role="tablist"]').addEventListener('keydown', event => {
@@ -497,72 +520,106 @@ export function activate({module, canvas, session, services})
 	const surveyResult = surveyBox.querySelector('[data-survey-result]');
 	const viewLink = surveyBox.querySelector('[data-view-link]');
 	let surveyRequest = null, surveyId = 0, surveyDraft = null, quantiles = null;
+
 	const invalidateSurvey = () => {
 		if(analyze.disabled) surveyRequest = {id: ++surveyId};
+
 		analyze.disabled = false;
 		surveyNote.textContent = '';
 		surveyResult.hidden = viewLink.hidden = true;
 		quantiles = null;
 	};
+
 	frame.addEventListener('input', event => {
-		if(event.target.matches('[name]') && surveyBox.closest('[role="tabpanel"]').contains(event.target)) invalidateSurvey();
+		if(event.target.matches('[name]') && surveyBox.closest('[role="tabpanel"]').contains(event.target))
+		invalidateSurvey();
 	}, {signal});
+
 	const stopHiddenSurvey = () => {
 		if(analyze.disabled && (!surveyBox.open || !frame.querySelector('.terrain-panel').open
-			|| surveyBox.closest('[role="tabpanel"]').hidden)) invalidateSurvey();
+			|| surveyBox.closest('[role="tabpanel"]').hidden
+		)) invalidateSurvey();
 	};
-	frame.addEventListener('toggle', stopHiddenSurvey, {capture:true,signal});
+
+	frame.addEventListener('toggle', stopHiddenSurvey, {capture: true,signal});
+
 	for(const event of ['click','keydown'])
 		frame.querySelector('[role="tablist"]').addEventListener(event, stopHiddenSurvey, {signal});
+
 	analyze.addEventListener('click', () => {
 		const draft = generationValues(frame);
+
 		if(quantiles && JSON.stringify(draft) === JSON.stringify(surveyDraft)) return;
+
 		surveyDraft = draft;
 		const {preset, ...options} = surveyDraft;
 		surveyRequest = {id: ++surveyId, recipe: {...surface.presets[preset], ...options, preset}};
 		analyze.disabled = true;
 		surveyNote.textContent = 'Sampling the landform…';
 	}, {signal});
+
 	shell.bridge('terrainSurveyResult', json => {
 		const result = JSON.parse(json);
+
 		if(result.id !== surveyId) return;
+
 		analyze.disabled = false;
-		if(result.error) { surveyNote.textContent = result.error; return; }
+
+		if(result.error)
+		{
+			surveyNote.textContent = result.error;
+
+			return;
+		}
+
 		quantiles = result.percentiles;
-		const percent = x => (100*x).toFixed(1)+'%';
-		surveyNote.textContent = percent(result.land)+' land · '+percent(result.steep)+' steeper than 30°'
-			+' · middle 90% of heights '+distanceLabel(quantiles[5])+' to '+distanceLabel(quantiles[95])
-			+(result.crestSpacing ? ' · average crest spacing '+distanceLabel(result.crestSpacing) : '')
-			+' · '+result.size+' × '+result.size+' samples across '+distanceLabel(result.span);
+
+		const percent = x => (100*x).toFixed(1) + '%';
+		surveyNote.textContent = percent(result.land) + ' land · ' + percent(result.steep) + ' steeper than 30°'
+			+ ' · middle 90% of heights ' + distanceLabel(quantiles[5]) + ' to ' + distanceLabel(quantiles[95])
+			+ (result.crestSpacing ? ' · average crest spacing ' + distanceLabel(result.crestSpacing) : '')
+			+ ' · ' + result.size + ' × ' + result.size + ' samples across ' + distanceLabel(result.span);
+
 		const img = surveyBox.querySelector('[data-shade]').getContext('2d');
-		const bitmap = img.createImageData(result.size,result.size), rgb = atob(result.rgb);
-		for(let i=0;i<result.size*result.size;i++) {
-			for(let c=0;c<3;c++) bitmap.data[4*i+c] = rgb.charCodeAt(3*i+c);
+		const bitmap = img.createImageData(result.size, result.size), rgb = atob(result.rgb);
+
+		for(let i = 0; i<result.size*result.size; i++)
+		{
+			for(let c = 0; c<3; c++) bitmap.data[4*i+c] = rgb.charCodeAt(3*i+c);
 			bitmap.data[4*i+3] = 255;
 		}
-		img.putImageData(bitmap,0,0);
+
+		img.putImageData(bitmap, 0, 0);
 		const histogram = surveyBox.querySelector('[data-histogram]').getContext('2d');
-		histogram.clearRect(0,0,192,64);
+		histogram.clearRect(0, 0, 192, 64);
 		histogram.fillStyle = '#adc8ac';
 		const peak = Math.max(...result.bins);
-		result.bins.forEach((v,i) => histogram.fillRect(i*8,64-64*v/peak,7,64*v/peak));
+		result.bins.forEach((v, i) => histogram.fillRect(i*8, 64-64*v/peak, 7, 64*v/peak));
 		const url = new URL(location.href);
-		url.searchParams.set('preset',surveyDraft.preset);
-		url.searchParams.set('seed',surveyDraft.seed);
-		const overrides = Object.fromEntries(Object.entries(surveyDraft).filter(([k,v]) =>
-			k !== 'preset' && k !== 'seed' && v !== surface.presets[surveyDraft.preset][k]));
-		url.searchParams.set('landform',JSON.stringify(overrides));
-		url.searchParams.set('camera',result.view.join(','));
+		url.searchParams.set('preset', surveyDraft.preset);
+		url.searchParams.set('seed', surveyDraft.seed);
+
+		const defaults = surface.presets[surveyDraft.preset];
+
+		const changed = ([key, value]) => key !== 'preset' && key !== 'seed' && value !== defaults[key];
+		const overrides = Object.fromEntries(Object.entries(surveyDraft).filter(changed));
+
+		url.searchParams.set('landform', JSON.stringify(overrides));
+		url.searchParams.set('camera', result.view.join(','));
 		viewLink.href = url.href;
 		viewLink.hidden = surveyResult.hidden = false;
 	});
+
 	surveyBox.querySelector('[data-fit-water]').addEventListener('click', () => {
 		const field = surveyBox.querySelector('[data-coverage]');
+
 		if(!field.reportValidity() || !quantiles) return;
-		setFieldValue(frame.querySelector('[name="waterLevel"]'),quantiles[100-Number(field.value)],false);
+
+		setFieldValue(frame.querySelector('[name="waterLevel"]'), quantiles[100-Number(field.value)], false);
 		invalidateSurvey();
 		surveyNote.textContent = 'Starting water level updated. Generate to apply.';
 	}, {signal});
+
 	let surface = null;
 	const materials = materialEditor(frame, push, status);
 	const air = atmosphereEditor(frame, push);
@@ -572,18 +629,35 @@ export function activate({module, canvas, session, services})
 		materials.configure(surface);
 		air.configure(surface.air);
 		const query = new URL(location.href).searchParams;
-		if(Object.hasOwn(surface.presets,query.get('preset'))) {
+
+		if(Object.hasOwn(surface.presets, query.get('preset')))
+		{
 			const preset = query.get('preset');
-			try {
+
+			try
+			{
 				const overrides = JSON.parse(query.get('landform') || '{}');
-				const fields = Object.fromEntries(Object.entries(overrides).filter(([key]) =>
-					(key !== 'seed' && Object.hasOwn(surface.presets[preset],key)) || key === 'worldSize'));
-				push({type:'generate',preset, ...fields, seed:query.get('seed') ?? surface.presets[preset].seed});
-			} catch { status.textContent = 'Invalid landform in view link.'; }
+
+				const fields = Object.fromEntries(
+					Object.entries(overrides).filter(
+						([key]) => (key !== 'seed' && Object.hasOwn(surface.presets[preset], key))
+							|| key === 'worldSize'
+					)
+				);
+
+				push({type: 'generate',preset, ...fields, seed: query.get('seed') ?? surface.presets[preset].seed});
+			}
+			catch
+			{
+				status.textContent = 'Invalid landform in view link.';
+			}
 		}
-		if(query.has('camera')) {
+
+		if(query.has('camera'))
+		{
 			const camera = query.get('camera').split(',').map(Number);
-			if(camera.length === 5 && camera.every(Number.isFinite)) push({type:'survey-view',camera});
+
+			if(camera.length === 5 && camera.every(Number.isFinite)) push({type: 'survey-view',camera});
 		}
 	});
 
@@ -595,9 +669,12 @@ export function activate({module, canvas, session, services})
 			if(type === 'generate') push({type, ...generationValues(frame)});
 			else if(type === 'journey-build')
 			{
+
 				const value = key => journeyField(key).value;
 				const destinations = [value('east')];
+
 				if(value('fork') === 'divide') destinations.push(value('south'));
+
 				const network = value('fork') === 'network' ? {network: value('network')} : {};
 				journeyRequest = 'queued';
 				journeyResult = '';
@@ -609,8 +686,10 @@ export function activate({module, canvas, session, services})
 				push({type, west: value('west'), destinations, span: Number(value('span')), ...network});
 			}
 			else if(type === 'journey-cpu' && latest?.journeyDriver) push('journey-take-wheel');
-			else if(type === 'journey-drive' || type === 'journey-fork' || type === 'journey-cpu') {
+			else if(type === 'journey-drive' || type === 'journey-fork' || type === 'journey-cpu')
+			{
 				const selection = planner.driveSelection(type === 'journey-fork');
+
 				if(selection) push({type, ...selection});
 			}
 			else if(type === 'load') frame.querySelector('[data-file]').click();
@@ -628,12 +707,16 @@ export function activate({module, canvas, session, services})
 
 	const timeline = frame.querySelector('[data-demo-timeline]');
 	const demoTime = frame.querySelector('[data-demo-time]');
+
 	const seekDemo = seconds => {
 		if(!Number.isFinite(seconds)) return;
+
 		// Dragging can send several pointer events before the next engine tick.
 		if(actions.at(-1)?.type === 'demo-seek') actions.pop();
-		push({type:'demo-seek',seconds});
+
+		push({type: 'demo-seek',seconds});
 	};
+
 	timeline.addEventListener('input', () => seekDemo(timeline.valueAsNumber), {signal});
 	demoTime.addEventListener('change', () => seekDemo(demoTime.valueAsNumber), {signal});
 
@@ -643,37 +726,49 @@ export function activate({module, canvas, session, services})
 	const networkField = journeyField('network');
 	const journeyProgress = frame.querySelector('[data-journey-progress]');
 	const journeyMeter = frame.querySelector('[data-journey-meter]');
-	const planner = module.terrainJourneyEditor.mount(frame,canvas,signal,()=>module.journeyMap);
-	shell.bridge('terrainJourneyMap',planner.receive);
+	const planner = module.terrainJourneyEditor.mount(frame, canvas, signal, () => module.journeyMap);
+	shell.bridge('terrainJourneyMap', planner.receive);
 	const guideError = frame.querySelector('[data-journey-error]');
 	let activeNetwork = null, preview = null, pendingDraft = null;
 	let journeyRequest = null, journeyResult = '', loadingGeneration = null;
+
 	const squareName = (id, nodes) => id + ' · ' + destinationNames.get(nodes[id].preset);
+
 	const showRoute = result => {
 		preview = result;
 		guideError.textContent = result?.error ?? '';
 		planner.validated(result);
 	};
+
 	const requestPreview = () => {
 		if(junction.value !== 'network' || preview?.plan === networkField.value) return;
+
 		if(activeNetwork?.plan === networkField.value) showRoute(activeNetwork);
-		else {
+		else
+		{
 			showRoute(null);
 			button('journey-build').disabled = true;
 			pendingDraft = networkField.value;
 		}
 	};
+
 	shell.bridge('terrainJourneyPreview', json => {
 		const result = JSON.parse(json);
+
 		if(junction.value === 'network' && result.plan === networkField.value) showRoute(result);
 	});
+
 	networkField.addEventListener('input', requestPreview, {signal});
+
 	const updateJunction = () => {
 		guideError.hidden = junction.value !== 'network';
+
 		if(guideError.hidden) pendingDraft = null;
+
 		planner.layoutChanged();
 		requestPreview();
 	};
+
 	junction.addEventListener('change', updateJunction, {signal});
 	updateJunction();
 
@@ -704,8 +799,10 @@ export function activate({module, canvas, session, services})
 
 			const json = await file.text();
 
-			if(!shell.closed) {
-				if(type==='load') loadingGeneration=latest?.generation;
+			if(!shell.closed)
+			{
+				if(type==='load') loadingGeneration = latest?.generation;
+
 				push({type,json});
 			}
 		}
@@ -798,6 +895,7 @@ export function activate({module, canvas, session, services})
 		focus();
 		const touch = event.pointerType === 'touch';
 		useTheme(touch ? 'touch' : 'keyboard');
+
 		// Let SDL receive the mouse events synthesized from a click or tap while the menu owns input.
 		if(latest?.menu) return;
 
@@ -1017,14 +1115,19 @@ export function activate({module, canvas, session, services})
 		const shoulders = heldMask & (LEFT_SHOULDER | RIGHT_SHOULDER);
 		// After a skip, the shoulder belongs to music until its own release, even if Back comes up first.
 		musicShoulders &= shoulders;
+
 		if(buttons.has(8) && shoulders)
 		{
 			const pressed = padButtons.has(8) ? shoulders & ~musicShoulders : shoulders;
+
 			if(pressed === LEFT_SHOULDER) skipTrack(music.previous);
+
 			if(pressed === RIGHT_SHOULDER) skipTrack(music.next);
+
 			musicShoulders = shoulders;
 			backShortcut = true;
 		}
+
 		heldMask &= ~musicShoulders;
 
 		if(gamepad && !buttons.has(8) && padButtons.has(8) && !backShortcut) push('jet-controls');
@@ -1053,24 +1156,45 @@ export function activate({module, canvas, session, services})
 		const [x, y] = gamepad?.axes ?? [0, 0];
 		const up = buttons.has(12) || y < -.5, down = buttons.has(13) || y > .5;
 		const left = buttons.has(14) || x < -.5, right = buttons.has(15) || x > .5;
-		const menuPad = [up, down, left, right, buttons.has(0), buttons.has(1), buttons.has(9),
-			Boolean(musicShoulders & LEFT_SHOULDER), Boolean(musicShoulders & RIGHT_SHOULDER)].map(Number);
+
+		const menuPad = [up
+			, down
+			, left
+			, right
+			, buttons.has(0)
+			, buttons.has(1)
+			, buttons.has(9)
+			, Boolean(musicShoulders & LEFT_SHOULDER)
+			, Boolean(musicShoulders & RIGHT_SHOULDER)
+		].map(Number);
+
 		const menuPadKey = menuPad.join(',');
 		const padsSame = padKey === previousPad && menuPadKey === previousMenuPad;
 
 		if(viewport === previousViewport && held === previousKeys && padsSame && !actions.length
-			&& !planner.hasRequest() && pendingDraft === null && surveyRequest === null && !clicks.length && !look[0] && !look[1] && !Object.keys(values).length
+			&& !planner.hasRequest() && pendingDraft === null && surveyRequest === null && !clicks.length && !look[0]
+				&& !look[1] && !Object.keys(values).length
 		) return '';
 
 		const packet = {keys,values,actions,clicks,look};
-		const mapRequest=planner.takeRequest();
-		if(mapRequest) packet.journeyMap=mapRequest;
-		if(surveyRequest) { packet.landformSurvey = surveyRequest; surveyRequest = null; }
-		if(pendingDraft !== null) {
+		const mapRequest = planner.takeRequest();
+
+		if(mapRequest) packet.journeyMap = mapRequest;
+
+		if(surveyRequest)
+		{
+			packet.landformSurvey = surveyRequest;
+			surveyRequest = null;
+		}
+
+		if(pendingDraft !== null)
+		{
 			packet.journeyDraft = pendingDraft;
 			pendingDraft = null;
 		}
-		if(journeyRequest === 'queued' && actions.some(action => action.type === 'journey-build')) journeyRequest = 'sent';
+
+		if(journeyRequest === 'queued' && actions.some(action => action.type === 'journey-build'))
+		journeyRequest = 'sent';
 
 		if(viewport !== previousViewport) packet.viewport = JSON.parse(viewport);
 
@@ -1116,7 +1240,8 @@ export function activate({module, canvas, session, services})
 		, handler: state => {
 
 			// A vehicle retains its result on reboarding. Celebrate the crossing once, on the ride that made it.
-			const finished = state.demo.playhead === null && (latest?.demo.playhead ?? null) === null && state.race.state === 'finished' && !state.delivery && state.mode === state.race.vehicle
+			const finished = state.demo.playhead === null && (latest?.demo.playhead ?? null) === null
+				&& state.race.state === 'finished' && !state.delivery && state.mode === state.race.vehicle
 				&& latest?.mode === state.mode && latest.generation === state.generation;
 
 			if(finished && (latest.race.state !== 'finished' || latest.race.time !== state.race.time))
@@ -1136,27 +1261,37 @@ export function activate({module, canvas, session, services})
 
 			if(quietPause !== Boolean(latest?.paused && !latest.menu)) music.pause(quietPause);
 
-			if(!latest || state.generation !== latest.generation || state.settings.circuitRelief !== latest.settings.circuitRelief
-				|| state.settings.circuitCauseways !== latest.settings.circuitCauseways)
+			if(!latest || state.generation !== latest.generation
+				|| state.settings.circuitRelief !== latest.settings.circuitRelief
+				|| state.settings.circuitCauseways !== latest.settings.circuitCauseways
+			)
 				showCircuitDefaults(state.circuit.defaults);
 
 			if(latest && state.demo.world !== latest.demo.world) lastGeneration = -1;
+
 			latest = state;
 
 			if(typeof state.grass === 'number') rememberGrass(state.grass);
 
 			const loaded = loadingGeneration != null && state.generation !== loadingGeneration;
-			if(loaded) loadingGeneration=null;
+
+			if(loaded) loadingGeneration = null;
+
 			const networkChanged = 'journeyNetwork' in state && state.journeyNetwork?.plan !== activeNetwork?.plan;
+
 			if('journeyNetwork' in state) activeNetwork = state.journeyNetwork;
-			if(activeNetwork && state.journeySquare && (networkChanged || loaded)) {
-				if(loaded || networkField.value!==activeNetwork.plan) planner.adopt(state.journeySquare,loaded);
+
+			if(activeNetwork && state.journeySquare && (networkChanged || loaded))
+			{
+				if(loaded || networkField.value!==activeNetwork.plan) planner.adopt(state.journeySquare, loaded);
+
 				networkField.value = activeNetwork.plan;
 				journeyField('span').value = String(state.recipe.join?.span ?? state.recipe.worldSize);
 				junction.value = 'network';
 				showRoute(activeNetwork);
 				updateJunction();
 			}
+
 			const demo = state.demo, playing = demo.playhead !== null;
 			button('beach-ball-spawn').disabled = playing;
 			controls.get('airPatrolEnabled').disabled = playing;
@@ -1169,8 +1304,11 @@ export function activate({module, canvas, session, services})
 			const position = playing ? demo.playhead : 0;
 			frame.querySelector('[data-demo-transport]').hidden = !demo.available || demo.recording;
 			timeline.max = demoTime.max = demo.duration;
+
 			if(!timeline.matches(':active')) timeline.value = position;
+
 			if(document.activeElement !== demoTime) demoTime.value = position.toFixed(2);
+
 			button('demo-hold').hidden = button('demo-take-control').hidden = !playing;
 			button('demo-hold').textContent = demo.held ? 'Continue playback' : 'Hold frame';
 			button('demo-swap').hidden = !demo.alternate || playing || demo.recording;
@@ -1179,11 +1317,13 @@ export function activate({module, canvas, session, services})
 			const seconds = Math.floor(playing ? demo.playhead : demo.duration);
 			demoStatus.textContent = (playing ? 'Replay' : 'Recording') + ' · ' + Math.floor(seconds/60)
 				+ ':' + String(seconds%60).padStart(2, '0');
+
 			module.updateTerrainHints(state);
 
 			if(jetView !== state.jetView)
 			{
 				jetView = state.jetView;
+
 				if(!playing) rememberJet();
 			}
 
@@ -1224,13 +1364,15 @@ export function activate({module, canvas, session, services})
 			}
 
 			// The pause menu draws in the canvas, so screen readers hear its selected row from here.
-			const menuRow = state.screenshotView ? 'Screenshot view. Escape, B or a tap returns to the pause menu.'
+			const menuRow = state.screenshotView
+				? 'Screenshot view. Escape, B or a tap returns to the pause menu.'
 				: state.menuRow ? state.menuRow.page + ': ' + state.menuRow.label : '';
 
 			if(menuLive.textContent !== menuRow) menuLive.textContent = menuRow;
 
 			// Keep the Lab closed until the menu releases input, including while taking a screenshot.
 			frame.classList.toggle('terrain-screenshot-view', state.screenshotView);
+
 			if(Boolean(state.menu) !== frame.classList.contains('terrain-menu-open'))
 			{
 				frame.classList.toggle('terrain-menu-open', Boolean(state.menu));
@@ -1248,6 +1390,7 @@ export function activate({module, canvas, session, services})
 				&& document.activeElement !== invertPitch
 			){
 				invertPitch.checked = state.invertPitch;
+
 				if(!playing) rememberJet();
 			}
 
@@ -1264,6 +1407,7 @@ export function activate({module, canvas, session, services})
 			if(state.jetControls && jetControls.value !== state.jetControls && document.activeElement !== jetControls)
 			{
 				jetControls.value = state.jetControls;
+
 				if(!playing) rememberJet();
 			}
 
@@ -1271,11 +1415,13 @@ export function activate({module, canvas, session, services})
 			if(state.headlights && headlights.value !== state.headlights && document.activeElement !== headlights)
 			{
 				headlights.value = state.headlights;
+
 				if(!playing) rememberHeadlights();
 			}
 
 			if(state.airPatrol?.seeker?.phase === 'return') status.textContent = 'Seeker locked onto the F5!';
-			else if(state.airPatrol?.repelled && ['departure','glide'].includes(state.airPatrol.phase)) status.textContent = 'Patrol beaten!';
+			else if(state.airPatrol?.repelled && ['departure','glide'].includes(state.airPatrol.phase))
+			status.textContent = 'Patrol beaten!';
 			else if(state.car?.roadHold > 0)
 			{
 				const reason = state.car.floodedHold ? 'Engine flooded' : 'Back on the road';
@@ -1283,17 +1429,28 @@ export function activate({module, canvas, session, services})
 			}
 			else if(state.car?.motion === 'overturned') status.textContent = 'Car overturned. Recovering…';
 			else if(state.car?.motion === 'tumbling') status.textContent = 'Car tumbling…';
-			else if(state.journeyDriver) {
+			else if(state.journeyDriver)
+			{
 				const id = state.journeyDriver.destination;
-				const destination = activeNetwork?.nodes[id] ? squareName(id,activeNetwork.nodes) : destinationNames.get(id) ?? id;
-				status.textContent = state.journeyDriver.arrived ? 'Journey complete · ' + destination : 'CPU driving to ' + destination;
+				const destination = activeNetwork?.nodes[id]
+					? squareName(id, activeNetwork.nodes)
+					: destinationNames.get(id) ?? id;
+
+				status.textContent = state.journeyDriver.arrived
+					? 'Journey complete · ' + destination
+					: 'CPU driving to ' + destination;
 			}
 			else if(state.cpuDriver && state.race.state !== 'finished')
 			status.textContent = 'CPU racer · ' + state.cpuDriver;
-			else if(state.mode === 'car' && state.journeyForkAhead && !state.journeySquare && !state.delivery && state.race.state === 'idle')
-			{
-				const [north, south] = state.recipe.join.destinations.map((form, i) =>
-					[state.journeyExits?.[i], destinationNames.get(form.preset)].filter(Boolean).join(' · '));
+			else if(state.mode === 'car' && state.journeyForkAhead && !state.journeySquare && !state.delivery
+				&& state.race.state === 'idle'
+			){
+				const [north, south] = state.recipe.join.destinations.map(
+					(form, i) => [state.journeyExits?.[i]
+						, destinationNames.get(form.preset)
+					].filter(Boolean).join(' · ')
+				);
+
 				status.textContent = south ? `Left · ${north}   /   Right · ${south}` : `Continue to ${north}.`;
 			}
 			else status.textContent = state.message;
@@ -1301,20 +1458,29 @@ export function activate({module, canvas, session, services})
 			const sign = frame.querySelector('[data-journey-sign]');
 			const showSign = activeNetwork && state.journeySquare && state.mode === 'car' && !state.delivery
 				&& !state.cpuDriver && state.race.state === 'idle';
+
 			sign.hidden = !showSign;
-			if(showSign) {
+
+			if(showSign)
+			{
+
 				const name = id => squareName(id, activeNetwork.nodes);
 				const here = name(state.journeySquare);
 				const [left, right] = [...new Set(state.journeyExits)];
 				let text;
+
 				if(state.journeyArrival) text = 'Arrived at ' + name(state.journeyArrival) + ' · End of route';
-				else if(state.journeySurveying) {
+				else if(state.journeySurveying)
+				{
 					const next = name(state.journeySurveying);
-					text = state.journeyWaiting ? 'Loading the highway beyond ' + next + '…' : here + ' → ' + next + ' · Loading onward roads…';
+					text = state.journeyWaiting
+						? 'Loading the highway beyond ' + next + '…'
+						: here + ' → ' + next + ' · Loading onward roads…';
 				}
 				else if(state.journeyBranch) text = here + ' → ' + name(state.journeyBranch);
 				else if(right) text = here + ' — Left to ' + name(left) + ' / Right to ' + name(right);
 				else text = left ? here + ' → ' + name(left) : here + ' · End of route';
+
 				if(sign.textContent !== text) sign.textContent = text;
 			}
 
@@ -1328,9 +1494,8 @@ export function activate({module, canvas, session, services})
 			button('cpu-demo').hidden = !state.canWatchDriver && !state.cpuDriver;
 			button('cpu-demo').textContent = state.cpuDriver ? 'Stop CPU demo' : 'Watch CPU racer';
 
-			button(
-				'delivery'
-			).disabled = Boolean(state.cpuDriver || state.journeyDriver) || state.findingCarSite || state.race.state === 'running';
+			button('delivery').disabled = Boolean(state.cpuDriver || state.journeyDriver) || state.findingCarSite
+				|| state.race.state === 'running';
 
 			button('delivery').textContent = state.delivery ? 'End package run' : 'Package run';
 			button('fly').hidden = state.mode === 'fly' && !state.findingCarSite;
@@ -1353,23 +1518,42 @@ export function activate({module, canvas, session, services})
 			const circuit = state.circuit;
 			const editable = state.mode === 'fly' && !state.preparing && !state.picking && !circuit.searching;
 			button('circuit-find').disabled = !editable;
+
 			if(state.journeyBuildPhase) journeyRequest = 'building';
-			else if(journeyRequest === 'sent' || journeyRequest === 'building') {
+			else if(journeyRequest === 'sent' || journeyRequest === 'building')
+			{
 				journeyResult = state.generation !== lastGeneration && state.recipe.join && state.mode === 'car'
-					? (state.journeySquare && activeNetwork ? `All ${Object.keys(activeNetwork.nodes).length} stages ready. Driving from the west edge.` : 'Highway ready. Driving from the west edge.') : state.message;
+					? (state.journeySquare && activeNetwork
+						? `All ${Object.keys(activeNetwork.nodes).length} stages ready. Driving from the west edge.`
+						: 'Highway ready. Driving from the west edge.'
+					)
+					: state.message;
+
 				journeyRequest = null;
 			}
+
 			const stage = state.journeyBuildProgress;
 			journeyMeter.hidden = !journeyRequest;
-			if(stage) {
+
+			if(stage)
+			{
 				journeyMeter.max = stage.total;
 				journeyMeter.value = stage.done + stage.fraction;
-			} else journeyMeter.removeAttribute('value');
-			const progress = stage?.stage ? `Stage ${stage.stage} · ${stage.done} of ${stage.total} stages ready · ${state.journeyBuildPhase}`
+			}
+			else journeyMeter.removeAttribute('value');
+
+			const progress = stage?.stage
+				? `Stage ${stage.stage} · ${stage.done} of ${stage.total} stages ready · ${state.journeyBuildPhase}`
 				: state.journeyBuildPhase ?? (journeyRequest ? 'Surveying the highway…' : journeyResult);
+
 			if(journeyProgress.textContent !== progress) journeyProgress.textContent = progress;
+
 			button('journey-build').textContent = journeyRequest ? 'Building journey…' : 'Build and drive';
-			button('journey-build').disabled = !editable || Boolean(journeyRequest) || (junction.value === 'network' && !preview?.nodes);
+
+			button(
+				'journey-build'
+			).disabled = !editable || Boolean(journeyRequest) || (junction.value === 'network' && !preview?.nodes);
+
 			button('circuit-cancel').hidden = !circuit.searching && !circuit.preview;
 			button('circuit-cancel').disabled = state.preparing;
 			button('circuit-dry').disabled = !editable || !circuit.points;
@@ -1436,6 +1620,7 @@ export function activate({module, canvas, session, services})
 			if(state.generation !== lastGeneration)
 			{
 				invalidateSurvey();
+
 				if(state.recipe.join && (!state.journeySquare || networkChanged || loaded || lastGeneration<0))
 				{
 					const {span, destinations} = state.recipe.join;
@@ -1443,9 +1628,12 @@ export function activate({module, canvas, session, services})
 					journeyField('span').value = String(span);
 					junction.value = state.journeySquare ? 'network' : destinations.length === 2 ? 'divide' : 'direct';
 					journeyField('east').value = destinations[0].preset;
+
 					if(destinations[1]) journeyField('south').value = destinations[1].preset;
+
 					updateJunction();
 				}
+
 				presetField.value = state.recipe.preset;
 				presetSeed = surface.presets[state.recipe.preset].seed;
 				const worldSize = frame.querySelector('[name="worldSize"]');
@@ -1476,7 +1664,9 @@ export function activate({module, canvas, session, services})
 				for(const field of fields)
 				{
 					const name = field.dataset.value;
+
 					if(!(name in state.settings)) continue;
+
 					const value = state.settings[name];
 
 					if(field.type === 'checkbox') field.checked = value;
@@ -1496,16 +1686,25 @@ export function activate({module, canvas, session, services})
 				updateCircuitFields();
 				lastGeneration = state.generation;
 			}
-			planner.sync(state,activeNetwork,journeyRequest);
+
+			planner.sync(state, activeNetwork, journeyRequest);
 
 			updateRace(race, state, finishTimer !== null);
 			const crossing = state.mode === state.race.vehicle ? state.race.splits.at(-1) : null;
-			const split = crossing ? {
-				at: crossing.at, seconds: crossing.lapTime,
-				label: crossing.role === 'checkpoint' ? `Lap ${crossing.lap} · Checkpoint ${crossing.number}` : `Lap ${crossing.lap}`
-			} : state.journeySplit;
+			const split = crossing
+				? {
+					at: crossing.at
+					, seconds: crossing.lapTime
+					, label: crossing.role === 'checkpoint'
+						? `Lap ${crossing.lap} · Checkpoint ${crossing.number}`
+						: `Lap ${crossing.lap}`
+				}
+				: state.journeySplit;
+
 			splitTime.hidden = !(split && state.time >= split.at && state.time - split.at < 4);
+
 			if(!splitTime.hidden) splitTime.textContent = split.label + ' · ' + raceClock(split.seconds);
+
 			updateGateTool(gateTool, state);
 		}
 	});
@@ -1987,7 +2186,8 @@ const RELIEF_HELP = {
 	none: 'Keeps the lighting from earlier layers, subject to Flatten underlying relief.'
 	, pattern: 'Uses the selected texture for bumps. Pattern scale sets their size and Relief strength their intensity.'
 	, ribs: 'Lights the shoulders of winding gullies. Set their width with Gully spacing under Shared field settings.'
-	, 'rib-tilt': 'Relief strength is the maximum tilt in degrees (−32 to 32). Gully spacing changes the size of the grooves.'
+	, 'rib-tilt':
+		'Relief strength is the maximum tilt in degrees (−32 to 32). Gully spacing changes the size of the grooves.'
 	, facets: 'Lights rock slabs and cracks. Set Slab width and Slab height under Shared field settings.'
 	, crowns: 'Gives tree crowns rounded highlights. Block and crown spacing in Shared field settings sets their size.'
 	, blocks: 'Lights loose stones and boulders. Block and crown spacing in Shared field settings sets their size.'
@@ -2146,6 +2346,7 @@ function materialEditor(frame, push, status)
 	const fieldBox = frame.querySelector('[data-shared-fields]');
 	const inkBox = frame.querySelector('[data-paint-inks]');
 	const applyLayers = frame.querySelector('[data-layer-apply]');
+
 	const rowElements = () => [...layerBox.querySelectorAll('details[data-layer]')];
 	let appliedIds = [], hiddenIds = [], eyeKey = '';
 	let draft = false, materialKey = '', lastValues = '', editorGeneration = -1, serial = 0, submitted = 0;
@@ -2213,7 +2414,11 @@ function materialEditor(frame, push, status)
 				<small id="${id}">${help}</small></div>`;
 		});
 
-		return `<div class="terrain-layer-row"><details data-layer="${escaped(row.id)}"><summary>${escaped(row.name)}</summary>
+		return `<div class="terrain-layer-row"><details data-layer="${escaped(
+			row.id
+		)}"><summary>${escaped(
+			row.name
+		)}</summary>
 			<div class="terrain-grid">${fields.join('')}</div><div class="terrain-row">
 			<button data-move="-1" ${index ? '' : 'disabled'}>Move up</button>
 			<button data-move="1" ${index + 1 < rows.length ? '' : 'disabled'}>Move down</button>
@@ -2248,9 +2453,13 @@ function materialEditor(frame, push, status)
 		show(['field','color','reflectivity','roughness'], color);
 		show(['relief','strength'], relief);
 		group('strength').querySelector('small').textContent = source==='rib-tilt'
-			? 'Maximum tilt in degrees. Negative angles invert the lighting.' : LAYER_FIELDS.strength[1];
+			? 'Maximum tilt in degrees. Negative angles invert the lighting.'
+			: LAYER_FIELDS.strength[1];
+
 		group('patternStretch').querySelector('small').textContent = field('pattern').value==='fall-line'
-			? 'Length of downhill streaks relative to their spacing.' : LAYER_FIELDS.patternStretch[1];
+			? 'Length of downhill streaks relative to their spacing.'
+			: LAYER_FIELDS.patternStretch[1];
+
 		show(['patternColor'], color && (pattern || field('field').value==='shrubs'));
 		show(['patternAmount','patternScale','patternStretch'], pattern);
 
@@ -2279,7 +2488,9 @@ function materialEditor(frame, push, status)
 		const name = row.querySelector('summary').textContent;
 		button.disabled = !appliedIds.includes(row.dataset.layer);
 		button.setAttribute('aria-pressed', String(visible));
-		button.title = button.disabled ? 'Apply this layer to preview its visibility' : `${visible ? 'Hide' : 'Show'} ${name}`;
+		button.title = button.disabled
+			? 'Apply this layer to preview its visibility'
+			: `${visible ? 'Hide' : 'Show'} ${name}`;
 	}
 
 	function drawRows(rows, preset = false)
@@ -2365,6 +2576,7 @@ function materialEditor(frame, push, status)
 			const visible = button.getAttribute('aria-pressed') !== 'true';
 			showEye(row, visible);
 			push({type: 'surface-visibility', id: row.dataset.layer, visible});
+
 			return;
 		}
 
@@ -2469,7 +2681,9 @@ function materialEditor(frame, push, status)
 		appliedIds = state.surfaceLayers.map(row => row.id);
 		hiddenIds = state.hiddenSurfaceLayers;
 		const nextEyeKey = JSON.stringify([appliedIds, hiddenIds]);
-		if(eyeKey !== nextEyeKey) {
+
+		if(eyeKey !== nextEyeKey)
+		{
 			for(const row of rowElements()) showEye(row, !hiddenIds.includes(row.dataset.layer));
 			eyeKey = nextEyeKey;
 		}
@@ -2625,18 +2839,27 @@ function markup(journeyMarkup)
 	const precipitationControl = weatherRange('Intensity · %', 'intensity', 0, 100, 1, 0);
 
 	const lapSelector = '<select data-value="gateLaps">' + Array.from({length: 20}, (_, i) =>
-		`<option value="${i+1}">${i+1}</option>`).join('') + '<option value="0">∞ · Endless</option></select>';
+		`<option value="${i+1}">${i+1}</option>`
+	).join('') + '<option value="0">∞ · Endless</option></select>';
+
 	const hintPrefix = `landform-${++labCount}`;
+
 	const circuitNumber = (key, label, unit, initial, bounds, automatic = '') => {
 		const hint = `${hintPrefix}-${key}`;
 		const suffix = unit === 'gradeCostAt20' ? '%' : unit;
-		const attrs = initial === null ? `data-automatic placeholder="${automatic}"` : `data-circuit-initial="${initial}" value="${initial}"`;
-		const caption = initial === null ? (automatic ? `Default ${automatic.toLowerCase()}` : '')
+		const attrs = initial === null
+			? `data-automatic placeholder="${automatic}"`
+			: `data-circuit-initial="${initial}" value="${initial}"`;
+
+		const caption = initial === null
+			? (automatic ? `Default ${automatic.toLowerCase()}` : '')
 			: `Default ${circuitDisplay(initial, unit)}${suffix === '%' ? '' : ' '}${suffix}`;
+
 		return `<div class="landform-field"><label class="terrain-field">${label} · ${suffix}
 			<input data-value="${key}" data-unit="${unit}" aria-describedby="${hint}" type="number" ${bounds} ${attrs}></label>
 			<small id="${hint}" data-circuit-default="${key}">${caption}</small></div>`;
 	};
+
 	const landscapeOptions = [
 		['coast', 'Coast']
 		, ['mountain', 'Mountain Ridges']
@@ -2670,8 +2893,8 @@ function markup(journeyMarkup)
 
 	const option = ([value, label]) => `<option value="${value}">${label}</option>`;
 
-	const journeyOptions = selected => landscapeOptions.map(([value, label]) =>
-		`<option value="${value}"${value === selected ? ' selected' : ''}>${label}</option>`
+	const journeyOptions = selected => landscapeOptions.map(
+		([value, label]) => `<option value="${value}"${value === selected ? ' selected' : ''}>${label}</option>`
 	).join('');
 
 	const surfaceOptions = landscapeOptions.flatMap(
@@ -2999,19 +3222,32 @@ function markup(journeyMarkup)
 	<section class="terrain-section" role="tabpanel" id="terrain-section-roads" aria-labelledby="terrain-tab-roads" data-tab-panel="roads" hidden>
 	<details><summary>Circuit generator</summary><div class="terrain-grid">
 	<label class="terrain-field">Race laps${lapSelector}</label>
-	${circuitNumber('circuitRelief','Minimum feature height difference','ft',400*FOOT,'min="-2000" max="2000" step="1"')}
+	${circuitNumber(
+		'circuitRelief'
+		, 'Minimum feature height difference'
+		, 'ft'
+		, 400*FOOT
+		, 'min="-2000" max="2000" step="1"'
+	)}
 	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
-	${circuitNumber('circuitMinLap','Minimum lap length','mi',null,'min="120" step="any"')}
-	${circuitNumber('circuitMinArea','Minimum feature area','acres',null,'min="0" step="any"')}
+	${circuitNumber('circuitMinLap', 'Minimum lap length', 'mi', null, 'min="120" step="any"')}
+	${circuitNumber('circuitMinArea', 'Minimum feature area', 'acres', null, 'min="0" step="any"')}
 	<p class="terrain-note">Clear either minimum to use the defaults for each search.</p>
-	${circuitNumber('circuitGradePreference','Grade preference','gradeCostAt20',8,'min="0" max="100"')}
-	${circuitNumber('circuitTurnRadius','Minimum turn radius','ft',6,'min="1"')}
+	${circuitNumber('circuitGradePreference', 'Grade preference', 'gradeCostAt20', 8, 'min="0" max="100"')}
+	${circuitNumber('circuitTurnRadius', 'Minimum turn radius', 'ft', 6, 'min="1"')}
 	<p class="terrain-note">Grade preference adds this much travel cost on a 20% slope. Increase it to favor gentler routes. Larger turn radii round bends more broadly.</p>
-	${circuitNumber('circuitStartHeight','Start elevation','ft',null,'min="-10000" max="10000" step="any"','Near the camera')}
-	${circuitNumber('circuitStartTolerance','Elevation tolerance','ft',.5,'min="0" max="20000" disabled')}
+	${circuitNumber(
+		'circuitStartHeight'
+		, 'Start elevation'
+		, 'ft'
+		, null
+		, 'min="-10000" max="10000" step="any"'
+		, 'Near the camera'
+	)}
+	${circuitNumber('circuitStartTolerance', 'Elevation tolerance', 'ft', .5, 'min="0" max="20000" disabled')}
 	<div class="landform-field"><label class="terrain-check"><input data-value="circuitCauseways" aria-describedby="${hintPrefix}-causeways" type="checkbox">Allow causeways</label>
 	<small id="${hintPrefix}-causeways">Default off</small></div>
-	${circuitNumber('circuitCausewayDepth','Maximum causeway depth','ft',30,'min="0" max="20000" disabled')}
+	${circuitNumber('circuitCausewayDepth', 'Maximum causeway depth', 'ft', 30, 'min="0" max="20000" disabled')}
 	<p class="terrain-note">A causeway raises the road across shallow water while preserving the water level.</p>
 	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
 	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
@@ -3020,7 +3256,9 @@ function markup(journeyMarkup)
 	</div></details>
 	<button type="button" class="terrain-wide" data-open-journey>Open journey planner</button>
 	<div class="terrain-section" data-road-workspace></div></section>
-	<section class="terrain-section" role="tabpanel" id="terrain-section-journey" aria-labelledby="terrain-tab-journey" data-tab-panel="journey" hidden>${journeyMarkup(journeyOptions)}</section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-journey" aria-labelledby="terrain-tab-journey" data-tab-panel="journey" hidden>${journeyMarkup(
+		journeyOptions
+	)}</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>
 	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset">${surfaceOptions.map(
