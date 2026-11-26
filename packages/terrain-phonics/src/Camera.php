@@ -63,12 +63,16 @@ final class Camera
 		$forward = [$s * $q,$p,-$c * $q];
 		$right = [$c,0,$s];
 		$up = [-$s * $p,$q,$c * $p];
+
 		if($this->roll != 0)
 		{
-			$cr = cos($this->roll); $sr = sin($this->roll);
+			$cr = cos($this->roll);
+			$sr = sin($this->roll);
+
 			for($i = 0; $i < 3; $i++)
-				[$right[$i],$up[$i]] = [$cr*$right[$i] + $sr*$up[$i], $cr*$up[$i] - $sr*$right[$i]];
+			[$right[$i],$up[$i]] = [$cr * $right[$i] + $sr * $up[$i], $cr * $up[$i] - $sr * $right[$i]];
 		}
+
 		return [$forward,$right,$up];
 	}
 
@@ -89,10 +93,10 @@ final class Camera
 
 		// Scale the camera basis by the four nonzero projection coefficients.
 		return [
-			$scaleX*$right[0], $scaleY*$up[0], $depth*$forward[0], $forward[0],
-			$scaleX*$right[1], $scaleY*$up[1], $depth*$forward[1], $forward[1],
-			$scaleX*$right[2], $scaleY*$up[2], $depth*$forward[2], $forward[2],
-			0.0, 0.0, -2*$far*$near / ($far - $near), 0.0
+			$scaleX * $right[0], $scaleY * $up[0], $depth * $forward[0], $forward[0]
+			, $scaleX * $right[1], $scaleY * $up[1], $depth * $forward[1], $forward[1]
+			, $scaleX * $right[2], $scaleY * $up[2], $depth * $forward[2], $forward[2]
+			, 0.0, 0.0, -2 * $far * $near / ($far - $near), 0.0
 		];
 	}
 
@@ -104,11 +108,16 @@ final class Camera
 	 */
 	public function clipPlanes(int $width, int $height): array
 	{
-		$m = $this->viewProjection($width,$height);
+		$m = $this->viewProjection($width, $height);
 		$planes = [];
-		foreach([0,1,2] as $row) foreach([-1,1] as $sign)
-			$planes[] = [$m[3]+$sign*$m[$row],$m[7]+$sign*$m[4+$row],
-				$m[11]+$sign*$m[8+$row],$m[15]+$sign*$m[12+$row]];
+
+		foreach([0,1,2] as $row)
+		foreach([-1,1] as $sign)
+		$planes[] = [
+			$m[3] + $sign * $m[$row],$m[7] + $sign * $m[4 + $row]
+			, $m[11] + $sign * $m[8 + $row],$m[15] + $sign * $m[12 + $row]
+		];
+
 		return $planes;
 	}
 
@@ -128,14 +137,17 @@ final class Camera
 		$size = $node['size'];
 		$depth = $node['depth'] ?? $size;
 		// GPU clip coordinates are rounded before adding/subtracting w at each plane.
-		$roundoff = 1e-5 * (1 + abs($x) + abs($z) + 2*$size + max(abs($low-$eye[1]), abs($high-$eye[1])));
+		$roundoff = 1e-5 * (1 + abs($x) + abs($z) + 2 * $size + max(abs($low - $eye[1]), abs($high - $eye[1])));
+
 		foreach($planes as [$a,$b,$c,$d])
 		{
-			$px = $a*($x + ($a>0 ? $size : 0));
-			$py = $b*(($b>0 ? $high : $low)-$eye[1]);
-			$pz = $c*($z + ($c>0 ? $depth : 0));
-			if($px+$py+$pz+$d < -$roundoff - 1e-5*(abs($px)+abs($py)+abs($pz)+abs($d))) return false;
+			$px = $a * ($x + ($a > 0 ? $size : 0));
+			$py = $b * (($b > 0 ? $high : $low) - $eye[1]);
+			$pz = $c * ($z + ($c > 0 ? $depth : 0));
+
+			if($px + $py + $pz + $d < -$roundoff - 1e-5 * (abs($px) + abs($py) + abs($pz) + abs($d))) return false;
 		}
+
 		return true;
 	}
 
@@ -154,14 +166,13 @@ final class Camera
 	 * @return int Index of a plane the box lies wholly behind, or -1 when inView() would return true.
 	 */
 	public static function rejectingPlane(
-		array $planes,
-		array $eye,
-		array $node,
-		float $low,
-		float $high,
-		int $first = -1
-	): int
-	{
+		array $planes
+		, array $eye
+		, array $node
+		, float $low
+		, float $high
+		, int $first = -1
+	): int {
 		$x = $node['x'] - $eye[0];
 		$z = $node['z'] - $eye[2];
 		$size = $node['size'];
@@ -171,28 +182,39 @@ final class Camera
 		// Magnitudes are taken with comparisons: abs() and max() are function calls, and this runs for every
 		// drawn patch on every frame. The values are those inView() computes.
 		$reach = ($low < 0 ? -$low : $low);
+
 		if(($high < 0 ? -$high : $high) > $reach) $reach = $high < 0 ? -$high : $high;
+
 		// GPU clip coordinates are rounded before adding/subtracting w at each plane.
 		$roundoff = 1e-5 * (1 + ($x < 0 ? -$x : $x) + ($z < 0 ? -$z : $z) + $size + $depth + $reach);
+
 		if($first >= 0)
 		{
 			[$a,$b,$c,$d] = $planes[$first];
-			$px = $a*($x + ($a>0 ? $size : 0));
-			$py = $b*($b>0 ? $high : $low);
-			$pz = $c*($z + ($c>0 ? $depth : 0));
-			$slack = 1e-5*(($px < 0 ? -$px : $px)+($py < 0 ? -$py : $py)+($pz < 0 ? -$pz : $pz)+($d < 0 ? -$d : $d));
+			$px = $a * ($x + ($a > 0 ? $size : 0));
+			$py = $b * ($b > 0 ? $high : $low);
+			$pz = $c * ($z + ($c > 0 ? $depth : 0));
+			$slack = 1e-5 * (($px < 0 ? -$px : $px) + ($py < 0 ? -$py : $py) + ($pz < 0 ? -$pz : $pz) + ($d < 0
+				? -$d
+				: $d
+			));
 
-			if($px+$py+$pz+$d < -$roundoff - $slack) return $first;
+			if($px + $py + $pz + $d < -$roundoff - $slack) return $first;
 		}
+
 		foreach($planes as $i => [$a,$b,$c,$d])
 		{
-			$px = $a*($x + ($a>0 ? $size : 0));
-			$py = $b*($b>0 ? $high : $low);
-			$pz = $c*($z + ($c>0 ? $depth : 0));
-			$slack = 1e-5*(($px < 0 ? -$px : $px)+($py < 0 ? -$py : $py)+($pz < 0 ? -$pz : $pz)+($d < 0 ? -$d : $d));
+			$px = $a * ($x + ($a > 0 ? $size : 0));
+			$py = $b * ($b > 0 ? $high : $low);
+			$pz = $c * ($z + ($c > 0 ? $depth : 0));
+			$slack = 1e-5 * (($px < 0 ? -$px : $px) + ($py < 0 ? -$py : $py) + ($pz < 0 ? -$pz : $pz) + ($d < 0
+				? -$d
+				: $d
+			));
 
-			if($px+$py+$pz+$d < -$roundoff - $slack) return $i;
+			if($px + $py + $pz + $d < -$roundoff - $slack) return $i;
 		}
+
 		return -1;
 	}
 

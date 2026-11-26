@@ -68,15 +68,20 @@ final class Lod
 			$this->cachedExtent = $this->extent;
 			$this->childGroups = [];
 		}
+
 		$key = $parent['key'];
+
 		if(isset($this->childGroups[$key])) return $this->childGroups[$key];
+
 		if(count($this->childGroups) >= 512) unset($this->childGroups[array_key_first($this->childGroups)]);
+
 		$level = $parent['level'] + 1;
 		$x = $parent['ix'] * 2;
 		$z = $parent['iz'] * 2;
+
 		return $this->childGroups[$key] = [
-			$this->node($level,$x,$z), $this->node($level,$x+1,$z),
-			$this->node($level,$x,$z+1), $this->node($level,$x+1,$z+1)
+			$this->node($level, $x, $z), $this->node($level, $x + 1, $z)
+			, $this->node($level, $x, $z + 1), $this->node($level, $x + 1, $z + 1)
 		];
 	}
 
@@ -110,8 +115,16 @@ final class Lod
 		, float $detailHigh = -INF
 	): array {
 
-		$walk = $this->walk($eye, $resident, $quality, $projection, $inDetailView, $detailPlanes, $detailLow
-			, $detailHigh);
+		$walk = $this->walk(
+			$eye
+			, $resident
+			, $quality
+			, $projection
+			, $inDetailView
+			, $detailPlanes
+			, $detailLow
+			, $detailHigh
+		);
 
 		// Without a credit the walk never pauses, so its first step is the whole selection.
 		$walk->current();

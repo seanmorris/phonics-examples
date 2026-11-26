@@ -15,9 +15,10 @@ final class GpuPatch
 
 	/**
 	 * Retain and upload one patch with matching parent-height and normal attributes.
+	 *
 	 * @param string $vertices Packed eleven-float vertex records, including parent normal.
-	 * @param int|null $sharedIndex Optional scene-owned element buffer.
 	 * @param string $indices Packed unsigned-short triangle indices.
+	 * @param int|null $sharedIndex Optional scene-owned element buffer.
 	 * @return void Uploads the retained mesh data.
 	 */
 	public function __construct(private string $vertices, private string $indices, ?int $sharedIndex = null)
@@ -40,7 +41,9 @@ final class GpuPatch
 		glBindBuffer(GL_ARRAY_BUFFER, $this->buffers[0]);
 		glBufferData(GL_ARRAY_BUFFER, strlen($this->vertices), $this->vertices, GL_STATIC_DRAW);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, $sharedIndex ?? $this->buffers[1]);
-		if($sharedIndex === null) glBufferData(GL_ELEMENT_ARRAY_BUFFER, strlen($this->indices), $this->indices, GL_STATIC_DRAW);
+
+		if($sharedIndex === null)
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, strlen($this->indices), $this->indices, GL_STATIC_DRAW);
 
 		foreach([[0,3,0],[1,3,12],[2,1,24],[3,1,28],[4,3,32]] as [$location,$size,$offset])
 		{
@@ -96,24 +99,34 @@ final class GpuPatch
 		$indices = unpack('v*', $regular);
 		$changes = [[], [], [], []];
 		$stride = $cells + 1;
+
 		foreach($indices as $i => $vertex)
 		{
-			$x = $vertex % $stride; $z = intdiv($vertex, $stride);
+			$x = $vertex % $stride;
+			$z = intdiv($vertex, $stride);
+
 			// Snap alternate boundary vertices onto an existing coarse endpoint. These
 			// directions preserve triangle winding even when two stitched edges meet.
 			if(($z & 1) && $x === 0) $changes[0][$i] = $vertex - $stride;
+
 			if(($z & 1) && $x === $cells) $changes[1][$i] = $vertex + $stride;
+
 			if(($x & 1) && $z === 0) $changes[2][$i] = $vertex - 1;
+
 			if(($x & 1) && $z === $cells) $changes[3][$i] = $vertex + 1;
 		}
+
 		$stream = $regular;
+
 		for($mask = 1; $mask < 16; $mask++)
 		{
 			$pattern = $indices;
+
 			foreach($changes as $edge => $entries)
-				if($mask & (1 << $edge)) $pattern = array_replace($pattern, $entries);
+			if($mask & (1 << $edge)) $pattern = array_replace($pattern, $entries);
 			$stream .= pack('v*', ...$pattern);
 		}
+
 		return $stream;
 	}
 

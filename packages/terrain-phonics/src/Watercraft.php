@@ -28,12 +28,18 @@ final class Watercraft
 	 * @param float $gravity Downward acceleration in m/s². Buoyancy compensates for the hull's weight at rest.
 	 * @return void Creates a craft with zero linear and angular velocity.
 	 */
-	public function __construct(float $x = 0, float $z = 0, float $yaw = 0, float $y = .232,
-		private float $gravity = self::REFERENCE_GRAVITY)
-	{
+	public function __construct(
+		float $x = 0
+		, float $z = 0
+		, float $yaw = 0
+		, float $y = .232
+		, private float $gravity = self::REFERENCE_GRAVITY
+	){
 		foreach([$x,$y,$z,$yaw] as $value)
 		if(!is_finite($value)) throw new \InvalidArgumentException('Craft pose must be finite');
-		if(!is_finite($gravity) || $gravity <= 0) throw new \InvalidArgumentException('Craft gravity must be finite and positive');
+
+		if(!is_finite($gravity) || $gravity <= 0)
+		throw new \InvalidArgumentException('Craft gravity must be finite and positive');
 
 		$this->buoyancyTrim = $gravity - self::REFERENCE_GRAVITY;
 		$this->x = $x;
@@ -220,7 +226,8 @@ final class Watercraft
 				, $this->z - cos($this->yaw) * self::LENGTH
 				, min(.18, abs($forward) * .008)
 				, $time
-				, $this->vx, $this->vz
+				, $this->vx
+				, $this->vz
 			);
 
 			$this->wakeClock = 0;
@@ -263,15 +270,27 @@ final class Watercraft
 		return $height;
 	}
 
+	/**
+	 * Read the rotational velocities and wake clock for replay resumption.
+	 *
+	 * @return array Pitch velocity, roll velocity and wake clock in simulation order.
+	 */
 	public function angularMotion(): array { return [$this->pitchVelocity,$this->rollVelocity,$this->wakeClock]; }
 
-	/** Set the hull pose and momentum at a simulation boundary. */
-	public function resume(array $pose,array $velocity,array $angular): void
+	/**
+	 * Set the hull pose and momentum at a simulation boundary.
+	 *
+	 * @param array $pose Recorded hull position and orientation.
+	 * @param array $velocity Recorded linear velocity.
+	 * @param array $angular Pitch and roll velocities and saved wake clock.
+	 * @return void No value.
+	 */
+	public function resume(array $pose, array $velocity, array $angular): void
 	{
-		foreach(['x','y','z','yaw','roll','pitch'] as $key) $this->$key=$pose[$key];
-		[$this->vx,$this->vy,$this->vz]=$velocity;
-		[$this->pitchVelocity,$this->rollVelocity,$this->wakeClock]=$angular;
-		$this->contacts=0;
+		foreach(['x','y','z','yaw','roll','pitch'] as $key) $this->$key = $pose[$key];
+		[$this->vx,$this->vy,$this->vz] = $velocity;
+		[$this->pitchVelocity,$this->rollVelocity,$this->wakeClock] = $angular;
+		$this->contacts = 0;
 	}
 
 	/**

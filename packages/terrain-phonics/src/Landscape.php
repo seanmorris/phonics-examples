@@ -86,30 +86,48 @@ final class Landscape implements TerrainSurface
 	public function roads(): array
 	{
 		$roads = [];
+
 		foreach($this->operations as $op) if($op['type'] === 'road') $roads[] = $op;
+
 		return $roads;
 	}
 
-	/** Portable active roads keyed by their position in the terrain edit order. */
+	/**
+	 * Portable active roads keyed by their position in the terrain edit order.
+	 *
+	 * @return array Active road edits keyed by their position in the edit log.
+	 */
 	public function roadRecords(): array
 	{
 		$records = [];
-		foreach($this->slots as $i=>$op) if($op['type'] === 'road') $records[$i] = Edits::serialize($op);
+
+		foreach($this->slots as $i => $op) if($op['type'] === 'road') $records[$i] = Edits::serialize($op);
+
 		return $records;
 	}
 
-	/** Build a snapshot for rendering with selected road layers hidden. Reuse the prepared spline samples. */
+	/**
+	 * Build a snapshot for rendering with selected road layers hidden. Reuse the prepared spline samples.
+	 *
+	 * @param array $ids Road edit identifiers to hide.
+	 * @return self Independent view with the specified road edits hidden.
+	 */
 	public function previewWithoutRoads(array $ids): self
 	{
 		$removals = [];
-		foreach($ids as $id) {
+
+		foreach($ids as $id)
+		{
 			if(is_int($id) && ($this->slots[$id]['type'] ?? null) === 'road')
-				$removals[$id] = ['type'=>'delete-road','id'=>$id];
+			$removals[$id] = ['type' => 'delete-road','id' => $id];
 		}
+
 		if(!$removals) return $this;
+
 		$preview = $this->fork();
 		$preview->pending = array_values($removals);
 		$preview->commit();
+
 		return $preview;
 	}
 
@@ -124,29 +142,40 @@ final class Landscape implements TerrainSurface
 		$half = $extent / 2;
 		$pad = 2 * $this->spacing;
 		$boxes = [];
+
 		foreach($this->operations as $operation)
 		{
 			if(!$includeRoads && $operation['type'] === 'road') continue;
+
 			foreach(Edits::footprints($operation, max(24., 2 * $pad)) as [$x, $z, $r, $b])
-				$boxes[] = [max(-$half, $x-$pad), max(-$half, $z-$pad), min($half, $r+$pad), min($half, $b+$pad)];
+			$boxes[] = [max(-$half, $x - $pad), max(-$half, $z - $pad), min($half, $r + $pad), min($half, $b + $pad)];
 		}
+
 		return new EditIndex($extent, $boxes);
 	}
 
-	/** Conservative footprints of active edits that can change elevation, shared until the next commit. */
+	/**
+	 * Conservative footprints of active edits that can change elevation, shared until the next commit.
+	 *
+	 * @return EditIndex Spatial index covering edits capable of changing elevation.
+	 */
 	public function heightEditIndex(): EditIndex
 	{
 		if($this->heightEdits !== null) return $this->heightEdits;
-		$pad = 2*$this->spacing;
+
+		$pad = 2 * $this->spacing;
 		$boxes = [];
+
 		foreach($this->operations as $op)
 		{
 			if($op['type'] === 'material' || ($op['amount'] ?? 1.) == 0.) continue;
+
 			// Use the precomputed road bounds. This lookup costs at most one rectangle per edit.
 			[$x,$z,$right,$back] = Edits::bounds($op);
-			$boxes[] = [$x-$pad,$z-$pad,$right+$pad,$back+$pad];
+			$boxes[] = [$x - $pad,$z - $pad,$right + $pad,$back + $pad];
 		}
-		return $this->heightEdits = new EditIndex($this->parameters['worldSize'],$boxes);
+
+		return $this->heightEdits = new EditIndex($this->parameters['worldSize'], $boxes);
 	}
 
 	/**
@@ -276,7 +305,8 @@ final class Landscape implements TerrainSurface
 	 * @param float $x World horizontal X coordinate in meters.
 	 * @param float $z World horizontal Z coordinate in meters.
 	 * @param array|null $centerOffset Optional offset in meters from the nearest point on a graded pavement centerline.
-	 * @param array|null $mark Optional signed lateral distance, distance along the spline and road half-width, in meters.
+	 * @param array|null $mark Optional signed lateral distance, distance along the spline and road half-width,
+	 * in meters.
 	 * @return string|null Most recent covering material, or null for recipe shading.
 	 */
 	public function material(float $x, float $z, ?array &$centerOffset = null, ?array &$mark = null): ?string
@@ -284,14 +314,22 @@ final class Landscape implements TerrainSurface
 		$this->coordinates($x, $z);
 
 		if(func_num_args() >= 3) return Edits::material($x, $z, $this->operations, $centerOffset, $mark);
+
 		return Edits::material($x, $z, $this->operations);
 	}
 
-	/** Encoded paint sample for areas where later brush edits supersede GPU road grading. */
+	/**
+	 * Encoded paint sample for areas where later brush edits supersede GPU road grading.
+	 *
+	 * @param float $x Horizontal X coordinate.
+	 * @param float $z Horizontal Z coordinate.
+	 * @return string Material and road-marking bytes for this sample.
+	 */
 	public function paintTexel(float $x, float $z): string
 	{
-		$material = $this->material($x,$z,$offset,$mark);
-		return RoadAtlas::paintTexel($material,$mark);
+		$material = $this->material($x, $z, $offset, $mark);
+
+		return RoadAtlas::paintTexel($material, $mark);
 	}
 
 	/**
@@ -301,10 +339,17 @@ final class Landscape implements TerrainSurface
 	 */
 	public function queue(array $operation): void
 	{
-		foreach($this->queueSteps($operation) as $_) {}
+		foreach($this->queueSteps($operation) as $_)
+		{
+		}
 	}
 
-	/** Stage only a fully prepared edit. Dropping the generator leaves the pending batch untouched. */
+	/**
+	 * Stage only a fully prepared edit. Dropping the generator leaves the pending batch untouched.
+	 *
+	 * @param array $operation Terrain edit to prepare or apply.
+	 * @return \Generator Yields during preparation before staging the normalized operation.
+	 */
 	public function queueSteps(array $operation): \Generator
 	{
 		$this->open();
@@ -312,14 +357,18 @@ final class Landscape implements TerrainSurface
 
 		if(($operation['type'] ?? null) === 'smooth') $operation['sampleStep'] ??= $this->parameters['spacing'];
 
-		$operation = yield from Edits::normalizeSteps($operation,$this->generator);
+		$operation = yield from Edits::normalizeSteps($operation, $this->generator);
 		$this->open();
+
 		if($this->version !== $revision) throw new \LogicException('The landscape changed while preparing the edit.');
-		if($operation['type'] !== 'delete-road') {
+
+		if($operation['type'] !== 'delete-road')
+		{
 			$box = Edits::bounds($operation);
 			$half = $this->parameters['worldSize'] / 2;
+
 			if($box[0] > $half || $box[2] < -$half || $box[1] > $half || $box[3] < -$half)
-				throw new \OutOfBoundsException('Edit does not intersect the world');
+			throw new \OutOfBoundsException('Edit does not intersect the world');
 		}
 
 		$candidate = self::replay($this->slots, [...$this->pending, $operation]);
@@ -401,7 +450,8 @@ final class Landscape implements TerrainSurface
 
 	/**
 	 * Return the conservative dirty rectangle relative to another committed surface. Null means the recipe changed
-	 * globally; an empty array means identical edits. Include overlapping downstream smoothing and the reconstruction's two-node halo.
+	 * globally; an empty array means identical edits. Include overlapping downstream smoothing and the
+	 * reconstruction's two-node halo.
 	 * @param self $other Committed surface used as the comparison baseline.
 	 * @return array|null Dirty rectangle, empty array for no change, or null for a changed recipe.
 	 */
@@ -415,28 +465,47 @@ final class Landscape implements TerrainSurface
 		$bounds = null;
 		$ids = array_keys($this->slots + $other->slots);
 		sort($ids, SORT_NUMERIC);
-		foreach($ids as $i) {
+
+		foreach($ids as $i)
+		{
 			$a = $this->slots[$i] ?? null;
 			$b = $other->slots[$i] ?? null;
+
 			if($a && $b && Edits::serialize($a) === Edits::serialize($b)
-				&& ($a['_road']['ink'] ?? null) === ($b['_road']['ink'] ?? null)) {
+				&& ($a['_road']['ink'] ?? null) === ($b['_road']['ink'] ?? null)
+			){
 				// All other edits are pointwise. A later smoothing brush may read its changed neighbor.
 				if($bounds === null || $a['type'] !== 'smooth') continue;
+
 				$reach = $a['sampleStep'];
 				$box = Edits::bounds($a);
-				if($box[2]+$reach<$bounds[0] || $box[0]-$reach>$bounds[2]
-					|| $box[3]+$reach<$bounds[1] || $box[1]-$reach>$bounds[3]) continue;
+
+				if($box[2] + $reach < $bounds[0] || $box[0] - $reach > $bounds[2]
+					|| $box[3] + $reach < $bounds[1] || $box[1] - $reach > $bounds[3]
+				) continue;
 			}
-			foreach([$a,$b] as $op) if($op !== null) {
+
+			foreach([$a,$b] as $op)
+			if($op !== null)
+			{
 				$box = Edits::bounds($op);
-				if($op['type'] === 'road') {
+
+				if($op['type'] === 'road')
+				{
 					$pad = $op['_road']['markReach'] - $op['_road']['radius'];
-					$box = [$box[0]-$pad,$box[1]-$pad,$box[2]+$pad,$box[3]+$pad];
+					$box = [$box[0] - $pad,$box[1] - $pad,$box[2] + $pad,$box[3] + $pad];
 				}
-				$bounds = $bounds === null ? $box : [min($bounds[0],$box[0]),min($bounds[1],$box[1]),
-					max($bounds[2],$box[2]),max($bounds[3],$box[3])];
+
+				$bounds = $bounds === null
+					? $box
+					: [
+						min($bounds[0], $box[0])
+						, min($bounds[1], $box[1])
+						, max($bounds[2], $box[2]),max($bounds[3], $box[3])
+					];
 			}
 		}
+
 		if($bounds === null) return [];
 
 		$halo = 2 * $this->parameters['spacing'];
@@ -448,11 +517,17 @@ final class Landscape implements TerrainSurface
 		];
 	}
 
-	/** Start an independent editing transaction, sharing immutable road samples and history by copy-on-write. */
+	/**
+	 * Start an independent editing transaction, sharing immutable road samples and history by copy-on-write.
+	 *
+	 * @return self Independent editable snapshot of the committed landscape.
+	 */
 	public function fork(): self
 	{
 		$this->open();
+
 		if($this->pending) throw new \LogicException('Commit or discard queued edits before forking');
+
 		$child = new self($this->parameters);
 		$child->history = $this->history;
 		$child->operations = $this->operations;
@@ -461,6 +536,7 @@ final class Landscape implements TerrainSurface
 		$child->range = $this->range;
 		$child->cursor = $this->cursor;
 		$child->version = $this->version;
+
 		return $child;
 	}
 
@@ -475,8 +551,16 @@ final class Landscape implements TerrainSurface
 		if($this->pending) throw new \LogicException('Commit or discard queued edits before saving');
 
 		$format = 1;
-		foreach($this->history as $batch) foreach($batch as $edit) {
-			if($edit['type'] === 'delete-road') { $format = 3; break 2; }
+
+		foreach($this->history as $batch)
+		foreach($batch as $edit)
+		{
+			if($edit['type'] === 'delete-road')
+			{
+				$format = 3;
+				break 2;
+			}
+
 			if(isset($edit['replaceAt']) || isset($edit['handles'])) $format = 2;
 		}
 
@@ -502,7 +586,11 @@ final class Landscape implements TerrainSurface
 
 		$value = json_decode($json, true, 32, JSON_THROW_ON_ERROR);
 
-		if(!is_array($value) || ($value['format'] ?? null) !== 'terrain-phonics' || !in_array($value['version'] ?? null,[1,2,3],true)
+		if(!is_array($value) || ($value['format'] ?? null) !== 'terrain-phonics' || !in_array(
+			$value['version'] ?? null
+			, [1,2,3]
+			, true
+		)
 			|| !is_array($value['recipe'] ?? null) || !is_array($value['history'] ?? null)
 			|| !is_int($value['cursor'] ?? null) || !is_int($value['revision'] ?? null)
 			|| $value['cursor'] < 0 || $value['cursor'] > count($value['history']) || $value['revision'] < 0
@@ -522,12 +610,13 @@ final class Landscape implements TerrainSurface
 			{
 				if(!is_array($operation)) throw new \InvalidArgumentException('Invalid terrain operation');
 
-				$normalized[] = Edits::normalize($operation,$result->generator);
+				$normalized[] = Edits::normalize($operation, $result->generator);
 			}
 
 			$all = self::replay($all, $normalized);
 			$result->operationLimit($all);
 			$result->history[] = array_map([Edits::class, 'serialize'], $normalized);
+
 			if(count($result->history) === $value['cursor']) $result->setOperations($all);
 		}
 
@@ -714,7 +803,9 @@ final class Landscape implements TerrainSurface
 	public function close(): void
 	{
 		$this->heightEdits = null;
-		$this->tiles = $this->leases = $this->history = $this->operations = $this->slots = $this->pending = $this->memo = [];
+		$this->tiles = $this->leases = $this->history = $this->operations = $this->slots = $this->pending = $this
+			->memo = [];
+
 		$this->blockBounds = $this->meshNodes = $this->cellRows = $this->queueX = $this->queueZ = [];
 		$this->queueNext = $this->queueCount = 0;
 		$this->recentKey = -1;
@@ -769,26 +860,36 @@ final class Landscape implements TerrainSurface
 	private function blockRange(int $x, int $z, int $size): array
 	{
 		$key = "$size:$x:$z";
+
 		if(isset($this->blockBounds[$key])) return $this->blockBounds[$key];
+
 		$s = $this->parameters['spacing'];
-		$box = [($x-1)*$s,($z-1)*$s,($x+$size+1)*$s,($z+$size+1)*$s];
+		$box = [($x - 1) * $s,($z - 1) * $s,($x + $size + 1) * $s,($z + $size + 1) * $s];
 		$affecting = [];
-		for($i=count($this->operations)-1; $i>=0; $i--)
+
+		for($i = count($this->operations) - 1; $i >= 0; $i--)
 		{
 			$op = $this->operations[$i];
 			$b = Edits::bounds($op);
-			if($b[0]>$box[2] || $b[2]<$box[0] || $b[1]>$box[3] || $b[3]<$box[1]) continue;
+
+			if($b[0] > $box[2] || $b[2] < $box[0] || $b[1] > $box[3] || $b[3] < $box[1]) continue;
+
 			$affecting[] = $i;
-			if($op['type']==='smooth') $box = [$box[0]-$s,$box[1]-$s,$box[2]+$s,$box[3]+$s];
+
+			if($op['type'] === 'smooth') $box = [$box[0] - $s,$box[1] - $s,$box[2] + $s,$box[3] + $s];
 		}
+
 		[$lo,$hi] = $this->generator->regionalBounds($box);
+
 		foreach(array_reverse($affecting) as $i)
-			[$lo,$hi] = Edits::heightBounds($this->operations[$i], $lo, $hi);
+		[$lo,$hi] = Edits::heightBounds($this->operations[$i], $lo, $hi);
 		// The absolute weight sum of a 1D Catmull-Rom stencil is <= 5/4.
 		// Tensor weights sum to one, hence their negative mass is <= 9/32.
-		$pad = 9/32 * ($hi-$lo) + 1e-8*(1+max(abs($lo),abs($hi)));
-		if(count($this->blockBounds)>=4096) unset($this->blockBounds[array_key_first($this->blockBounds)]);
-		return $this->blockBounds[$key] = [$lo-$pad,$hi+$pad];
+		$pad = 9 / 32 * ($hi - $lo) + 1e-8 * (1 + max(abs($lo), abs($hi)));
+
+		if(count($this->blockBounds) >= 4096) unset($this->blockBounds[array_key_first($this->blockBounds)]);
+
+		return $this->blockBounds[$key] = [$lo - $pad,$hi + $pad];
 	}
 
 	/**
@@ -802,9 +903,13 @@ final class Landscape implements TerrainSurface
 	private static function enteredCell(float $origin, float $direction, float $time, float $spacing): int
 	{
 		$cell = (int)floor(($origin + $direction * $time) / $spacing);
+
 		if(abs($direction) < 1e-14) return $cell;
+
 		$edge = ($cell + (int)($direction > 0)) * $spacing;
+
 		if(($edge - $origin) / $direction <= $time) $cell += $direction > 0 ? 1 : -1;
+
 		return $cell;
 	}
 
@@ -890,49 +995,67 @@ final class Landscape implements TerrainSurface
 
 			foreach([128,16,4] as $size)
 			{
-				$bx = (int)floor($ix/$size)*$size;
-				$bz = (int)floor($iz/$size)*$size;
+				$bx = (int)floor($ix / $size) * $size;
+				$bz = (int)floor($iz / $size) * $size;
+
 				if(($tested[$size] ?? null) === [$bx,$bz]) continue;
+
 				$tested[$size] = [$bx,$bz];
 				$end = $far;
+
 				foreach([[0,$bx],[2,$bz]] as [$axis,$first])
 				{
 					$d = $direction[$axis];
-					if(abs($d)<1e-14) continue;
-					$edge = ($first + ($d>0 ? $size : 0))*$spacing;
-					$end = min($end, ($edge-$origin[$axis])/$d);
+
+					if(abs($d) < 1e-14) continue;
+
+					$edge = ($first + ($d > 0 ? $size : 0)) * $spacing;
+					$end = min($end, ($edge - $origin[$axis]) / $d);
 				}
+
 				if($end <= $time) continue;
-				[$low,$high] = $this->blockRange($bx,$bz,$size);
-				$y0 = $origin[1]+$direction[1]*$time;
-				$y1 = $origin[1]+$direction[1]*$end;
-				if(min($y0,$y1) <= $high && max($y0,$y1) >= $low) continue;
+
+				[$low,$high] = $this->blockRange($bx, $bz, $size);
+				$y0 = $origin[1] + $direction[1] * $time;
+				$y1 = $origin[1] + $direction[1] * $end;
+
+				if(min($y0, $y1) <= $high && max($y0, $y1) >= $low) continue;
+
 				if($end >= $far) return null;
+
 				$time = $end;
 				yield $cells;
 				continue 2;
 			}
+
 			$end = $far;
+
 			foreach([[0,$ix],[2,$iz]] as [$axis,$cell])
 			{
 				if(abs($direction[$axis]) < 1e-14) continue;
+
 				$edge = ($cell + (int)($direction[$axis] > 0)) * $spacing;
 				$crossing = ($edge - $origin[$axis]) / $direction[$axis];
+
 				if($crossing > $time) $end = min($end, $crossing);
 			}
+
 			$rows = $this->patch($ix, $iz);
-			$lo = min(min($rows[0]),min($rows[1]),min($rows[2]),min($rows[3]));
-			$hi = max(max($rows[0]),max($rows[1]),max($rows[2]),max($rows[3]));
-			$pad = 9/32*($hi-$lo) + 1e-8*(1+max(abs($lo),abs($hi)));
-			$y0 = $origin[1]+$direction[1]*$time;
-			$y1 = $origin[1]+$direction[1]*$end;
-			if(min($y0,$y1) > $hi+$pad || max($y0,$y1) < $lo-$pad)
+			$lo = min(min($rows[0]), min($rows[1]), min($rows[2]), min($rows[3]));
+			$hi = max(max($rows[0]), max($rows[1]), max($rows[2]), max($rows[3]));
+			$pad = 9 / 32 * ($hi - $lo) + 1e-8 * (1 + max(abs($lo), abs($hi)));
+			$y0 = $origin[1] + $direction[1] * $time;
+			$y1 = $origin[1] + $direction[1] * $end;
+
+			if(min($y0, $y1) > $hi + $pad || max($y0, $y1) < $lo - $pad)
 			{
 				if($end >= $far) return null;
+
 				$time = $end;
 				yield $cells;
 				continue;
 			}
+
 			$polynomial = $this->rayPolynomial($rows, $origin, $direction, $time, $end, $ix, $iz);
 			$bernstein = [];
 
@@ -1003,18 +1126,42 @@ final class Landscape implements TerrainSurface
 		}
 
 		[
-			'a' => $a, 'b' => $b, 'c' => $c, 'd' => $d
-			, 'e' => $e, 'f' => $f, 'g' => $g, 'h' => $h
-			, 'i' => $i, 'j' => $j, 'k' => $k, 'l' => $l
-			, 'm' => $m, 'n' => $n, 'o' => $o, 'p' => $p
+			'a' => $a
+			, 'b' => $b
+			, 'c' => $c
+			, 'd' => $d
+			, 'e' => $e
+			, 'f' => $f
+			, 'g' => $g
+			, 'h' => $h
+			, 'i' => $i
+			, 'j' => $j
+			, 'k' => $k
+			, 'l' => $l
+			, 'm' => $m
+			, 'n' => $n
+			, 'o' => $o
+			, 'p' => $p
 		] = $this->stencil($ix, $iz);
 
 		// Each line converts one row of four nodes exactly as cubic() does.
 		$rows = [
-			$b, .5 * ($c - $a), $a - 2.5 * $b + 2 * $c - .5 * $d, .5 * (-$a + 3 * $b - 3 * $c + $d)
-			, $f, .5 * ($g - $e), $e - 2.5 * $f + 2 * $g - .5 * $h, .5 * (-$e + 3 * $f - 3 * $g + $h)
-			, $j, .5 * ($k - $i), $i - 2.5 * $j + 2 * $k - .5 * $l, .5 * (-$i + 3 * $j - 3 * $k + $l)
-			, $n, .5 * ($o - $m), $m - 2.5 * $n + 2 * $o - .5 * $p, .5 * (-$m + 3 * $n - 3 * $o + $p)
+			$b
+			, .5 * ($c - $a)
+			, $a - 2.5 * $b + 2 * $c - .5 * $d
+			, .5 * (-$a + 3 * $b - 3 * $c + $d)
+			, $f
+			, .5 * ($g - $e)
+			, $e - 2.5 * $f + 2 * $g - .5 * $h
+			, .5 * (-$e + 3 * $f - 3 * $g + $h)
+			, $j
+			, .5 * ($k - $i)
+			, $i - 2.5 * $j + 2 * $k - .5 * $l
+			, .5 * (-$i + 3 * $j - 3 * $k + $l)
+			, $n
+			, .5 * ($o - $m)
+			, $m - 2.5 * $n + 2 * $o - .5 * $p
+			, .5 * (-$m + 3 * $n - 3 * $o + $p)
 		];
 
 		$this->cellRows[$iz][$ix] = $rows;
@@ -1261,19 +1408,29 @@ final class Landscape implements TerrainSurface
 	public function meshHeight(float $wx, float $wz, float $step): float
 	{
 		$s = $this->parameters['spacing'];
-		if($step < $s*$this->parameters['tileSize']) return $this->height($wx,$wz);
-		$this->coordinates($wx,$wz);
-		$x = $wx/$s; $z = $wz/$s;
-		if($x !== floor($x) || $z !== floor($z)) return $this->height($wx,$wz);
+
+		if($step < $s * $this->parameters['tileSize']) return $this->height($wx, $wz);
+
+		$this->coordinates($wx, $wz);
+		$x = $wx / $s;
+		$z = $wz / $s;
+
+		if($x !== floor($x) || $z !== floor($z)) return $this->height($wx, $wz);
+
 		$key = (int)$x . ':' . (int)$z;
+
 		if(isset($this->meshNodes[$key]))
 		{
 			$this->hits++;
+
 			return $this->meshNodes[$key];
 		}
-		if(count($this->meshNodes)>=4096) unset($this->meshNodes[array_key_first($this->meshNodes)]);
+
+		if(count($this->meshNodes) >= 4096) unset($this->meshNodes[array_key_first($this->meshNodes)]);
+
 		$this->generated++;
-		return $this->meshNodes[$key] = $this->generateNode((int)$x,(int)$z);
+
+		return $this->meshNodes[$key] = $this->generateNode((int)$x, (int)$z);
 	}
 
 	/**
@@ -1286,10 +1443,13 @@ final class Landscape implements TerrainSurface
 	{
 		$wx = $x * $this->spacing;
 		$wz = $z * $this->spacing;
+
 		if(!$this->hasSmoothing)
 		{
-			$value = $this->generator->height($wx,$wz);
-			foreach($this->operations as $operation) $value = Edits::apply($wx,$wz,$value,$operation);
+			$value = $this->generator->height($wx, $wz);
+
+			foreach($this->operations as $operation) $value = Edits::apply($wx, $wz, $value, $operation);
+
 			return $value;
 		}
 
@@ -1297,7 +1457,7 @@ final class Landscape implements TerrainSurface
 
 		try
 		{
-			return $this->edited($wx,$wz,count($this->operations));
+			return $this->edited($wx, $wz, count($this->operations));
 		}
 		finally
 		{
@@ -1372,11 +1532,17 @@ final class Landscape implements TerrainSurface
 		$this->tiles = $tiles;
 	}
 
+	/**
+	 * Replace the committed edits and invalidate the derived spatial indexes.
+	 *
+	 * @param array $operations Committed edits in application order.
+	 * @return void No value.
+	 */
 	private function setOperations(array $operations): void
 	{
 		$this->slots = RoadMarkings::connect($operations);
 		$this->operations = array_values($this->slots);
-		$this->hasSmoothing = in_array('smooth',array_column($operations,'type'),true);
+		$this->hasSmoothing = in_array('smooth', array_column($operations, 'type'), true);
 	}
 
 	/**
@@ -1388,31 +1554,56 @@ final class Landscape implements TerrainSurface
 	{
 		$result = [];
 
-		foreach(array_slice($this->history, 0, $cursor) as $batch) $result = self::replay($result,$batch);
-		foreach($result as $i=>$record) {
+		foreach(array_slice($this->history, 0, $cursor) as $batch) $result = self::replay($result, $batch);
+
+		foreach($result as $i => $record)
+		{
 			$active = $this->slots[$i] ?? null;
-			$result[$i] = $active !== null && Edits::serialize($active) === $record ? $active : Edits::normalize($record,$this->generator);
+			$result[$i] = $active !== null && Edits::serialize($active) === $record
+				? $active
+				: Edits::normalize($record, $this->generator);
 		}
+
 		return $result;
 	}
 
-	/** Resolve replacements at the original position so later brushes retain their effect. */
+	/**
+	 * Resolve replacements at the original position so later brushes retain their effect.
+	 *
+	 * @param array $operations Committed edits in application order.
+	 * @param array $batch Edits to apply in their original order.
+	 * @return array Operations remaining after the edit batch has been applied.
+	 */
 	private static function replay(array $operations, array $batch): array
 	{
-		foreach($batch as $edit) {
-			if($edit['type'] === 'delete-road') {
+		foreach($batch as $edit)
+		{
+			if($edit['type'] === 'delete-road')
+			{
 				$id = $edit['id'];
-				if(($operations[$id]['type'] ?? null) !== 'road') throw new \InvalidArgumentException('The road to delete does not exist.');
+
+				if(($operations[$id]['type'] ?? null) !== 'road')
+				throw new \InvalidArgumentException('The road to delete does not exist.');
+
 				unset($operations[$id]);
 				continue;
 			}
-			if(!isset($edit['replaceAt'])) { $operations[] = $edit; continue; }
+
+			if(!isset($edit['replaceAt']))
+			{
+				$operations[] = $edit;
+				continue;
+			}
+
 			$i = $edit['replaceAt'];
+
 			if(($operations[$i]['type'] ?? null) !== 'road')
-				throw new \InvalidArgumentException('The road to replace does not exist.');
+			throw new \InvalidArgumentException('The road to replace does not exist.');
+
 			unset($edit['replaceAt']);
 			$operations[$i] = $edit;
 		}
+
 		return $operations;
 	}
 
@@ -1440,7 +1631,8 @@ final class Landscape implements TerrainSurface
 
 		if($smooth > 8) throw new \OverflowException('Terrain v1 supports at most eight smoothing operations');
 
-		if($kernels > Edits::MAX_ROAD_SAMPLES) throw new \OverflowException('Active roads exceed the landscape sample budget');
+		if($kernels > Edits::MAX_ROAD_SAMPLES)
+		throw new \OverflowException('Active roads exceed the landscape sample budget');
 	}
 
 	/**

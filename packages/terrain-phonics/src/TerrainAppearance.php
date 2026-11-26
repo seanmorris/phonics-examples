@@ -147,40 +147,88 @@ final class TerrainAppearance
 			, 'macroVariation' => .6
 		]
 		, 'salt-pans' => [
-			'snowColor'=>'#d1ceca', 'sandColor'=>'#b79e82', 'soilColor'=>'#867068',
-			'rockColor'=>'#756462', 'rockBandColor'=>'#a18e80', 'rockSlopeStart'=>.042, 'rockSlopeEnd'=>.14,
+			'snowColor' => '#d1ceca'
+			, 'sandColor' => '#b79e82'
+			, 'soilColor' => '#867068'
+			, 'rockColor' => '#756462'
+			, 'rockBandColor' => '#a18e80'
+			, 'rockSlopeStart' => .042
+			, 'rockSlopeEnd' => .14
 		]
 		, 'cinder-highlands' => [
-			'rockColor'=>'#323438', 'rockBandColor'=>'#504b48', 'soilColor'=>'#754833',
-			'sandColor'=>'#807570', 'grassColor'=>'#686b52', 'rockSlopeStart'=>.105, 'rockSlopeEnd'=>.25,
+			'rockColor' => '#323438'
+			, 'rockBandColor' => '#504b48'
+			, 'soilColor' => '#754833'
+			, 'sandColor' => '#807570'
+			, 'grassColor' => '#686b52'
+			, 'rockSlopeStart' => .105
+			, 'rockSlopeEnd' => .25
 		]
 		, 'rolling-prairie' => [
-			'grassColor'=>'#797a43', 'meadowColor'=>'#55683e', 'sandColor'=>'#aa965e',
-			'rockColor'=>'#8b8572', 'rockBandColor'=>'#a19882', 'rockSlopeStart'=>.027, 'rockSlopeEnd'=>.09,
+			'grassColor' => '#797a43'
+			, 'meadowColor' => '#55683e'
+			, 'sandColor' => '#aa965e'
+			, 'rockColor' => '#8b8572'
+			, 'rockBandColor' => '#a19882'
+			, 'rockSlopeStart' => .027
+			, 'rockSlopeEnd' => .09
 		]
 		, 'river-valley' => [
-			'grassColor'=>'#647745', 'meadowColor'=>'#768050', 'soilColor'=>'#665947',
-			'rockColor'=>'#87857a', 'sandColor'=>'#a5987d', 'beachHeight'=>1.524, 'beachWidth'=>2.4384,
+			'grassColor' => '#647745'
+			, 'meadowColor' => '#768050'
+			, 'soilColor' => '#665947'
+			, 'rockColor' => '#87857a'
+			, 'sandColor' => '#a5987d'
+			, 'beachHeight' => 1.524
+			, 'beachWidth' => 2.4384
 		]
 		, 'wooded-foothills' => [
-			'grassColor'=>'#747d4e', 'meadowColor'=>'#576c43', 'forestColor'=>'#344b3a',
-			'soilColor'=>'#655b46', 'rockColor'=>'#787a72', 'rockBandColor'=>'#63665d',
-			'rockSlopeStart'=>.085, 'rockSlopeEnd'=>.20, 'snowline'=>1219.2, 'treeline'=>-121.92,
+			'grassColor' => '#747d4e'
+			, 'meadowColor' => '#576c43'
+			, 'forestColor' => '#344b3a'
+			, 'soilColor' => '#655b46'
+			, 'rockColor' => '#787a72'
+			, 'rockBandColor' => '#63665d'
+			, 'rockSlopeStart' => .085
+			, 'rockSlopeEnd' => .20
+			, 'snowline' => 1219.2
+			, 'treeline' => -121.92
 		]
 		, 'high-desert-steppe' => [
-			'grassColor'=>'#777b62', 'soilColor'=>'#a38465', 'sandColor'=>'#bdad8e',
-			'rockColor'=>'#796c62', 'rockBandColor'=>'#9b8974', 'rockSlopeStart'=>.023, 'rockSlopeEnd'=>.08,
+			'grassColor' => '#777b62'
+			, 'soilColor' => '#a38465'
+			, 'sandColor' => '#bdad8e'
+			, 'rockColor' => '#796c62'
+			, 'rockBandColor' => '#9b8974'
+			, 'rockSlopeStart' => .023
+			, 'rockSlopeEnd' => .08
 		]
 		, 'alaska-range' => [
-			'grassColor'=>'#77714e', 'meadowColor'=>'#514f3e', 'sandColor'=>'#888783',
-			'talusColor'=>'#737778', 'rockColor'=>'#525b65', 'rockBandColor'=>'#83888b',
-			'snowColor'=>'#d3dce0', 'snowline'=>1280.16, 'snowTransition'=>152.4,
-			'rockSlopeStart'=>.11, 'rockSlopeEnd'=>.27, 'snowSlopeStart'=>.12, 'snowSlopeEnd'=>.37,
+			'grassColor' => '#77714e'
+			, 'meadowColor' => '#514f3e'
+			, 'sandColor' => '#888783'
+			, 'talusColor' => '#737778'
+			, 'rockColor' => '#525b65'
+			, 'rockBandColor' => '#83888b'
+			, 'snowColor' => '#d3dce0'
+			, 'snowline' => 1280.16
+			, 'snowTransition' => 152.4
+			, 'rockSlopeStart' => .11
+			, 'rockSlopeEnd' => .27
+			, 'snowSlopeStart' => .12
+			, 'snowSlopeEnd' => .37
 		]
 		, 'chalk-headlands' => [
-			'grassColor'=>'#526742', 'meadowColor'=>'#728258', 'rockColor'=>'#bfc1b8',
-			'rockBandColor'=>'#818582', 'soilColor'=>'#7b837e', 'sandColor'=>'#a29988',
-			'rockSlopeStart'=>.065, 'rockSlopeEnd'=>.18, 'beachHeight'=>2.4384, 'beachWidth'=>2.1336,
+			'grassColor' => '#526742'
+			, 'meadowColor' => '#728258'
+			, 'rockColor' => '#bfc1b8'
+			, 'rockBandColor' => '#818582'
+			, 'soilColor' => '#7b837e'
+			, 'sandColor' => '#a29988'
+			, 'rockSlopeStart' => .065
+			, 'rockSlopeEnd' => .18
+			, 'beachHeight' => 2.4384
+			, 'beachWidth' => 2.1336
 		]
 		// Grey limestone streaked dark by rain, with forest clinging to every ledge it can hold.
 		, 'karst-bay' => [
@@ -339,13 +387,25 @@ final class TerrainAppearance
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
-		'bandSpacing' => [5.0, 1000.0], 'bandContrast' => [0.0, 1.0], 'bandSharpness' => [1.0, 8.0],
-		'rockSlopeStart' => [0.0, 1.0], 'rockSlopeEnd' => [0.0, 1.0], 'beachHeight' => [-100.0, 500.0],
-		'beachWidth' => [.5, 500.0], 'snowline' => [-1000.0, 5000.0], 'snowTransition' => [1.0, 1000.0],
-		'alpineStart' => [-2000.0, 0.0], 'alpineEnd' => [-2000.0, 0.0], 'snowSlopeStart' => [0.0, 1.0],
-		'snowSlopeEnd' => [0.0, 1.0], 'macroVariation' => [0.0, 3.0], 'treeline' => [-2000.0, 0.0],
-		'tundraStart' => [-2000.0, 0.0], 'talusAmount' => [0.0, 1.0], 'stainAmount' => [0.0, 1.0],
-		'lichenAmount' => [0.0, 1.0],
+		'bandSpacing' => [5.0, 1000.0]
+		, 'bandContrast' => [0.0, 1.0]
+		, 'bandSharpness' => [1.0, 8.0]
+		, 'rockSlopeStart' => [0.0, 1.0]
+		, 'rockSlopeEnd' => [0.0, 1.0]
+		, 'beachHeight' => [-100.0, 500.0]
+		, 'beachWidth' => [.5, 500.0]
+		, 'snowline' => [-1000.0, 5000.0]
+		, 'snowTransition' => [1.0, 1000.0]
+		, 'alpineStart' => [-2000.0, 0.0]
+		, 'alpineEnd' => [-2000.0, 0.0]
+		, 'snowSlopeStart' => [0.0, 1.0]
+		, 'snowSlopeEnd' => [0.0, 1.0]
+		, 'macroVariation' => [0.0, 3.0]
+		, 'treeline' => [-2000.0, 0.0]
+		, 'tundraStart' => [-2000.0, 0.0]
+		, 'talusAmount' => [0.0, 1.0]
+		, 'stainAmount' => [0.0, 1.0]
+		, 'lichenAmount' => [0.0, 1.0]
 	];
 	/**
 	 * Start and end of each blend, with the smallest gap between them. An end that is too low moves up to the start
@@ -353,27 +413,50 @@ final class TerrainAppearance
 	 * top and the start moves down. A difference that falls short of the gap by less than SLACK counts as the gap.
 	 */
 	public const ORDER = [
-		['rockSlopeStart', 'rockSlopeEnd', .01], ['snowSlopeStart', 'snowSlopeEnd', .01],
-		['alpineStart', 'alpineEnd', 1.0], ['treeline', 'tundraStart', 1.0],
+		['rockSlopeStart', 'rockSlopeEnd', .01]
+		, ['snowSlopeStart', 'snowSlopeEnd', .01]
+		, ['alpineStart', 'alpineEnd', 1.0], ['treeline', 'tundraStart', 1.0]
 	];
 	/** Shortfall from an ORDER gap that floating-point subtraction can leave between values one gap apart. */
 	private const SLACK = 1e-9;
 	/** Settings in panel order, grouped by what they control. */
 	public const GROUPS = [
 		'colors' => [
-			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
-			'canyonRustColor', 'canyonShaleColor', 'canyonSandstoneColor', 'canyonCapColor',
-			'forestColor', 'meadowColor', 'tundraColor', 'graniteColor', 'stainColor', 'talusColor',
-		],
-
-		'banding' => ['bandSpacing', 'bandContrast', 'bandSharpness'],
-
-		'blending' => [
-			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'snowline', 'snowTransition',
-			'alpineStart', 'alpineEnd', 'snowSlopeStart', 'snowSlopeEnd', 'macroVariation', 'treeline', 'tundraStart',
-		],
-
-		'rock' => ['talusAmount', 'stainAmount', 'lichenAmount'],
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'canyonRustColor'
+			, 'canyonShaleColor'
+			, 'canyonSandstoneColor'
+			, 'canyonCapColor'
+			, 'forestColor'
+			, 'meadowColor'
+			, 'tundraColor'
+			, 'graniteColor'
+			, 'stainColor'
+			, 'talusColor'
+		]
+		, 'banding' => ['bandSpacing', 'bandContrast', 'bandSharpness']
+		, 'blending' => [
+			'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'snowline'
+			, 'snowTransition'
+			, 'alpineStart'
+			, 'alpineEnd'
+			, 'snowSlopeStart'
+			, 'snowSlopeEnd'
+			, 'macroVariation'
+			, 'treeline'
+			, 'tundraStart'
+		]
+		, 'rock' => ['talusAmount', 'stainAmount', 'lichenAmount']
 	];
 	/**
 	 * The settings each terrain style reads, in GROUPS order, so a panel can show only those. The keys are what style()
@@ -486,25 +569,70 @@ final class TerrainAppearance
 			, 'macroVariation'
 		]
 		, 'rolling-prairie' => [
-			'grassColor','rockColor','rockBandColor','sandColor','roadColor','meadowColor','rockSlopeStart','rockSlopeEnd',
+			'grassColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'roadColor'
+			, 'meadowColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
 		]
 		, 'river-valley' => [
-			'grassColor','soilColor','rockColor','sandColor','roadColor','meadowColor','beachHeight','beachWidth',
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'sandColor'
+			, 'roadColor'
+			, 'meadowColor'
+			, 'beachHeight'
+			, 'beachWidth'
 		]
 		, 'wooded-foothills' => [
-			'grassColor','soilColor','rockColor','rockBandColor','roadColor','forestColor','meadowColor',
-			'rockSlopeStart','rockSlopeEnd','snowline','treeline',
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'roadColor'
+			, 'forestColor'
+			, 'meadowColor'
+			, 'rockSlopeStart','rockSlopeEnd','snowline','treeline'
 		]
 		, 'high-desert-steppe' => [
-			'grassColor','soilColor','rockColor','rockBandColor','sandColor','roadColor','rockSlopeStart','rockSlopeEnd',
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'roadColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
 		]
 		, 'alaska-range' => [
-			'grassColor','rockColor','rockBandColor','sandColor','snowColor','roadColor','meadowColor','talusColor',
-			'rockSlopeStart','rockSlopeEnd','snowline','snowTransition','snowSlopeStart','snowSlopeEnd',
+			'grassColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'meadowColor'
+			, 'talusColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'snowline'
+			, 'snowTransition'
+			, 'snowSlopeStart'
+			, 'snowSlopeEnd'
 		]
 		, 'chalk-headlands' => [
-			'grassColor','soilColor','rockColor','rockBandColor','sandColor','roadColor','meadowColor',
-			'rockSlopeStart','rockSlopeEnd','beachHeight','beachWidth',
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'roadColor'
+			, 'meadowColor'
+			, 'rockSlopeStart','rockSlopeEnd','beachHeight','beachWidth'
 		]
 		, 'karst-bay' => [
 			'grassColor'
@@ -633,12 +761,24 @@ final class TerrainAppearance
 			, 'treeline'
 		]
 		, 'salt-pans' => [
-			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
-			'rockSlopeStart', 'rockSlopeEnd',
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'rockSlopeStart', 'rockSlopeEnd'
 		]
 		, 'cinder-highlands' => [
-			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
-			'rockSlopeStart', 'rockSlopeEnd',
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'rockSlopeStart', 'rockSlopeEnd'
 		]
 		, 'heather-moor' => [
 			'grassColor'
@@ -701,6 +841,7 @@ final class TerrainAppearance
 		{
 			// In binary, .21 - .2 is a little less than .01, so values one slider step apart need the slack.
 			if($settings[$end] - $settings[$start] >= $gap - self::SLACK) continue;
+
 			$top = self::RANGES[$end][1];
 
 			// Rounding puts a pushed end on the next step, where .05 + .01 alone would give 0.060000000000000005.
@@ -806,9 +947,9 @@ final class TerrainAppearance
 		$reference = self::bedAverage(self::canyonBeds(self::DEFAULTS));
 
 		return $beds + [
-			'dust' => self::shade($average, $reference, self::DUST),
-			'distant' => self::shade($average, $reference, self::DISTANT),
-			'bounce' => self::shade($average, $reference, self::BOUNCE),
+			'dust' => self::shade($average, $reference, self::DUST)
+			, 'distant' => self::shade($average, $reference, self::DISTANT)
+			, 'bounce' => self::shade($average, $reference, self::BOUNCE)
 		];
 	}
 
@@ -823,11 +964,12 @@ final class TerrainAppearance
 		$cap = self::decode($settings['canyonCapColor']);
 
 		return [
-			'rust' => $rust, 'shale' => self::decode($settings['canyonShaleColor']),
-			'ledge' => self::shade($cap, self::decode(self::DEFAULTS['canyonCapColor']), self::LEDGE),
-			'sandstone' => self::decode($settings['canyonSandstoneColor']),
-			'redBeds' => self::shade($rust, self::decode(self::DEFAULTS['canyonRustColor']), self::RED_BEDS),
-			'cap' => $cap,
+			'rust' => $rust
+			, 'shale' => self::decode($settings['canyonShaleColor'])
+			, 'ledge' => self::shade($cap, self::decode(self::DEFAULTS['canyonCapColor']), self::LEDGE)
+			, 'sandstone' => self::decode($settings['canyonSandstoneColor'])
+			, 'redBeds' => self::shade($rust, self::decode(self::DEFAULTS['canyonRustColor']), self::RED_BEDS)
+			, 'cap' => $cap
 		];
 	}
 
@@ -841,8 +983,14 @@ final class TerrainAppearance
 		$c = CanyonBeds::CONTACTS;
 		// The sandstone crosses the section twice: below the red beds and again above them.
 		$thickness = [
-			$c[1] - $c[0], $c[2] - $c[1], $c[3] - $c[2], $c[4] - $c[3] + $c[6] - $c[5], $c[5] - $c[4], $c[7] - $c[6],
+			$c[1] - $c[0]
+			, $c[2] - $c[1]
+			, $c[3] - $c[2]
+			, $c[4] - $c[3] + $c[6] - $c[5]
+			, $c[5] - $c[4]
+			, $c[7] - $c[6]
 		];
+
 		$average = [0.0, 0.0, 0.0];
 
 		foreach(array_values($beds) as $i => $color)
@@ -862,8 +1010,9 @@ final class TerrainAppearance
 	private static function shade(array $source, array $default, array $shade): array
 	{
 		return [
-			min(1.0, $source[0] * $shade[0] / $default[0]), min(1.0, $source[1] * $shade[1] / $default[1]),
-			min(1.0, $source[2] * $shade[2] / $default[2]),
+			min(1.0, $source[0] * $shade[0] / $default[0])
+			, min(1.0, $source[1] * $shade[1] / $default[1])
+			, min(1.0, $source[2] * $shade[2] / $default[2])
 		];
 	}
 
@@ -885,8 +1034,13 @@ final class TerrainAppearance
 		$s = $settings;
 		$uniforms['uBanding'] = [2 * M_PI / $s['bandSpacing'], $s['bandContrast'], $s['bandSharpness']];
 		$uniforms['uSlopeBlend'] = [$s['rockSlopeStart'], $s['rockSlopeEnd'], $s['snowSlopeStart'], $s['snowSlopeEnd']];
-		$uniforms['uHeightBlend'] = [$s['beachHeight'], $s['beachHeight'] + $s['beachWidth'], $s['alpineStart'],
-			$s['alpineEnd']];
+		$uniforms['uHeightBlend'] = [
+			$s['beachHeight']
+			, $s['beachHeight'] + $s['beachWidth']
+			, $s['alpineStart']
+			, $s['alpineEnd']
+		];
+
 		$uniforms['uSnowline'] = [$s['snowline'], $s['snowTransition']];
 		$uniforms['uMacroVariation'] = [$s['macroVariation']];
 
@@ -909,12 +1063,18 @@ final class TerrainAppearance
 	 */
 	public function uniforms(): array { return $this->uniforms; }
 
-	/** Bind the five final paint inks in terrain material-ID order. */
+	/**
+	 * Bind the five final paint inks in terrain material-ID order.
+	 *
+	 * @param Program $program Active GPU program receiving the bindings.
+	 * @return void No value.
+	 */
 	public function bindPaint(Program $program): void
 	{
 		$colors = [];
-		foreach(SurfaceLayers::INKS as $key) array_push($colors,...self::linear($this->settings[$key]));
-		glUniform3fv($program->location('uPaintColor[0]'),5,$colors);
+
+		foreach(SurfaceLayers::INKS as $key) array_push($colors, ...self::linear($this->settings[$key]));
+		glUniform3fv($program->location('uPaintColor[0]'), 5, $colors);
 	}
 
 	/**

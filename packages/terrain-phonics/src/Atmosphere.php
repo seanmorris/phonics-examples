@@ -50,6 +50,7 @@ final class Atmosphere
 		$this->stars = new Starfield;
 		$layers = $options['layers'] ?? [];
 		unset($options['layers']);
+
 		$this->parameters = array_replace([
 			'planetRadius' => 6371000.0
 			, 'atmosphereHeight' => 80000.0
@@ -117,14 +118,22 @@ final class Atmosphere
 		$this->setLayers($layers);
 	}
 
-	/** Replace the authored aerosol shells together. Only a change to extinction invalidates sunlight. */
+	/**
+	 * Replace the authored aerosol shells together. Only a change to extinction invalidates sunlight.
+	 *
+	 * @param array $rows Number of grid rows to cover.
+	 * @return void No value.
+	 */
 	public function setLayers(array $rows): void
 	{
 		$next = new AtmosphereLayers($rows, $this->parameters['atmosphereHeight']);
-		foreach($next->rows as $layer) {
+
+		foreach($next->rows as $layer)
+		{
 			if($layer['bottom'] <= -$this->parameters['planetRadius'])
-				throw new \InvalidArgumentException('Layer base must be above the planet center.');
+			throw new \InvalidArgumentException('Layer base must be above the planet center.');
 		}
+
 		if(!isset($this->air) || $this->air->bands !== $next->bands) $this->lut = null;
 
 		if(!isset($this->air) || $this->air->bands !== $next->bands || $this->air->colors !== $next->colors)
@@ -133,6 +142,11 @@ final class Atmosphere
 		$this->air = $next;
 	}
 
+	/**
+	 * Read the atmospheric layer definitions, including disabled layers.
+	 *
+	 * @return array Ordered authored layer records.
+	 */
 	public function layers(): array { return $this->air->rows; }
 
 	/**
@@ -281,10 +295,17 @@ final class Atmosphere
 		$this->parameters['exposure'] = $exposure;
 	}
 
-	/** Set the artistic night illumination without rebuilding solar scattering or extinction textures. */
+	/**
+	 * Set the artistic night illumination without rebuilding solar scattering or extinction textures.
+	 *
+	 * @param float $strength Requested night illumination strength.
+	 * @return void No value.
+	 */
 	public function setNightGlow(float $strength): void
 	{
-		if(!is_finite($strength) || $strength < 0) throw new \InvalidArgumentException('Night glow must be nonnegative');
+		if(!is_finite($strength) || $strength < 0)
+		throw new \InvalidArgumentException('Night glow must be nonnegative');
+
 		$this->parameters['nightGlow'] = $strength;
 	}
 
@@ -308,18 +329,31 @@ final class Atmosphere
 		];
 	}
 
+	/**
+	 * Evaluate the night sky at the current solar elevation.
+	 *
+	 * @return float Visibility multiplier for the star field.
+	 */
 	public function starVisibility(): float
 	{
 		return $this->stars->visibility($this->parameters['sunDirection'][1]);
 	}
 
-	/** Repaint the last frame of a meteor as well as each visible animated frame. */
+	/**
+	 * Repaint the last frame of a meteor as well as each visible animated frame.
+	 *
+	 * @param float $time Simulation time in seconds.
+	 * @param float $previous Simulation time of the previous frame in seconds.
+	 * @return bool Whether the sky can change between these two frames.
+	 */
 	public function starsMoving(float $time, float $previous): bool
 	{
-		if($time===$previous || ($this->stars->twinkle<=0. && $this->stars->perMinute<=0.)) return false;
-		if($this->stars->twinkle>0. && $this->starVisibility()>0.) return true;
-		return $this->stars->perMinute>0. && $this->nightVisibility()>0.
-			&& ($this->stars->meteor($time)!==null || $this->stars->meteor($previous)!==null);
+		if($time === $previous || ($this->stars->twinkle <= 0. && $this->stars->perMinute <= 0.)) return false;
+
+		if($this->stars->twinkle > 0. && $this->starVisibility() > 0.) return true;
+
+		return $this->stars->perMinute > 0. && $this->nightVisibility() > 0.
+			&& ($this->stars->meteor($time) !== null || $this->stars->meteor($previous) !== null);
 	}
 
 	/**
@@ -472,23 +506,42 @@ final class Atmosphere
 	public function transmittance(float $altitude, float $cosZenith, int $samples = 48): array
 	{
 		$airTransmission = 1.;
-		return $this->traceTransmission($altitude,$cosZenith,$samples,$airTransmission);
+
+		return $this->traceTransmission($altitude, $cosZenith, $samples, $airTransmission);
 	}
 
-	private function traceTransmission(float $altitude, float $cosZenith, int $samples, float &$airTransmission,
-		bool $layers = true): array
-	{
+	/**
+	 * Integrate the light reaching the eye from one direction through the atmosphere.
+	 *
+	 * @param float $altitude Height above sea level in meters.
+	 * @param float $cosZenith Cosine of the ray angle from local vertical.
+	 * @param int $samples Number of ray integration steps.
+	 * @param float $airTransmission Receives the transmittance of the authored aerosol layers.
+	 * @param bool $layers Include authored layer extinction in the returned RGB.
+	 * @return array RGB transmission along the ray, zero where the planet blocks it.
+	 */
+	private function traceTransmission(
+		float $altitude
+		, float $cosZenith
+		, int $samples
+		, float &$airTransmission
+		, bool $layers = true
+	): array {
 		[$altitude,$cosZenith] = $this->coordinates($altitude, $cosZenith);
 		$samples = max(8, min(256, $samples));
-		[$distance,$ground] = $this->boundary(max(0.,$altitude), $cosZenith);
+		[$distance,$ground] = $this->boundary(max(0., $altitude), $cosZenith);
 
 		$airDepth = 0.;
-		if($this->air->bands) {
-			$spans = $this->air->spans($this->parameters['planetRadius'],$altitude,$cosZenith);
-			[$airDistance] = $this->boundary($altitude,$cosZenith);
-			$airDepth = $this->air->opticalDepth($spans,$airDistance);
+
+		if($this->air->bands)
+		{
+			$spans = $this->air->spans($this->parameters['planetRadius'], $altitude, $cosZenith);
+			[$airDistance] = $this->boundary($altitude, $cosZenith);
+			$airDepth = $this->air->opticalDepth($spans, $airDistance);
 		}
+
 		$airTransmission = exp(-$airDepth);
+
 		if($ground) return [0.0,0.0,0.0];
 
 		$dr = $dm = $do = 0.0;
@@ -496,7 +549,7 @@ final class Atmosphere
 
 		for($i = 0; $i < $samples; $i++)
 		{
-			$h = max(0.,$this->rayAltitude(max(0.,$altitude), $cosZenith, ($i + .5) * $step));
+			$h = max(0., $this->rayAltitude(max(0., $altitude), $cosZenith, ($i + .5) * $step));
 			$dr += exp(-$h / $this->parameters['rayleighHeight']) * $step;
 			$dm += exp(-$h / $this->parameters['mieHeight']) * $step;
 			$do += max(0.0, 1 - abs($h - 25000) / 15000) * $step;
@@ -517,7 +570,8 @@ final class Atmosphere
 	 * @param int $samples Optical-depth samples per texel, between eight and 256.
 	 * @return array Width/height, RGB float data, RGBA32F little-endian bytes, RGBA8 bytes, and generation.
 	 * RGB is clear air only. The shaders add the authored layers exactly (terrainAirDepth in atmosphere.glsl): the
-	 * texture's 16 or so altitude rows sit hundreds of meters apart near the ground, too coarse for sub-kilometer layers.
+	 * texture's 16 or so altitude rows sit hundreds of meters apart near the ground, too coarse for sub-
+	 * kilometer layers.
 	 * Alpha still carries transmission through the authored layers.
 	 * Texel X encodes sign(mu)*sqrt(abs(mu)); texel Y encodes sqrt(altitude/atmosphereHeight).
 	 */
@@ -592,29 +646,44 @@ final class Atmosphere
 		$radius = $this->parameters['planetRadius'] + $altitude;
 
 		// Split the molecular quadrature at every shell crossing. Even a thin layer gets its own segment.
-		$spans = $this->air->spans($this->parameters['planetRadius'],$altitude,$mu);
+		$spans = $this->air->spans($this->parameters['planetRadius'], $altitude, $mu);
 		$ends = [];
+
 		for($i = 1; $i <= $samples; ++$i) $ends[] = $i * $step;
+
 		foreach($spans as $span)
-			foreach(array_slice($span,0,4) as $crossing) if($crossing > 0 && $crossing < $distance) $ends[] = $crossing;
-		if($spans) sort($ends,SORT_NUMERIC);
+		foreach(array_slice($span, 0, 4) as $crossing)
+		if($crossing > 0 && $crossing < $distance)
+		$ends[] = $crossing;
+
+		if($spans) sort($ends, SORT_NUMERIC);
+
 		$start = $airDepth = 0.;
-		foreach($ends as $end) {
+
+		foreach($ends as $end)
+		{
 			$step = $end - $start;
+
 			if($step <= 0) continue;
+
 			$d = $start + .5 * $step;
 			$depth = 0.;
 			$scatter = [0.,0.,0.];
-			foreach($spans as $j => [$enter,$exit,$innerEnter,$innerExit]) {
+
+			foreach($spans as $j => [$enter,$exit,$innerEnter,$innerExit])
+			{
 				if($d < $enter || $d >= $exit || ($d >= $innerEnter && $d < $innerExit)) continue;
-				$tau = $this->air->bands[$j][2] * AtmosphereLayers::column($spans[$j]['profile'],$start,$end);
+
+				$tau = $this->air->bands[$j][2] * AtmosphereLayers::column($spans[$j]['profile'], $start, $end);
 				$depth += $tau;
-				foreach($this->air->colors[$j] as $c=>$tint) $scatter[$c] += $tau * $tint;
+
+				foreach($this->air->colors[$j] as $c => $tint) $scatter[$c] += $tau * $tint;
 			}
+
 			$start = $end;
 			$h = $this->rayAltitude($altitude, $mu, $d);
-			$r = exp(-max(0.,$h) / $this->parameters['rayleighHeight']) * $step;
-			$m = exp(-max(0.,$h) / $this->parameters['mieHeight']) * $step;
+			$r = exp(-max(0., $h) / $this->parameters['rayleighHeight']) * $step;
+			$m = exp(-max(0., $h) / $this->parameters['mieHeight']) * $step;
 			$sunMu = ($d * $ray[0] * $sun[0] + ($radius + $d * $ray[1]) * $sun[1]
 				+ $d * $ray[2] * $sun[2]
 			) / ($this->parameters['planetRadius'] + $h);
@@ -684,8 +753,10 @@ final class Atmosphere
 
 	/**
 	 * Convert molecular/aerosol optical lengths into channel transmittances.
+	 *
 	 * @param float $rayleigh Integrated molecular density in meters.
 	 * @param float $mie Integrated aerosol density in meters.
+	 * @param float $airDepth Integrated extinction from the authored atmosphere layers.
 	 * @return array Three Beer-Lambert transmittances.
 	 */
 	private function attenuation(float $rayleigh, float $mie, float $airDepth = 0.): array
@@ -694,7 +765,8 @@ final class Atmosphere
 
 		$result = [];
 
-		foreach($this->parameters['rayleigh'] as $beta) $result[] = exp(-$beta * $rayleigh - $extinction * $mie - $airDepth);
+		foreach($this->parameters['rayleigh'] as $beta)
+		$result[] = exp(-$beta * $rayleigh - $extinction * $mie - $airDepth);
 
 		return $result;
 	}
@@ -708,6 +780,7 @@ final class Atmosphere
 	private function boundary(float $altitude, float $mu): array
 	{
 		if($altitude <= 0 && $mu < 0) return [0.,true];
+
 		$planet = $this->parameters['planetRadius'];
 		$radius = $planet + $altitude;
 		$groundDelta = $altitude * (2 * $planet + $altitude);
@@ -751,12 +824,18 @@ final class Atmosphere
 		return [$this->samplingAltitude($altitude),max(-1.0, min(1.0, $mu))];
 	}
 
-	/** Clear air uses sea-level density in depressions. Active aerosol shells use true scene height. */
+	/**
+	 * Clear air uses sea-level density in depressions. Active aerosol shells use true scene height.
+	 *
+	 * @param float $altitude Height above sea level in meters.
+	 * @return float Elevation to use for the transmission lookup in meters.
+	 */
 	public function samplingAltitude(float $altitude): float
 	{
 		$ceiling = $this->parameters['atmosphereHeight'];
-		$floor = $this->air->bands ? -min($ceiling,$this->parameters['planetRadius']*(1.-1e-6)) : 0.;
-		return max($floor,min($ceiling,$altitude));
+		$floor = $this->air->bands ? -min($ceiling, $this->parameters['planetRadius'] * (1. - 1e-6)) : 0.;
+
+		return max($floor, min($ceiling, $altitude));
 	}
 
 	/**
