@@ -1235,7 +1235,7 @@ export function activate({module, canvas, session, services})
 			}
 
 			if(state.airPatrol?.seeker?.phase === 'return') status.textContent = 'Seeker locked onto the F5!';
-			else if(state.airPatrol?.repelled && state.airPatrol.phase === 'departure') status.textContent = 'Patrol beaten!';
+			else if(state.airPatrol?.repelled && ['departure','glide'].includes(state.airPatrol.phase)) status.textContent = 'Patrol beaten!';
 			else if(state.car?.roadHold > 0)
 			{
 				const reason = state.car.floodedHold ? 'Engine flooded' : 'Back on the road';

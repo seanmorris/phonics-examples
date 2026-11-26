@@ -10,7 +10,7 @@ final class SpeedSeeker
 {
 	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 12.;
 	private const LOOM_ABOVE_ROOF = 2.12;
-	private const RETURN_RADIUS = 50., BOOST_RAMP = .44, BOOST_CRUISE = .35;
+	private const RETURN_RADIUS = 50., BOOST_RAMP = .24, BOOST_CRUISE = .18;
 	/** An eligible coast tracks this gap; its last value marks the boosted return in recorded takes. */
 	private ?float $rearPassGap=null;
 	private string $phase = 'mounted';
@@ -30,6 +30,7 @@ final class SpeedSeeker
 		$drifting=abs($car['drift'])>=self::SLIP && ($car['motion'] ?? 'driving')==='driving';
 		if($this->phase==='reload') {
 			if($this->clock>=FlightTrails::LODGED_LIFE) $this->mount=null;
+			if($patrol==='glide' || $patrol==='slide') { $this->clock=min($this->clock,self::RELOAD_SECONDS); return null; }
 			if($this->clock>=self::RELOAD_SECONDS) {
 				$this->phase='mounted'; $this->clock=0.; $this->impact=null;
 				$this->slot=1-$this->slot;
@@ -78,7 +79,7 @@ final class SpeedSeeker
 					$this->phase='return'; $this->clock=0.;
 					$this->start=[$this->pose['x']-$plane['x'],$this->pose['y']-$plane['y'],$this->pose['z']-$plane['z'],
 						$this->pose['yaw'],$this->pose['pitch'],$this->pose['roll'],
-						$this->velocity[0]-$plane['vx'],$this->velocity[1]-$plane['vy'],$this->velocity[2]-$plane['vz'],self::BOOST_RAMP];
+						$this->velocity[0]-$plane['vx'],$this->velocity[1]-$plane['vy'],$this->velocity[2]-$plane['vz'],self::BOOST_RAMP,self::BOOST_CRUISE];
 				}
 				$this->rearPassGap=$gap;
 			}
@@ -155,7 +156,7 @@ final class SpeedSeeker
 		$eased=count($this->start)>=9;
 		if($eased) {
 			$ramp=$this->start[9] ?? .20; // Earlier recorded returns built speed in 200 ms.
-			$duration=$ramp+self::BOOST_CRUISE;
+			$duration=$ramp+($this->start[10] ?? .35);
 			$t=min(1.,($this->clock+1e-9)/$duration);
 			// Integrate a smoothstep speed ramp, then keep the gained speed through the end of the animation.
 			$time=$t*$duration;

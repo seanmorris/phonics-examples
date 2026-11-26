@@ -225,7 +225,8 @@ final class DemoTape
 			$dt=$f['time']-$last['time'];
 			if($dt>0. && $dt<=.25 && $f['world']===$last['world'] && $f['mode']==='car' && $last['mode']==='car')
 				$patrol->stepSmoke($dt,$last['events']['airPatrol']['seeker'] ?? null,$f['events']['airPatrol']['seeker'] ?? null,$f['vehicle'],$last['vehicle'],
-					$last['events']['airPatrol']['pose'] ?? null,$f['events']['airPatrol']['pose'] ?? null);
+					$last['events']['airPatrol']['pose'] ?? null,$f['events']['airPatrol']['pose'] ?? null,
+					($f['events']['airPatrol']['phase'] ?? '')==='glide' ? $f['events']['airPatrol']['flight'][0] : null);
 			else $patrol->smoke=null;
 			if($t===$time) break;
 			$last=$f;

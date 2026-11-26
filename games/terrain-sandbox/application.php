@@ -33,6 +33,7 @@ use TerrainSandbox\Jet;
 use TerrainSandbox\VehicleModel;
 use TerrainSandbox\TracerBatch;
 use TerrainSandbox\TrailRenderer;
+use TerrainSandbox\FlightLights;
 use TerrainSandbox\DisplayUnits;
 use TerrainSandbox\Session;
 use TerrainSandbox\SeekerMount;
@@ -63,6 +64,7 @@ $session->prepareMaterial = $scene->prepareMaterial(...);
 $models = [];
 $tracers = null;
 $trailRenderer = null;
+$flightLights = null; $lightSources=[];
 $beacon = $arrow = null;
 $arrowBearing = null;
 $visibleSites = [];
@@ -294,7 +296,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 $shadow = null;
 $grass = null;
 $traffic=[];
-$drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use (&$traffic, $gates, $curveSigns, $journeySigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites, &$grass): void {
+$drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use (&$traffic, &$lightSources, $gates, $curveSigns, $journeySigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites, &$grass): void {
 	// Grass multiplies the ground the terrain pass drew, so it comes first: signs, shadows and vehicles then cover it.
 	$grassQuality = (int)round($session->settings['grass']);
 	if($grassQuality > 0 && array_filter($styles = $session->grassStyles()))
@@ -316,6 +318,7 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		($shadow ??= new GroundShadow)->draw($vehiclePose, $session->landscape, $viewCamera, $width, $height, $scene);
 	if($session->mode !== 'fly' && !($session->mode === 'jet' && $session->jetView === 'cockpit'))
 	{
+		if($session->mode==='jet') $lightSources[]=[$vehiclePose,true];
 		$name = match($session->mode) { 'car' => 'testarossa', 'jet' => 'f5', 'craft' => 'jetski' };
 		$model = $models[$name] ??= new VehicleModel(__DIR__ . '/assets/' . $name . '/mesh.bin.gz');
 		$model->draw($vehiclePose,
@@ -328,12 +331,14 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		if($patrol !== null) {
 			$model = $models['f5'] ??= new VehicleModel(__DIR__.'/assets/f5/mesh.bin.gz');
 			$traffic[]=['plane',$patrol['x'],$patrol['z']];
+			$lightSources[]=[$patrol,true];
 			$model->draw($patrol+['power'=>.65],$viewCamera,$session->atmosphere,$session->water,$width,$height);
 			foreach(SpeedSeeker::mountedSlots($seeker) as $slot) $projectiles[]=Jet::projectileMount($patrol,$slot);
 		}
 		if(isset($seeker['mount']) && $session->airPatrol->smoke?->showsLodgedSeeker()) $projectiles[]=SeekerMount::model($seeker['mount'],$vehiclePose);
 		elseif(isset($seeker['pose'])) {
 			$projectiles[]=$seeker['pose'];
+			$lightSources[]=[$seeker['pose'],false];
 			$traffic[]=['missile',$seeker['pose']['x'],$seeker['pose']['z']];
 		}
 	}
@@ -368,6 +373,7 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 		$traffic[]=['missile',$position[0],$position[2]];
 		$projectiles[] = ['x'=>$position[0],'y'=>$position[1],'z'=>$position[2],'yaw'=>atan2($dir[0],$dir[2]),
 			'pitch'=>asin(max(-1,min(1,$dir[1]))),'roll'=>$roll];
+		$lightSources[]=[$projectiles[array_key_last($projectiles)],false];
 	}
 	if($projectiles)
 	{
@@ -385,7 +391,7 @@ $liveScene = $scene;
 $playback = null;
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$liveSession, $liveScene, &$playback, &$hiddenGates, $drawOpaque, &$traffic, $gates, $curveSigns, $journeySigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
+		$liveSession, $liveScene, &$playback, &$hiddenGates, $drawOpaque, &$traffic, &$lightSources, &$flightLights, $gates, $curveSigns, $journeySigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
 		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound,
 		$pauseMenu, &$displayTerrain, $journeyAtlas, $atlasResult
@@ -483,6 +489,7 @@ $engine->start(
 			usort($visibleSites, static fn($a,$b) => (($b['x']-$a['x'])*$forward[0]
 				+ ($b['y']-$a['y'])*$forward[1] + ($b['z']-$a['z'])*$forward[2]) <=> 0.);
 		}
+		if(!$dirty && $lightSources && FlightLights::beaconPulse($session->time)!==FlightLights::beaconPulse($lastRenderedTime)) $dirty=true;
 		if(($hadVisibleSmoke || $visibleSites) && $session->time !== $lastRenderedTime) $dirty = true;
 		$signTerrain = $sample ? $playback->terrain : $displayTerrain;
 		$dirty = $curveSigns->update($signTerrain) || $dirty;
@@ -528,7 +535,7 @@ $engine->start(
 			}
 			if($journeyAtlas->needsChart) $journeyAtlas->capture($scene,$session,$width,$height,$atlasResult);
 			$engine->device->begin([.15,.25,.35,1]);
-			$traffic=[];
+			$traffic=[]; $lightSources=[];
 			$scene->render($viewCamera, $width, $height, $session->time,
 				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !$journeySigns->count && !($events['balloons'] ?? $session->balloons->targets())
 					&& !($events['beachBalls'] ?? $session->balloons->beachBalls->states()) ? null
@@ -541,6 +548,7 @@ $engine->start(
 				($trailRenderer ??= new TrailRenderer)->draw($session->airPatrol->smoke,$sample ? 1. : $shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility'],closeExhaust:true);
 			foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->smoke($site,$viewCamera,$width,$height,$session->time);
+			if($lightSources) ($flightLights ??= new FlightLights)->draw($lightSources,$viewCamera,$width,$height,$session->time,$session->atmosphere->uniforms()['nightVisibility']);
 			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$arrowBearing,$viewCamera,$width,$height);
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
@@ -621,13 +629,14 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, $journeySigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$grass, $pauseMenu, $journeyAtlas): void {
+	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, $journeySigns, &$models, &$tracers, &$trailRenderer, &$flightLights, &$beacon, &$arrow, &$shadow, &$grass, $pauseMenu, $journeyAtlas): void {
 		$journeyAtlas->cancel();
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');
 		foreach($models as $model) $model->close();
 		$tracers?->close(); $tracers = null;
 		$trailRenderer?->close(); $trailRenderer = null;
+		$flightLights?->close(); $flightLights = null;
 		$shadow?->close();
 		$grass?->close();
 		$beacon?->close(); $arrow?->close();
@@ -638,11 +647,12 @@ $engine->start(
 		$playback?->close();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $session, &$playback, $gates, $curveSigns, $journeySigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$grass, &$dirty, $pauseMenu): void {
+	static function() use ($scene, $session, &$playback, $gates, $curveSigns, $journeySigns, &$models, &$tracers, &$trailRenderer, &$flightLights, &$beacon, &$arrow, &$shadow, &$grass, &$dirty, $pauseMenu): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
 		$trailRenderer?->close(); $trailRenderer = null;
+		$flightLights?->close(); $flightLights = null;
 		// The lost context took the shadow's program and grid with it; the next frame that needs it builds them again.
 		$shadow?->close();
 		$shadow = null;

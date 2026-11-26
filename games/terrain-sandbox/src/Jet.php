@@ -174,6 +174,60 @@ final class Jet
 		return true;
 	}
 
+	public function cutEngine(): void { $this->pose['power']=0.; }
+
+	/** Carry the hit aircraft's velocity through a wings-level glide, flare and gear-up rollout. */
+	public function landUnpowered(float $dt,Landscape $land,float $water,bool $sliding): bool
+	{
+		$p=&$this->pose;
+		if($sliding && $p['speed']===0.) return true;
+		$this->previous=$p;
+		$half=$land->recipe()['worldSize']/2.;
+		$run=hypot($p['vx'],$p['vz']);
+		$speed=$sliding ? max(0.,$run-(9.+.18*$run)*$dt) : $run*exp(-.045*$dt);
+		$drag=$run>0. ? $speed/$run : 0.;
+		foreach(['x','z'] as $axis) {
+			$v='v'.$axis; $p[$v]*=$drag;
+			$next=$p[$axis]+$p[$v]*$dt;
+			$p[$axis]=max(-$half,min($half,$next));
+			if($p[$axis]!==$next) $p[$v]=0.;
+		}
+		$ground=$land->sample($p['x'],$p['z']);
+		$surface=max($water,$ground['height']);
+		$dx=$surface>$ground['height'] ? 0. : $ground['dx'];
+		$dz=$surface>$ground['height'] ? 0. : $ground['dz'];
+		if($speed>1.) {
+			$yaw=atan2($p['vx'],$p['vz'])-$p['yaw'];
+			$p['yaw']+=atan2(sin($yaw),cos($yaw))*(1.-exp(-$dt/.50));
+		}
+		$along=$dx*sin($p['yaw'])+$dz*cos($p['yaw']);
+		$across=$dx*cos($p['yaw'])-$dz*sin($p['yaw']);
+		$clearance=$p['y']-$surface-.83;
+		$flare=max(0.,min(1.,1.-$clearance/10.));
+		$sink=max(3.,.11*$speed);
+		$desiredVy=-$sink+(max(-$sink,min(-1.2,$speed*$along-1.6))+$sink)*$flare;
+		$p['vy']+=($desiredVy-$p['vy'])*(1.-exp(-$dt/.38));
+		$pitch=$sliding ? atan($along) : atan2($p['vy'],max(1.,$speed))*(1.-$flare)+.085*$flare;
+		$roll=$sliding ? -atan($across*cos($pitch)) : 0.;
+		$blend=$sliding && $speed===0. ? 1. : 1.-exp(-$dt/.30);
+		$this->deflect($dt,$roll-$p['roll'],$pitch-$p['pitch'],0.);
+		$p['roll']+=($roll-$p['roll'])*$blend;
+		$p['pitch']+=($pitch-$p['pitch'])*$blend;
+		// Support the mesh at its belly, tail, nose and wingtips on the local terrain tangent.
+		$basis=VehicleModel::basis($p);
+		$normal=[];
+		for($i=0;$i<9;$i+=3) $normal[]=$basis[$i+1]-$dx*$basis[$i]-$dz*$basis[$i+2];
+		$contact=$surface+max(.83*$normal[1]+2.30*$normal[2],.49*$normal[1]+6.27*$normal[2],
+			.20*$normal[1]-8.*$normal[2],4.17*abs($normal[0])+.48*$normal[1]+2.16*$normal[2]);
+		$height=$p['y']+$p['vy']*$dt;
+		$sliding=$sliding || $height<=$contact;
+		$p['y']=$sliding ? $contact : $height;
+		if($sliding) $p['vy']=$p['vx']*$dx+$p['vz']*$dz;
+		$p['speed']=hypot(hypot($p['vx'],$p['vz']),$p['vy']);
+		if($p['speed']>.001) $this->flightDirection=[$p['vx']/$p['speed'],$p['vy']/$p['speed'],$p['vz']/$p['speed']];
+		return $sliding;
+	}
+
 	/**
 	 * Turn the jet about its own axes for one Expert step, then move the control surfaces with the stick.
 	 * @param float $dt Fixed step in seconds.

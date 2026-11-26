@@ -1,6 +1,6 @@
 <?php
 use TerrainPhonics\{Camera,Landscape};
-use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,FlightTrails,Jet,Session,SpeedSeeker,SeekerMount,VehicleModel};
+use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,FlightLights,FlightTrails,Jet,Session,SpeedSeeker,SeekerMount,VehicleModel};
 
 $flat = ['worldSize'=>4096,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-10.];
 $land = new Landscape($flat);
@@ -19,6 +19,21 @@ foreach([0.,M_PI/2,M_PI,3*M_PI/2] as $eye->yaw) {
 		['x'=>$p['x']-9.,'z'=>$p['z']-9.,'size'=>18.],$p['y']-9.,$p['y']+9.),'The whole aircraft spawns outside the current look direction.');
 }
 
+// Observe a level F5 from each sector and inspect the lights sent to the renderer.
+$level=['x'=>0.,'y'=>10.,'z'=>0.,'yaw'=>0.,'pitch'=>0.,'roll'=>0.,'power'=>0.];
+$lightEye=new Camera;
+foreach([[[450.,10.,0.],[1.,.022,.012]],[[-450.,10.,0.],[.015,1.,.12]],[[0.,10.,-450.],[1.,.96,.88]]] as [$where,$color]) {
+	$lightEye->position=$where;
+	$lamps=FlightLights::lamps($level,true,$lightEye,.5,1.);
+	expect(strlen($lamps)===32,'A side or rear observer sees its single steady navigation color on the unpowered jet.');
+	$v=array_values(unpack('g*',$lamps));
+	foreach($color as $i=>$c) expect(abs($v[4+$i]-$c)<.00001,'The navigation lamp color identifies the observed aspect.');
+}
+expect(strlen(FlightLights::lamps($level,true,$lightEye,.14,1.))===64,'The beacon flashes independently of engine power.');
+$level['power']=1.;
+expect(strlen(FlightLights::lamps($level,true,$lightEye,.5,1.))===96,'The running F5 has two glowing exhausts when seen from aft.');
+expect(strlen(FlightLights::lamps($level,false,$lightEye,.5,1.))===32,'A flying projectile has a visible nozzle glow from behind.');
+
 // A driver crossing the limit in the real simulation gets a visible banking pass and two distinct stations.
 $drive = new Session($flat);
 $drive->camera->position=[0.,35.,0.]; $drive->camera->yaw=M_PI;
@@ -35,7 +50,7 @@ $drive->input(['values'=>['airPatrolEnabled'=>true],'keys'=>['KeyW'=>1,'ShiftLef
 $bank=$visible=0.; $minSide=INF; $maxSide=0.; $minSeparation=INF; $first=null; $entryTime=0.; $wingRelease=false;
 $releaseTime=$stationTime=$hitTime=null; $visibleRelease=false;
 $maxLead=0.; $swing=false;
-$glances=[];
+$glances=[]; $peekTimes=[]; $maxPeek=0.;
 for($i=0;$i<880;$i++) {
 	$drive->step(1/60); $drive->demo->capture($drive);
 	$pilot=$drive->airPatrol->snapshot();
@@ -43,6 +58,13 @@ for($i=0;$i<880;$i++) {
 	$p=$pilot['pose']; [$eye,$car]=$drive->view(1.);
 	$first ??= abs($car['speed'])/Car::MPS_PER_MPH;
 	$shot=$pilot['seeker']; $time=$drive->demo->duration();
+	if(($pilot['arrivalPeek'] ?? 1.)<.5) {
+		$peekTimes[]=$time;
+		[$pan,$tilt]=$pilot['glance'] ?? [0.,0.];
+		$maxPeek=max($maxPeek,hypot($pan,$tilt));
+	} elseif(isset($pilot['arrivalPeek']) && $shot['phase']==='mounted') {
+		expect(!isset($pilot['glance']),'The arrival camera is back on the road at half a second.');
+	}
 	if(isset($pilot['glance'])) {
 		[$pan,$tilt]=$pilot['glance'];
 		if(abs($pan)+abs($tilt)>deg2rad(1.)) $glances[$pilot['phase']==='arrival' ? 'arrival' : $shot['phase']]=$time;
@@ -77,6 +99,8 @@ for($i=0;$i<880;$i++) {
 		$minSeparation=min($minSeparation,hypot($x,$z));
 	}
 }
+expect($peekTimes && abs(end($peekTimes)-$peekTimes[0]-.47)<.04 && $maxPeek<=deg2rad(30.)+.0001 && $maxPeek>deg2rad(18.),
+	'The first visible pass gets a single half-second peek with a substantial, bounded turn.');
 expect($wingRelease && $visibleRelease,'The seeker starts at the visible wing mount on the frame it detaches.');
 expect($releaseTime!==null && $stationTime!==null && abs($stationTime-$releaseTime-1.95)<.05 && $maxLead>13. && $swing,'The prop passes ahead of the moving F5, falls back alongside it and arcs down outside the car.');
 expect($stationTime!==null && $hitTime!==null && $hitTime-$stationTime>=3. && $hitTime-$stationTime<=4.,
@@ -187,30 +211,66 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 		}
 		$previousPose=$shot['pose'] ?? null;
 		if(($patrol['repelled'] ?? false) && $wonAt===null) {
-			$wonAt=$game->demo->duration();
+			$wonAt=$game->demo->duration(); $hitPatrol=$patrol;
 			expect($shot['impact']===[$patrol['pose']['x'],$patrol['pose']['y'],$patrol['pose']['z']] &&
-				$patrol['phase']==='departure' && $game->airPatrol->carImpact===null,'The return bursts on the plane and sends the pilot away.');
+				$patrol['phase']==='glide' && $patrol['pose']['power']===0. && $game->airPatrol->carImpact===null,'The return bursts on the F5 and cuts its engines.');
 		}
-		if($wonAt!==null && isset($shot['impact']) && $shot['clock']<=.40)
+		if($wonAt!==null && isset($shot['impact']) && $shot['clock']<=.20)
 			expect($inFrame($game->view(1.)[0],$shot['impact'],.22),'The camera holds the world-space flash as the car drives on.');
 	}
 	if($delay<1.95) expect($driftedOnApproach && $followed,'An early handbrake slide still leads into the bumper chase.');
 	expect($missed===$shakes,'A slide that ends before the bumper chase cannot shake the lock later.');
 	expect(($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'Only a drift that brings the loose seeker back near the F5 wins.');
 	if($wins) {
-		expect(abs($returnSpeeds[1]-1.)<.08 && $returnSpeeds[6]<1.25 && $returnSpeeds[12]>$returnSpeeds[6] &&
-			$returnSpeeds[20]>$returnSpeeds[12] && $returnSpeeds[27]>max(1.4,$returnSpeeds[20]),
-			'The loose seeker carries its drift speed into the switch and visibly builds speed over the next 440 ms.');
-		expect(abs($wonAt-$lockedAt-.79)<.04,'The camera move preserves the timing of the return.');
+		expect($returnSpeeds[1]<1.3 && $returnSpeeds[8]>$returnSpeeds[2] && $returnSpeeds[14]>$returnSpeeds[8],
+			'The returning prop carries its drift into a short, eased acceleration.');
+		expect(abs($wonAt-$lockedAt-.42)<.04,'The faster return reaches the plane in about four tenths of a second.');
 		[$pan,$tilt]=$game->airPatrol->snapshot()['glance'] ?? [0.,0.];
 		expect(max(abs($pan),abs($tilt))<.02,'The view eases back to the road after the flash.');
-		$won=$game->airPatrol->snapshot();
-		$away=new AirPatrol; $away->resume($won);
-		$fast=$game->car->state(); $fast['speed']=70.;
-		for($tick=0;$tick<1200;$tick++) $away->step(1/60,$fast,fn()=>$eye,16/9,$land,-10.);
-		expect($away->pose()===null && $away->snapshot()['repelled'],'A victorious driver can continue speeding beyond the normal respawn time.');
-		$fast['speed']=0.; $away->step(1/60,$fast,fn()=>$eye,16/9,$land,-10.);
-		$fast['speed']=70.; $away->step(1/60,$fast,fn()=>$eye,16/9,$land,-10.);
+		$away=new AirPatrol; $away->resume($hitPatrol);
+		$fast=$game->car->state(); $fast['speed']=70.; $watch=new Camera;
+		$touch=null; $flare=false; $puffs=$streak=false;
+		for($tick=0;$tick<1500;$tick++) {
+			$prev=$away->pose();
+			$fast['x']=$prev['x']; $fast['z']=$prev['z']+30.;
+			$watch->position=[$fast['x'],$prev['y']+2.,$fast['z']]; $watch->yaw=M_PI;
+			$away->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
+			$state=$away->snapshot(); $p=$state['pose'];
+			if($tick===36 || ($touch===null && $state['phase']==='slide')) {
+				$recorded=DemoEvents::import([[0,json_encode(['airPatrol'=>$state])]],1)->at(0,0.,'car')['airPatrol'];
+				$branch=new AirPatrol; $branch->resume($recorded);
+				$branch->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
+				$nextLandingPose=$branch->pose();
+			} elseif(isset($nextLandingPose)) {
+				expect(abs($nextLandingPose['y']-$p['y'])<1.e-8 && abs($nextLandingPose['z']-$p['z'])<1.e-8,
+					'Branching during the glide or slide preserves landing velocity and surface contact.');
+				unset($nextLandingPose);
+			}
+			if($state['phase']==='glide') {
+				expect($p['power']===0. && abs($p['roll'])<=abs($prev['roll'])+.000001,'The gliding pilot levels the wings without thrust.');
+				if($p['pitch']>.01 && $p['vy']<0.) $flare=true;
+				foreach(str_split($away->smoke->instances(),FlightTrails::STRIDE) as $bytes) {
+					$kind=unpack('g',substr($bytes,32,4))[1];
+					$puffs=$puffs || $kind===5.; $streak=$streak || $kind===4.;
+				}
+			} else {
+				expect($state['phase']==='slide' && $p['y']>=.82,'The downed aircraft remains on its belly when the nearby driver looks away.');
+				$touch??=$p;
+				if($p['speed']===0.) break;
+			}
+		}
+		expect($touch && $flare && $puffs && $streak && $p['speed']===0. && hypot($p['x']-$touch['x'],$p['z']-$touch['z'])>20.,
+			'The powerless aircraft trails smoke, flares, travels along the ground, then stops.');
+		$fast['x']=$p['x']; $fast['z']=$p['z']+650.; $watch->position=[$fast['x'],$p['y'],$fast['z']]; $watch->yaw=0.;
+		$away->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
+		expect($away->pose()!==null,'A distant wreck stays as long as the camera can see it.');
+		$watch->yaw=M_PI;
+		$away->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
+		expect($away->pose()===null && $away->snapshot()['repelled'],'A stopped, distant wreck despawns once offscreen.');
+		for($tick=0;$tick<750;$tick++) $away->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
+		$fast['x']=$fast['z']=$fast['yaw']=$fast['drift']=0.; $watch->position=[0.,3.,-7.];
+		$fast['speed']=0.; $away->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
+		$fast['speed']=70.; $away->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
 		expect($away->snapshot()['phase']==='arrival','Slowing and crossing the limit again allows a new encounter.');
 		$game->input(['actions'=>['demo-stop']],0.,16/9);
 		$recording=$game->demo->export(); $result=DemoTape::import($recording);
@@ -219,7 +279,7 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,tru
 			$game->input(['actions'=>[$action]],0.,16/9);
 		for($tick=0;$tick<42;$tick++) $game->step(1/60);
 		expect($game->airPatrol->snapshot()['repelled'] ?? false,'Taking control halfway through a recorded return completes the encounter.');
-		foreach([$lockedAt+.25,$wonAt+.17] as $at) {
+		foreach([$lockedAt+.20,$wonAt+.12] as $at) {
 			foreach(['demo-stop',['type'=>'demo-open','json'=>$recording],['type'=>'demo-seek','seconds'=>$at],'demo-take-control'] as $action)
 				$game->input(['actions'=>[$action]],0.,16/9);
 			$recorded=$result->frame($game->demo->duration())['camera']; $view=$game->view(1.)[0];

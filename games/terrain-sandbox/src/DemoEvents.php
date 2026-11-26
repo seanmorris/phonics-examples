@@ -69,6 +69,8 @@ final class DemoEvents
 				$from=$view['airPatrol']['glance'] ?? [0.,0.]; $to=$next['glance'] ?? [0.,0.];
 				$view['airPatrol']['glance']=AirPatrol::interpolateGlance($from,$to,$fraction);
 			}
+			if($view['airPatrol']['phase']==='glide' && ($next['phase'] ?? null)==='glide')
+				$view['airPatrol']['flight'][0]+=$fraction*($next['flight'][0]-$view['airPatrol']['flight'][0]);
 			if(isset($view['airPatrol']['pose'],$next['pose'])) $view['airPatrol']['pose']=AirPatrol::interpolate($view['airPatrol']['pose'],$next['pose'],$fraction);
 			if(isset($view['airPatrol']['seeker']['pose'],$next['seeker']['pose']))
 				$view['airPatrol']['seeker']['pose']=AirPatrol::interpolate($view['airPatrol']['seeker']['pose'],$next['seeker']['pose'],$fraction);
@@ -121,7 +123,9 @@ final class DemoEvents
 			if(!is_array($v) || !array_key_exists('pose',$v)) return false;
 			$legacy=self::vector($v['flight'] ?? null,9);
 			if(isset($v['glance']) && (!self::vector($v['glance'],2) || max(abs($v['glance'][0]),abs($v['glance'][1]))>M_PI+.00001)) return false;
-			if(isset($v['repelled']) && (!is_bool($v['repelled']) || !in_array($v['phase'] ?? null,['departure','idle'],true))) return false;
+			if(isset($v['repelled']) && (!is_bool($v['repelled']) || !in_array($v['phase'] ?? null,['departure','glide','slide','idle'],true))) return false;
+			if(in_array($v['phase'] ?? null,['glide','slide'],true) && ($legacy || !($v['repelled'] ?? false))) return false;
+			if(isset($v['arrivalPeek']) && (!self::vector([$v['arrivalPeek']],1) || $v['arrivalPeek']<0. || $v['arrivalPeek']>.5)) return false;
 			if(!$legacy && !self::vector($v['flight'] ?? null,6)) return false;
 			$keys=['x','y','z','yaw','pitch','roll'];
 			if(isset($v['seeker'])) {
@@ -140,12 +144,12 @@ final class DemoEvents
 					|| !(self::vector($s['start'] ?? null,6)
 						|| (in_array($s['phase'],['drop','chase'],true) && self::vector($s['start'] ?? null,7) && $s['start'][6]>=0. && $s['start'][6]<=5.)
 						|| ($s['phase']==='return' && isset($s['rearPassGap']) && (self::vector($s['start'] ?? null,9)
-							|| (self::vector($s['start'] ?? null,10) && $s['start'][9]>=.05 && $s['start'][9]<=1.))))
+							|| ((self::vector($s['start'] ?? null,10) || (self::vector($s['start'] ?? null,11) && $s['start'][10]>0. && $s['start'][10]<=1.)) && $s['start'][9]>=.05 && $s['start'][9]<=1.))))
 					|| !is_array($s['pose']) || count($s['pose'])!==6 ||
 					!self::vector(array_map(fn($k)=>$s['pose'][$k] ?? null,$keys),6)) return false;
 			}
 			if(($v['phase'] ?? null)==='idle') return $v['pose']===null && (!isset($v['seeker']) || !$legacy);
-			if(!in_array($v['phase'] ?? null,['arrival','escort','departure'],true) || !is_array($v['pose'])) return false;
+			if(!in_array($v['phase'] ?? null,['arrival','escort','departure','glide','slide'],true) || !is_array($v['pose'])) return false;
 			if(!$legacy) {
 				if(!self::vector($v['direction'] ?? null,3)) return false;
 				[$x,$y,$z]=$v['direction'];
