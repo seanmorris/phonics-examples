@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "slug": "terrain-sandbox",
   "title": "Landscape Sandbox",
-  "description": "Fly across editable procedural landscapes, grade roads, move the sun, and ride physical waves.",
+  "description": "A 20-mile procedural world written in PHP. Reshape it, lay a road, then drive a 240 mph car, fly an F5 or race the computer across it.",
   "controls": "Right-drag to look · WASD to fly or drive · Q/E down/up · Shift for fast flight · P to pause · H for controls",
   "application": "dist/game.phar",
   "mediaDirectory": "music",
@@ -13,7 +13,8 @@
   "documentation": {
     "chapters": [
       {"slug": "index", "title": "Landscape Sandbox", "path": "docs/index.md"},
-      {"slug": "authoring", "title": "Shape a landscape", "path": "docs/authoring.md"}
+      {"slug": "authoring", "title": "Shape a landscape", "path": "docs/authoring.md"},
+      {"slug": "how-it-works", "title": "How it works", "path": "docs/how-it-works.md"}
     ],
     "api": {"namespace": "TerrainSandbox", "description": "Offline authoring session, camera controls, versioned saves, and landscape sandbox composition."},
     "embed": {

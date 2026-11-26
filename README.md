@@ -8,6 +8,10 @@ PHP Poker offers Bicycle-inspired five-card draw, Texas Hold'em and five- and se
 
 RPSC is Rock Paper Scissors Checkers against the computer or another person online. It reuses Poker's private-deck primitive for placements: each browser proves its twelve hidden pieces are four of each kind without showing where they stand.
 
+Landscape Sandbox is a 20-mile-square procedural world written in PHP. Sculpt it, lay roads that cut and fill the ground, and cross it in a 240 mph car, an F5 or a watercraft. It finds closed circuits in the terrain, and a computer driver races them in the same car. [How the sandbox works](games/terrain-sandbox/docs/how-it-works.md) describes how PHP and the GPU compute the same surface.
+
+![Eight of the 28 landscapes in Landscape Sandbox](games/terrain-sandbox/docs/eight-landscapes.jpg)
+
 ```sh
 npm install
 npm test

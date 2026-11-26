@@ -1,6 +1,17 @@
 # Landscape Sandbox
 
-Landscape Sandbox is a place to explore and edit procedural terrain. The default landscape is about 20 miles on each side. Nearby geometry becomes more detailed as you approach it, while the physical ground remains independent of visual detail.
+Landscape Sandbox is a 20-mile-square world you can reshape, pave and race across. It is written in PHP and runs in your browser tab. No map of the ground is stored. Each height comes from a seed and a recipe, computed where the camera or a wheel needs it.
+
+![Eight of the 28 landscapes](eight-landscapes.jpg)
+
+Start with these:
+
+1. **Pick a landscape.** On the **Landscape** tab, choose one of 28 presets and select **Generate**.
+2. **Drive it.** On the **Explore** tab, choose **Drive car**, or press **C**. The car reaches 240 mph. Hold the handbrake and the nitrous together to slide it through a bend without losing speed.
+3. **Race it.** In free flight, open **Roads → Circuit generator** and choose **Find circuit near camera**. The sandbox searches the terrain for a closed course. **Apply dry course** lays the road and sets the gates. **Watch CPU racer** puts the computer in the same car.
+4. **Change it.** Raise a hill, dig a crater or lay your own road on the **Shape** tab. The ground under your wheels changes with what you see.
+
+[How the sandbox works](how-it-works.md) explains how PHP and the GPU share one surface, and how the computer driver plans a lap.
 
 ## Use the Landscape Lab panel
 
