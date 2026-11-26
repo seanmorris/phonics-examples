@@ -55,10 +55,11 @@ final class FlightTrails
 	}
 
 	/** Build the same exhaust segments from the arcade prop's visible poses, in live play or a replay. */
-	public function seeker(float $dt, ?array $before, ?array $after, ?array $impact, ?array $mount, array $car, float $impactAge=0., ?array $previousCar=null): void
+	public function seeker(float $dt, ?array $before, ?array $after, ?array $impact, ?array $mount, array $car, float $impactAge=0., ?array $previousCar=null,
+		?array $previousPlane=null, ?array $plane=null): void
 	{
 		if($dt<=0.) return;
-		$this->advance($dt);
+		$this->step($dt,$previousPlane,$plane);
 		if($after!==null) {
 			$before ??= $after;
 			$this->exhaust([$before['x'],$before['y'],$before['z']],[$after['x'],$after['y'],$after['z']],
@@ -99,10 +100,11 @@ final class FlightTrails
 		$this->carFlash=$outside || $this->now-$birth>=self::LODGED_LIFE ? null : [$tick,$birth,$center];
 	}
 
-	public function step(float $dt, array $before, array $after): void
+	public function step(float $dt, ?array $before, ?array $after): void
 	{
 		if($dt<=0.) return;
 		$this->advance($dt);
+		if($before===null || $after===null) { $this->density=0.; return; }
 		// The vertical component of the span stays well behaved through inverted flight and loops.
 		$bank = abs(sin($after['roll']) * cos($after['pitch']));
 		if($bank < .15 && $this->density === 0.0) return;
@@ -111,7 +113,9 @@ final class FlightTrails
 		$bend = 0.0;
 		for($i = 6; $i < 9; $i++) $bend += ($axes[$i] - $oldAxes[$i]) ** 2;
 		// Visual load follows the change in flight direction at the current airspeed.
-		$turnLoad = sqrt($bend) * $after['speed'] / $dt;
+		// Early patrol recordings stored only the aircraft pose.
+		$speed = $after['speed'] ?? hypot(hypot($after['x']-$before['x'],$after['z']-$before['z']),$after['y']-$before['y'])/$dt;
+		$turnLoad = sqrt($bend) * $speed / $dt;
 		$demand = min(1.0,max(0.0,($bank - .15) / .65)) * min(1.0,max(0.0,($turnLoad - 2.0) / 24.0));
 		$this->density += ($demand - $this->density) * (1 - exp(-$dt / .13));
 		if($this->density < .012) { if($demand === 0.0) $this->density = 0.0; return; }

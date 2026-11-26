@@ -36,6 +36,7 @@ use TerrainSandbox\TrailRenderer;
 use TerrainSandbox\DisplayUnits;
 use TerrainSandbox\Session;
 use TerrainSandbox\SeekerMount;
+use TerrainSandbox\SpeedSeeker;
 
 $app = new Context;
 $music = new BackgroundMusic($app);
@@ -323,14 +324,14 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 	$projectiles = [];
 	if($session->mode==='car') {
 		$patrol = $events ? ($events['airPatrol']['pose'] ?? null) : $session->airPatrol->pose($shotAlpha);
+		$seeker=$events ? ($events['airPatrol']['seeker'] ?? null) : $session->airPatrol->seeker($shotAlpha);
 		if($patrol !== null) {
 			$model = $models['f5'] ??= new VehicleModel(__DIR__.'/assets/f5/mesh.bin.gz');
 			$traffic[]=['plane',$patrol['x'],$patrol['z']];
 			$model->draw($patrol+['power'=>.65],$viewCamera,$session->atmosphere,$session->water,$width,$height);
+			foreach(SpeedSeeker::mountedSlots($seeker) as $slot) $projectiles[]=Jet::projectileMount($patrol,$slot);
 		}
-		$seeker=$events ? ($events['airPatrol']['seeker'] ?? null) : $session->airPatrol->seeker($shotAlpha);
-		if($patrol!==null && ($seeker['phase'] ?? '')==='mounted') $projectiles[]=Jet::projectileMount($patrol,0);
-		elseif(isset($seeker['mount']) && $session->airPatrol->smoke?->showsLodgedSeeker()) $projectiles[]=SeekerMount::model($seeker['mount'],$vehiclePose);
+		if(isset($seeker['mount']) && $session->airPatrol->smoke?->showsLodgedSeeker()) $projectiles[]=SeekerMount::model($seeker['mount'],$vehiclePose);
 		elseif(isset($seeker['pose'])) {
 			$projectiles[]=$seeker['pose'];
 			$traffic[]=['missile',$seeker['pose']['x'],$seeker['pose']['z']];
@@ -536,7 +537,7 @@ $engine->start(
 			if($trails?->active())
 				($trailRenderer ??= new TrailRenderer)->draw($trails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
-			if($session->mode==='car' && $session->airPatrol->smoke)
+			if($session->mode==='car' && $session->airPatrol->smoke?->active())
 				($trailRenderer ??= new TrailRenderer)->draw($session->airPatrol->smoke,$sample ? 1. : $shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility'],closeExhaust:true);
 			foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->smoke($site,$viewCamera,$width,$height,$session->time);

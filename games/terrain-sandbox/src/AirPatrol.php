@@ -191,20 +191,20 @@ final class AirPatrol
 	{
 		$before=$this->seeker?->state();
 		$hit=$this->seeker?->step($dt,$car,$plane,$phase,$land,$water,$beforeCar,$eye,$aspect);
-		$this->stepSmoke($dt,$before,$this->seeker?->state(),$car,$beforeCar);
+		$this->stepSmoke($dt,$before,$this->seeker?->state(),$car,$beforeCar,$this->previous,$plane);
 		if(($hit['kind'] ?? null)==='plane') {
 			$this->repelled=true; $this->phase='departure'; $this->elapsed=0.;
 		}
 		if(($hit['kind'] ?? null)==='car') $this->carImpact=$hit['point'];
 	}
 
-	public function stepSmoke(float $dt,?array $from,?array $to,array $car,?array $previousCar): void
+	public function stepSmoke(float $dt,?array $from,?array $to,array $car,?array $previousCar,?array $previousPlane,?array $plane): void
 	{
 		$impact=$to['impact'] ?? null;
 		if($impact===($from['impact'] ?? null)) $impact=null;
-		if(!isset($to['pose']) && $impact===null && !$this->smoke) return;
-		($this->smoke ??= new FlightTrails)->seeker($dt,$from['pose'] ?? null,$to['pose'] ?? null,$impact,$to['mount'] ?? null,$car,$to['clock'] ?? 0.,$previousCar);
-		if(!$this->smoke->active()) $this->smoke=null;
+		if($plane===null && !isset($to['pose']) && $impact===null && !$this->smoke) return;
+		($this->smoke ??= new FlightTrails)->seeker($dt,$from['pose'] ?? null,$to['pose'] ?? null,$impact,$to['mount'] ?? null,$car,$to['clock'] ?? 0.,$previousCar,$previousPlane,$plane);
+		if($plane===null && !$this->smoke->active()) $this->smoke=null;
 	}
 
 	public function seeker(float $alpha=1.): ?array { return $this->seeker?->state($alpha); }

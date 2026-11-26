@@ -14,6 +14,7 @@ foreach([0.,M_PI/2,M_PI,3*M_PI/2] as $eye->yaw) {
 	$driver['speed']=30.;
 	expect($pilot->step(1/60,$driver,fn()=>$eye,16/9,$land,-10.),'Open sky admits an arrival.');
 	$p=$pilot->pose();
+	expect(SpeedSeeker::mountedSlots($pilot->seeker())===[0,1],'The arriving patrol carries a seeker under each wing.');
 	expect(!Camera::inView($eye->clipPlanes(1600,900),$eye->position,
 		['x'=>$p['x']-9.,'z'=>$p['z']-9.,'size'=>18.],$p['y']-9.,$p['y']+9.),'The whole aircraft spawns outside the current look direction.');
 }
@@ -118,6 +119,10 @@ foreach([$glances['arrival'],$glances['chase']] as $at) {
 }
 
 $rewound=new AirPatrol;
+$copy->restorePatrolSmoke($rewound,$entryTime,$copy->frame($entryTime));
+$entryTrails=str_split($rewound->smoke?->instances() ?? '',FlightTrails::STRIDE);
+expect(count($entryTrails)>=2 && count($entryTrails)%2===0,'Seeking into the entry bank rebuilds paired wingtip vapor before either seeker fires.');
+foreach($entryTrails as $bytes) expect(unpack('gkind',substr($bytes,32,4))['kind']===0.,'Neither wing emits exhaust while its seeker is mounted.');
 $when=$stationTime+.5;
 $copy->restorePatrolSmoke($rewound,$when,$copy->frame($when));
 expect($rewound->smoke?->active()===true,'Seeking into a chase reconstructs the smoke already in the air.');
@@ -240,12 +245,22 @@ foreach([[28.,M_PI/2],[72.,0.],[106.,M_PI]] as [$speed,$heading]) {
 	$pilot=new AirPatrol; $eye=new Camera; $eye->yaw=M_PI-$heading; $eye->fov=1.36;
 	$f=sin($heading); $g=cos($heading);
 	$car=['x'=>-18.*$speed*$f,'y'=>0.,'z'=>-18.*$speed*$g,'yaw'=>$heading,'drift'=>0.,'speed'=>$speed];
-	$left=180.; $right=-180.; $lead=INF; $crossings=[]; $side=0; $released=false;
+	$left=180.; $right=-180.; $lead=INF; $crossings=[]; $side=0; $releases=[]; $reloaded=false;
 	for($tick=0;$tick<36*60;$tick++) {
 		$car['x']+=$speed*$f/60.; $car['z']+=$speed*$g/60.;
 		$eye->position=[$car['x']-7.*$f,3.,$car['z']-7.*$g];
 		$pilot->step(1/60,$car,fn()=>$eye,16/9,$land,-10.);
-		$released=$released || ($pilot->seeker()['phase'] ?? null)==='drop';
+		$shot=$pilot->seeker();
+		if($shot['phase']==='mounted' && $releases) $reloaded=SpeedSeeker::mountedSlots($shot)===[0,1];
+		if($shot['phase']==='drop' && $shot['clock']===0.) {
+			$slot=$shot['slot']; $releases[]=$slot;
+			$wing=Jet::projectileMount($pilot->pose(),$slot);
+			foreach(['x','y','z'] as $axis)
+				expect(abs($shot['pose'][$axis]-$wing[$axis])<1e-6,'The flying model departs the wing that just emptied.');
+			expect(SpeedSeeker::mountedSlots($shot)===[1-$slot],'The opposite projectile stays mounted on release.');
+			$restored=new SpeedSeeker; $restored->resume($shot);
+			expect($restored->state()['slot']===$slot,'Taking control preserves the releasing wing.');
+		}
 		if($tick<15*60) continue;
 		$p=$pilot->pose();
 		if($p===null) throw new RuntimeException('The patrol left the flat-road crossing fixture.');
@@ -255,7 +270,8 @@ foreach([[28.,M_PI/2],[72.,0.],[106.,M_PI]] as [$speed,$heading]) {
 		$newSide=$across<=>0.; if($side!==0 && $newSide!==$side) $crossings[]=$tick/60.;
 		$side=$newSide;
 	}
-	expect($released && $lead>20. && $left<-55. && $left>-68. && $right>55. && $right<68.,
+	expect($releases===[0,1] && $reloaded,'Both wings reload and fire in turn on the same patrol.');
+	expect($lead>20. && $left<-55. && $left>-68. && $right>55. && $right<68.,
 		"The F5 stays ahead and reaches both 10 and 2 o'clock at $speed m/s.");
 	expect(count($crossings)>=3,'The pilot keeps alternating shoulders.');
 	for($i=1;$i<count($crossings);$i++) expect(abs(($crossings[$i]-$crossings[$i-1])-5.24)<.4,
@@ -439,16 +455,17 @@ foreach(['car','ground'] as $object) {
 			}
 		} elseif($lodged) $cleared=true;
 		$peak=max($peak,$game->car->state()['y']-$c['y']);
-		$burstCount=0;
+		$burstCount=$exhaustCount=0;
 		foreach(str_split($game->airPatrol->smoke?->instances() ?? '',FlightTrails::STRIDE) as $bytes) {
 			$instance=unpack('g*',$bytes);
-			if($instance[9]===1.) $sawSmoke=true;
+			if($instance[9]===1.) $exhaustCount++;
 			if($instance[9]===2.) $burstCount++;
 		}
+		$sawSmoke=$sawSmoke || $exhaustCount>0;
 		$flashes=max($flashes,$burstCount);
 	}
 	expect($object==='ground' || ($lodged && $cleared),'The inert shell lasts through the flash and then clears.');
-	expect($sawSmoke && $flashes===1 && !$game->airPatrol->smoke,"A $object hit emits one burst and its exhaust and flash expire.");
+	expect($sawSmoke && $flashes===1 && $burstCount===0 && $exhaustCount===0,"A $object hit emits one burst and its exhaust and flash expire.");
 	expect($game->mode==='car' && $game->car->state()['motion']==='driving' &&
 		($object==='car' ? $hits===1 && $peak>3. : $hits===0 && $peak<.5),
 		'Only a direct hit throws the car, and the normal landing or recovery returns control.');

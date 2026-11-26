@@ -14,6 +14,7 @@ final class SpeedSeeker
 	/** An eligible coast tracks this gap; its last value marks the boosted return in recorded takes. */
 	private ?float $rearPassGap=null;
 	private string $phase = 'mounted';
+	private int $slot = 0;
 	private float $clock = 0., $passSpeed = 0.;
 	private ?array $velocity = null, $impact = null;
 	/** Drop poses end with the loom clearance above the roof. Older recorded drops used 1.32 m. */
@@ -29,14 +30,17 @@ final class SpeedSeeker
 		$drifting=abs($car['drift'])>=self::SLIP && ($car['motion'] ?? 'driving')==='driving';
 		if($this->phase==='reload') {
 			if($this->clock>=FlightTrails::LODGED_LIFE) $this->mount=null;
-			if($this->clock>=self::RELOAD_SECONDS) { $this->phase='mounted'; $this->clock=0.; $this->impact=null; }
+			if($this->clock>=self::RELOAD_SECONDS) {
+				$this->phase='mounted'; $this->clock=0.; $this->impact=null;
+				$this->slot=1-$this->slot;
+			}
 			return null;
 		}
 		if($this->phase==='mounted') {
 			if($plane===null || $patrol!=='escort' || $car['speed']<=60.*Car::MPS_PER_MPH || $drifting ||
-				hypot($plane['x']-$car['x'],$plane['z']-$car['z'])>80. || !$eye || !self::inShot($plane,$camera=$eye(),$aspect)) { $this->clock=0.; return null; }
+				hypot($plane['x']-$car['x'],$plane['z']-$car['z'])>80. || !$eye || !$this->inShot($plane,$camera=$eye(),$aspect)) { $this->clock=0.; return null; }
 			if($this->clock<1.5-1e-9) return null;
-			$wing=Jet::projectileMount($plane,0);
+			$wing=Jet::projectileMount($plane,$this->slot);
 			if($wing['y']<SeekerContact::floor($wing,$land,$water)+1.25) return null;
 			$sight=[$wing['x']-$camera->position[0],$wing['y']-$camera->position[1],$wing['z']-$camera->position[2]];
 			$range=hypot(hypot($sight[0],$sight[2]),$sight[1]);
@@ -93,7 +97,7 @@ final class SpeedSeeker
 		foreach(['x','y','z'] as $i=>$axis) $p[$axis]+=$body[$i]*$mark[0]+$body[$i+3]*$mark[1]+$body[$i+6]*$mark[2];
 		if($drop) {
 			// The first beat uses the moving wing as its reference. The next beat arcs around the rear quarter.
-			$wing=Jet::projectileMount($plane,0);
+			$wing=Jet::projectileMount($plane,$this->slot);
 			$nose=array_slice(VehicleModel::basis($plane),6);
 			$ahead=14.*self::smooth($this->clock/self::FLY_AHEAD);
 			$t=max(0.,($this->clock-self::FLY_AHEAD)/(self::DROP_SECONDS-self::FLY_AHEAD));
@@ -204,10 +208,10 @@ final class SpeedSeeker
 	}
 
 	/** Leave space around the fuselage and the releasing wing in the actual chase camera. */
-	private static function inShot(array $plane,Camera $camera,float $aspect): bool
+	private function inShot(array $plane,Camera $camera,float $aspect): bool
 	{
 		[$front,$right,$up]=$camera->basis();
-		$wing=Jet::projectileMount($plane,0);
+		$wing=Jet::projectileMount($plane,$this->slot);
 		foreach([$plane,$wing] as $p) {
 			$x=$p['x']-$camera->position[0]; $y=$p['y']-$camera->position[1]; $z=$p['z']-$camera->position[2];
 			$depth=$x*$front[0]+$y*$front[1]+$z*$front[2];
@@ -253,15 +257,22 @@ final class SpeedSeeker
 		return [sin($p['yaw'])*$run,sin($p['pitch'])*$speed,cos($p['yaw'])*$run];
 	}
 
+	/** A patrol carries one prop per wing. The other wing stays loaded throughout a pass. */
+	public static function mountedSlots(?array $seeker): array
+	{
+		return ($seeker['phase'] ?? 'mounted')==='mounted' ? [0,1] : [1-($seeker['slot'] ?? 0)];
+	}
+
 	public function state(float $alpha=1.): array
 	{
 		$p=$this->pose;
 		if($alpha<1. && $this->previous!==null && $p!==null) $p=AirPatrol::interpolate($this->previous,$p,$alpha);
-		return ['phase'=>$this->phase,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+($this->rearPassGap!==null ? ['rearPassGap'=>$this->rearPassGap] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
+		return ['phase'=>$this->phase,'slot'=>$this->slot,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+($this->rearPassGap!==null ? ['rearPassGap'=>$this->rearPassGap] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
 	}
 
 	public function resume(array $s): void
 	{
+		$this->slot=$s['slot'] ?? 0;
 		$this->rearPassGap=$s['rearPassGap'] ?? null;
 		$this->phase=$s['phase']; $this->clock=$s['clock']; $this->start=$s['start']; $this->passSpeed=$s['passSpeed'];
 		$this->pose=$this->previous=$s['pose'];
