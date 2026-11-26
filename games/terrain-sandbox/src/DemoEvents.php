@@ -21,7 +21,7 @@ final class DemoEvents
 		$dynamics = match($s->mode) {
 			'car'=>$s->car->motion(), 'jet'=>$s->jet->motion(), 'craft'=>$s->craft->angularMotion(), default=>[]
 		};
-		$state = ['motion'=>base64_encode(pack('g*',...$dynamics)),
+		$state = ['weather'=>$s->weather->snapshot(),'motion'=>base64_encode(pack('g*',...$dynamics)),
 			'airPatrol'=>$s->mode==='car' ? $s->airPatrol->snapshot() : null,
 			'raceDistance'=>$s->race->distanceFromStart(), 'rangeTimers'=>$s->mode==='jet' ? $s->balloons->timers() : null,
 			'race'=>$race,'target'=>$s->navigationTarget($vehicle),
@@ -111,6 +111,7 @@ final class DemoEvents
 
 	private static function valid(string $key, mixed $v): bool
 	{
+		if($key==='weather') return \TerrainPhonics\Weather::valid($v);
 		if($key==='motion') {
 			if(!is_string($v) || strlen($v)>144) return false;
 			$bytes=base64_decode($v,true);

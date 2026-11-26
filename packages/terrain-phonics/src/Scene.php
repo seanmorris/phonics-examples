@@ -30,6 +30,8 @@ final class Scene
 	 */
 	private array $litDrawn = ['ground' => false, 'water' => false];
 
+	public ?Weather $weather = null;
+	private ?WeatherRenderer $weatherRenderer = null;
 	private AtmosphereRenderer $atmosphereCache;
 	private TerrainShadows $terrainShadows;
 	private Lod $lod;
@@ -232,7 +234,7 @@ final class Scene
 		$atmosphere = AtmosphereRenderer::shaderSource();
 		$water = file_get_contents($root . 'water-functions.glsl');
 		$grid = $this->useClipmap ? "#define CLIPMAP\n".Clipmap::gridShader() : file_get_contents($root.'patch-grid.glsl');
-		$optics = WaterAppearance::shaderSource();
+		$optics = WaterAppearance::shaderSource()."\n".file_get_contents($root.'weather.glsl');
 		$lamps = SpotLights::shaderSource();
 		$dark = SpotLights::shaderSource(false);
 
@@ -2400,6 +2402,11 @@ final class Scene
 		$this->atmosphereCache->update($camera->position[1], $this->textures[0], $this->water->level());
 
 		$environment = $this->atmosphere->uniforms();
+		if($this->weather) {
+			$c=$this->weather->controls();
+			if($this->weatherRenderer || $c['coverage']>0 || $c['kind']!=='none' || max($this->weather->ground($time))>0.)
+				($this->weatherRenderer ??= new WeatherRenderer)->prepare($this->weather,$time,$this->water->level(),$environment['sunDirection'][1]);
+		} else $this->weatherRenderer?->clear();
 		$bounds = $this->landscape->bounds();
 		$this->clipmap?->updateShadows($camera->position,$environment['sunDirection'],$this->heightTextureRevision);
 		$this->terrainShadows->update(
@@ -2599,6 +2606,7 @@ final class Scene
 			$patch['mesh']->draw($this->bindPatch($uPatch, $uEdges, $uCorners, $n, $lastBoundary));
 		}
 
+		$this->weatherRenderer?->draw($camera,$width,$height,$environment['exposure']);
 		if($waterProgram === $this->litWaterProgram && $this->waterDraws > 0) $this->litDrawn['water'] = true;
 		glDisable(GL_BLEND);
 		glBindVertexArray(0);
@@ -2641,6 +2649,7 @@ final class Scene
 			$this->boundEnvironment[$id] = $environment;
 		}
 
+		if($program !== $this->skyProgram) $this->weatherRenderer?->bind($program);
 		if($program !== $this->skyProgram) $this->scalar($program, 'uWaterLevel', $this->water->level());
 		if($program === $this->litGroundProgram || $program === $this->litWaterProgram)
 			$this->spotLights?->bind($program, $environment['nightVisibility']);
@@ -3100,6 +3109,7 @@ final class Scene
 		$this->paletteBuffer = $this->uploadedMaterials = $this->selectedMaterials = [];
 		$this->boundPaint = []; $this->layerBinding=[];
 		$this->boundEnvironment = [];
+		$this->weatherRenderer?->close(); $this->weatherRenderer=null;
 		$this->skyProgram->restore();
 		$this->starsProgram->restore();
 		$this->waterProgram->restore();
@@ -3166,6 +3176,7 @@ final class Scene
 		if($this->paletteBuffer) glDeleteBuffers(1,$this->paletteBuffer);
 		foreach($this->materialPrograms as $set) foreach($set as $program) $program->close();
 		$this->materialPrograms = [];
+		$this->weatherRenderer?->close();
 		$this->skyProgram->close();
 		$this->starsProgram->close();
 		$this->waterProgram->close();

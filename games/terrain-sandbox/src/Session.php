@@ -5,6 +5,7 @@ namespace TerrainSandbox;
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
 use Phonics\Ecs\Scheduler;
+use TerrainPhonics\Weather;
 use TerrainPhonics\Atmosphere;
 use TerrainPhonics\Camera;
 use TerrainPhonics\GrassShells;
@@ -36,6 +37,7 @@ final class Session
 	public Water $water;
 	/** Shared physical atmospheric parameters. */
 	public Atmosphere $atmosphere;
+	public Weather $weather;
 	/** Perspective camera used for flight and vehicle chase views. */
 	public Camera $camera;
 	/** Controllable physical watercraft. */
@@ -588,6 +590,7 @@ final class Session
 		]);
 		$this->settings['waterLevel'] = $this->water->level();
 		$this->atmosphere = new Atmosphere;
+		$this->weather = new Weather;
 		$this->camera = new Camera;
 		$this->craft = new Watercraft(gravity: self::DRIVING_GRAVITY);
 		$this->car = new Car;
@@ -1731,6 +1734,12 @@ final class Session
 				$this->message = !$moved ? "Nothing to $type." : ($type === 'undo'
 					? 'Undid the last terrain transaction.' : 'Redid the terrain transaction.');
 				break;
+			case 'weather':
+				$controls = $action['controls'] ?? [];
+				if(isset($action['preset'])) $controls = Weather::PRESETS[$action['preset']] ?? throw new \InvalidArgumentException('Unknown weather preset.');
+				$this->weather->edit($controls,$this->time,($action['resetGround'] ?? false) === true);
+				$this->dirty = true;
+				break;
 			case 'atmosphere-layers':
 				$this->atmosphereReply = (int)($action['request'] ?? 0);
 				if(!is_array($action['layers'] ?? null)) throw new \InvalidArgumentException('Expected a list of atmosphere layers.');
@@ -1875,6 +1884,7 @@ final class Session
 				}
 				$this->replace($next);
 				$this->switchPresetLook($previous, $preset);
+				$this->weather->restore((new Weather)->snapshot(),$this->time);
 				$this->resetCamera();
 				$this->message = 'Generated ' . $recipe['preset'] . ' terrain. Detail streams in as you fly.';
 				if($this->course->count() > 0) $this->message .= ' The new landscape starts without gates.';
@@ -2420,6 +2430,7 @@ final class Session
 		$this->course=new Course($this->gateShapes);
 		$this->surfaceLayers=$this->materialPreset=$this->paint=null;
 		$this->switchPresetLook($before['preset'],$next->recipe()['preset']);
+		$this->weather->translate($shift[0],$shift[2],$this->time);
 		$this->car->translate($shift,$next,$this->water->level());
 		foreach($shift as $axis=>$d) $this->camera->position[$axis]+=$d;
 		$this->chase->resetInterpolation();
@@ -2862,6 +2873,7 @@ final class Session
 		foreach($rows as &$row) if($row['parent'] >= 0) $row['parent'] = $stack->layers[$row['parent']]['id'];
 		unset($row);
 		$document = ['schema' => 'phonics-landscape-sandbox','version' => 5,
+			'weather'=>$this->weather->snapshot($this->time),
 			'atmosphereLayers'=>$this->atmosphere->layers(),
 			'atmosphereOrigin'=>$this->atmosphereOrigin,
 			'surface'=>['origin'=>$this->surfaceLayers ? 'authored' : 'preset',
@@ -2955,6 +2967,8 @@ final class Session
 		$data = json_decode($json, true, 64, JSON_THROW_ON_ERROR);
 		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || !in_array($data['version'] ?? 0, [1, 2, 3, 4, 5], true))
 		throw new \InvalidArgumentException('This is not a supported landscape sandbox file.');
+		$weather = $data['weather'] ?? (new Weather)->snapshot();
+		if(!Weather::valid($weather)) throw new \InvalidArgumentException('Invalid saved weather.');
 		$candidate = Landscape::load(json_encode($data['landscape'] ?? null, JSON_THROW_ON_ERROR));
 		$circuit = null; $variant = null;
 		try
@@ -3070,6 +3084,7 @@ final class Session
 		$this->replace($candidate,$highways);
 		$this->network=$network; $this->square=$square; $this->journeyViews=$views;
 		$this->balloons = $balloons;
+		$this->weather->restore($weather,$this->time);
 		$this->atmosphere->setLayers($air->rows);
 		$this->atmosphereOrigin = $airOrigin;
 		$this->setWaterAppearance($appearance);
@@ -3147,6 +3162,7 @@ final class Session
 		try { DemoPlayback::restoreWorld($this,$world); }
 		finally { $source->playhead=$at; }
 		$this->time=$frame['time']; $this->water->update($this->time);
+		if(isset($events['weather'])) $this->weather->restore($events['weather']);
 		$this->settings['azimuth']=$frame['azimuth']; $this->settings['elevation']=$frame['elevation']; $this->sun();
 		$this->mode=$frame['mode']; $this->boarding++;
 		$this->camera=clone $frame['camera'];
@@ -3225,6 +3241,7 @@ final class Session
 			'demo'=>$this->demoStatus(),'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
+			'weather'=>['controls'=>$this->weather->controls(),'ground'=>$this->weather->ground($this->time)],
 			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,
 			'settings' => $this->settings,'hiddenSurfaceLayers'=>$this->hiddenLayerIds,'surfaceLayers'=>$this->activeLayers()->layers,'materialReply'=>$this->materialReply,'surfaceOrigin'=>$this->surfaceLayers ? 'authored' : 'preset',
 			'surfacePreset'=>$this->materialPreset ?? self::materialStyle($this->landscape->recipe()),

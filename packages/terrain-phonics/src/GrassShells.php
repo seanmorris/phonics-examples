@@ -458,6 +458,7 @@ final class GrassShells
 		glUniform1f($p->location('uJoinWidth'), JoinedTerrain::GAP);
 
 		// Grass no taller than the eye allows: a surface above the eye would hide the blades under it.
+		$snow = $scene->weather?->ground($time)[1] ?? 0.;
 		$headroom = self::HEADROOM * max(0., $clearance);
 
 		foreach($styles as $index => $style)
@@ -469,7 +470,7 @@ final class GrassShells
 
 			glUniform4f(
 				$p->location("uBlades[$index]")
-				, $style['density']
+				, $style['density']*(1.-.9*$snow)
 				, .5 * $style['width']
 				, $style['lean']
 				, min($style['height']

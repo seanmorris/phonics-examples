@@ -133,4 +133,26 @@ foreach(['car'=>-10.,'craft'=>10.] as $mode=>$water) {
 	if($mode==='craft') check(abs($p['velocity'][1]-$snap['vehicle']['vy'])<.00001,'Restore vertical watercraft velocity');
 	$s->step(1/60); $s->view(.5); $s->demo->capture($s); $s->close();
 }
+$s=new Session(['worldSize'=>256]);
+$send=static fn($a)=>$s->input(['actions'=>[$a]],0.,1.);
+$send('demo-record');
+$send(['type'=>'weather','preset'=>'snow']);
+for($i=0;$i<12;$i++) { $s->step(1/60); $s->demo->capture($s); }
+$snowSample=$s->demo->duration();
+$send(['type'=>'weather','preset'=>'rain']);
+for($i=0;$i<12;$i++) { $s->step(1/60); $s->demo->capture($s); }
+$send('demo-stop');
+$file=json_decode($s->demo->export(),true);
+$count=0;
+foreach($file['cues'] as [, $cue]) if(isset(json_decode($cue,true)['weather'])) $count++;
+check($count===3,'Only the initial weather and two edits need demo events');
+$loaded=DemoTape::import($s->demo->export());
+check($loaded->frame($loaded->duration())['world']===0,'Changing weather keeps the terrain chapter');
+check($loaded->frame($loaded->duration())['events']['weather']['controls']['kind']==='rain','A later seek restores rain');
+$send('demo-play');
+$send(['type'=>'demo-seek','seconds'=>$snowSample]);
+$send('demo-take-control');
+check($s->weather->controls()['kind']==='snow' && abs($s->weather->ground($s->time)[1]-$snowSample/60.)<.00001,'Branching restores the snow already on the ground at the seek time');
+$s->close();
+
 echo "Terrain demo capture, scrubbing, branching, vehicle momentum and file isolation passed.\n";

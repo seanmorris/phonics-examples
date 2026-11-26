@@ -331,6 +331,17 @@ export function activate({module, canvas, session, services})
 
 	const push = action => { actions.push(typeof action === 'string' ? {type: action} : action); };
 
+	const weatherFields = [...frame.querySelectorAll('[data-weather]')];
+	for(const field of weatherFields) field.addEventListener('input', () => {
+		const value = field.type === 'range' ? field.valueAsNumber : field.value;
+		if(field.type === 'range') field.nextElementSibling.value = value;
+		push({type:'weather',controls:{[field.dataset.weather]:value}});
+	}, {signal});
+	for(const button of frame.querySelectorAll('[data-weather-preset]')) button.addEventListener('click', () =>
+		push({type:'weather',preset:button.dataset.weatherPreset}), {signal});
+	frame.querySelector('[data-weather-reset]').addEventListener('click', () => push({type:'weather',resetGround:true}), {signal});
+	const groundReadout = frame.querySelector('[data-weather-ground]');
+
 	const focus = () => canvas.focus({preventScroll: true});
 
 	const focusedField = target => target instanceof HTMLElement && Boolean(target.closest('input,select,textarea'));
@@ -1182,6 +1193,16 @@ export function activate({module, canvas, session, services})
 
 			materials.show(state);
 			air.show(state);
+			if(state.weather) {
+				for(const field of weatherFields) {
+					const value = state.weather.controls[field.dataset.weather];
+					if(field.matches(':active')) continue;
+					if(field.value !== String(value)) field.value = value;
+					if(field.type === 'range') field.nextElementSibling.value = value;
+				}
+				const [wet,snow] = state.weather.ground.map(v => Math.round(v*100));
+				groundReadout.value = `Wetness ${wet}% · Snow cover ${snow}%`;
+			}
 
 			// The pause menu draws in the canvas, so screen readers hear its selected row from here.
 			const menuRow = state.screenshotView ? 'Screenshot view. Escape, B or a tap returns to the pause menu.'
@@ -2547,6 +2568,11 @@ function range(label, key, min, max, step, value, unit = '')
 			+ `<output data-output="${key}">${value}</output></label>`;
 }
 
+function weatherRange(label,key,min,max,step,value)
+{
+	return `<label class="terrain-control"><span>${label}</span><input type="range" data-weather="${key}" min="${min}" max="${max}" step="${step}" value="${value}"><output>${value}</output></label>`;
+}
+
 let labCount = 0;
 
 function markup(journeyMarkup)
@@ -2712,7 +2738,7 @@ function markup(journeyMarkup)
 		.terrain-section,.terrain-grid,.terrain-surface-group{grid-template-columns:repeat(2,minmax(0,1fr))}
 	}
 	@container terrain-lab (min-width:490px){
-		.terrain-tabs{grid-template-columns:repeat(8,minmax(0,1fr))}
+		.terrain-tabs{grid-template-columns:repeat(9,minmax(0,1fr))}
 	}
 	@container terrain-view (max-width:560px){
 		.terrain-panel{--lab-inset:8px;--lab-width:calc(100% - 16px);--lab-height:min(62cqh,calc(100cqh - 16px - var(--radar-room,0px)))}
@@ -2774,7 +2800,7 @@ function markup(journeyMarkup)
 	<button type="button" data-music-next aria-label="Next track" title="Next track"><i aria-hidden="true"></i></button>
 	</div>
 	<div class="lab-workspace">
-	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-roads" aria-controls="terrain-section-roads" data-tab="roads" aria-selected="false" tabindex="-1">Roads</button><button type="button" role="tab" id="terrain-tab-journey" aria-controls="terrain-section-journey" data-tab="journey" aria-selected="false" tabindex="-1">Journey</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
+	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-roads" aria-controls="terrain-section-roads" data-tab="roads" aria-selected="false" tabindex="-1">Roads</button><button type="button" role="tab" id="terrain-tab-journey" aria-controls="terrain-section-journey" data-tab="journey" aria-selected="false" tabindex="-1">Journey</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-weather" aria-controls="terrain-section-weather" data-tab="weather" aria-selected="false" tabindex="-1">Weather</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
 	<div class="lab-pages"><section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
 	<label class="terrain-field">Preset<select name="preset">${landscapeOptions.map(option).join('')}</select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
@@ -3020,6 +3046,23 @@ function markup(journeyMarkup)
 	<div class="terrain-row"><button type="button" data-air-remove>Remove atmosphere layer</button></div>
 	</div></fieldset></template>
 	</section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-weather" aria-labelledby="terrain-tab-weather" data-tab-panel="weather" hidden>
+	<fieldset><legend>Weather presets</legend><div class="terrain-row">
+	${['Clear','Cloudy','Rain','Snow'].map(p => `<button type="button" data-weather-preset="${p.toLowerCase()}">${p}</button>`).join('')}
+	</div></fieldset>
+	<fieldset><legend>Cloud deck</legend>
+	${weatherRange('Cloud cover · %','coverage',0,100,1,0)}
+	${weatherRange('Altitude above sea level · ft','altitude',100,30000,100,3500)}
+	${weatherRange('Cloud shadow · %','shadow',0,100,1,45)}
+	${weatherRange('Wind speed · mph','wind',0,150,1,12)}
+	${weatherRange('Wind heading · °','heading',0,360,1,90)}
+	</fieldset>
+	<fieldset><legend>Precipitation</legend>
+	<label class="terrain-control"><span>Type</span><select data-weather="kind"><option value="none">None</option><option value="rain">Rain</option><option value="snow">Snow</option></select></label>
+	${weatherRange('Intensity · %','intensity',0,100,1,0)}
+	</fieldset>
+	<fieldset><legend>Ground</legend><div class="terrain-row"><output data-weather-ground>Wetness 0% · Snow cover 0%</output>
+	<button type="button" data-weather-reset>Reset ground</button></div></fieldset></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
 	<fieldset><legend>Demos</legend><div class="terrain-row"><button data-action="demo-record">Record run</button><button data-action="demo-stop" hidden>Stop recording</button><button data-action="demo-play" disabled>Play last demo</button><button data-action="demo-save" disabled>Save demo</button><button data-action="demo-file">Open demo</button><button data-action="demo-swap" hidden>Switch takes</button><input type="file" data-demo-file accept=".json,application/json" hidden></div>
 	<div data-demo-transport hidden><label class="terrain-field">Timeline<input data-demo-timeline type="range" min="0" max="0" step="any"></label>

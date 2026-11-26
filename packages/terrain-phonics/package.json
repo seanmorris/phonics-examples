@@ -86,6 +86,14 @@
     "phonics.json",
     "composer.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "src/Weather.php",
+    "src/WeatherRenderer.php",
+    "shaders/clouds.vert",
+    "shaders/clouds.frag",
+    "shaders/precipitation.vert",
+    "shaders/precipitation.frag",
+    "shaders/weather.glsl",
+    "textures/cloud-noise.r8"
   ]
 }

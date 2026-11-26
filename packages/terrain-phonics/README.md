@@ -164,6 +164,20 @@ level to 210 m above it, so peat lochans fill the lowest 9% or so. Existing reci
 their versioned preset. `salt-pans` holds a nearly level playa between alluvial slopes. `cinder-highlands` combines a wider wall transition with rolling relief to form volcanic cones and saddles. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
 changing the landscape's playable extent.
 
+### Add weather
+
+Assign a `TerrainPhonics\Weather` to `$scene->weather` and pass simulation seconds to its controls and to `Scene::render()`.
+
+```php
+$weather = $scene->weather = new TerrainPhonics\Weather;
+$weather->edit(TerrainPhonics\Weather::PRESETS['rain'], $time);
+$weather->edit(['altitude' => 6000, 'wind' => 20, 'heading' => 90], $time);
+```
+
+Cloud altitude is in feet above the water datum. Wind is in mph toward a compass heading. Coverage, shadow strength, and precipitation intensity are percentages. The cloud sheet, projected shadows, and water reflections sample the same moving, mipmapped noise texture. Rain and snow use up to 1,536 nearby GPU instances. Ground cover affects shading and grass visibility.
+
+For a save, store `snapshot($time)` and call `restore($snapshot, $newTime)` when loading. For rewindable playback, record `snapshot()` on edits and restore that anchor against the original simulation clock. Call `translate($dx, $dz, $time)` when changing a journey’s local coordinate origin.
+
 ### Surface materials
 
 `SurfaceLayers::landscape($recipe, $appearance)` returns the editable material recipe used by the ground and the minimap. Assign a replacement to `Scene::$layers`. The stack holds up to sixteen ordered layers with stable IDs. Heights, slope, water level, dipping beds, noise and an earlier layer’s mask can restrict coverage. A parent can be given by ID or by its earlier index.

@@ -294,11 +294,27 @@ void main()
 		shadow = localSunlight(vWorld.xz,footprint,shadow);
 	}
 	#endif
+	#ifdef TERRAIN_WEATHER
+	if(uDeck.x>0. && uDeck.z>0. && uSunDirection.y>.015 && vWorld.y<uDeck.y)
+		shadow*=1.-uDeck.z*cloudsOnRay(vWorld,uSunDirection).x;
+	float wet=uCraft<.5 && vWorld.y>uWaterLevel ? uGroundCover.x : 0.;
+	if((wet>0. || uGroundCover.y>0.) && uCraft<.5 && vWorld.y>uWaterLevel) {
+		float snow=uGroundCover.y*smoothstep(.38,.88,n.y);
+		albedo=mix(albedo*(1.-.31*wet),vec3(.82,.88,.93),snow);
+		markingGlow*=1.-snow;
+	}
+	#endif
 	// Approximate diffuse sky fill follows solar irradiance and fades through twilight.
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
 	vec3 ambient = uSkyAmbient * (0.35 + 0.65 * max(0.0,n.y));
 	ambient += bounce * illumination * (1.0-max(0.,n.y));
 	vec3 lit = albedo * (ambient + direct * facing * shadow) + markingGlow;
+	#ifdef TERRAIN_WEATHER
+	if(wet>0.) {
+		float glint=max(0.,dot(reflect(-uSunDirection,n),normalize(-vRelative)));
+		lit+=wet*(1.-uGroundCover.y)*(.06*ambient+direct*shadow*facing*.32*pow(glint,36.));
+	}
+	#endif
 	lit += terrainNightMaterial(albedo, mix(lightingNormal,n,painted), uNightAmbient);
 	lit += albedo / 3.14159265 * terrainSpotLight(vWorld, mix(lightingNormal,n,painted), uWaterLevel, uWaterOptics.z);
 	#ifdef MATERIAL_REFLECTION

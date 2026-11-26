@@ -66,7 +66,14 @@ vec3 waterEnvironmentReflection(vec3 ray, float altitude, float angularFootprint
 	vec3 lower = mix(body,vec3(0.035,0.075,0.11),0.45) * (vec3(illumination) + uNightAmbient);
 	vec3 reflected = mix(lower,upper,smoothstep(-0.12,0.04,ray.y));
 	// Keep the solar disk on the true reflection direction, with its existing pixel-footprint filter.
-	return reflected + terrainSolarDisk(ray,altitude,terrainTransmittance(altitude,ray.y),angularFootprint);
+	vec3 result = reflected + terrainSolarDisk(ray,altitude,terrainTransmittance(altitude,ray.y),angularFootprint);
+	#ifdef TERRAIN_WEATHER
+	if(uDeck.x>0. && ray.y>0.) {
+		vec2 cloud=cloudsOnRay(vWorld,ray);
+		result=mix(result,cloudRadiance(cloud.y,0.),cloud.x);
+	}
+	#endif
+	return result;
 }
 
 uniform float uPlayHalf;
@@ -107,7 +114,12 @@ void main()
 	float reflectionWeight = (1.0 - foam) * fresnel;
 	float tintWeight = (1.0 - foam) * (1.0 - fresnel) * (1.0 - uWaterOptics.x);
 	float alpha = foam + reflectionWeight + tintWeight;
-	vec3 surfaceLight = vec3(illumination) + uNightAmbient;
+	float sunlit=illumination;
+	#ifdef TERRAIN_WEATHER
+	if(uDeck.x>0. && uDeck.z>0. && uSunDirection.y>.015)
+		sunlit*=1.-uDeck.z*cloudsOnRay(vWorld,uSunDirection).x;
+	#endif
+	vec3 surfaceLight = vec3(sunlit) + uNightAmbient;
 	// Lamps, in the units of illumination, where 20 is full sunlight.
 	surfaceLight += terrainSpotLight(vWorld, n, uWaterLevel, 0.0) / 20.0;
 	vec3 lit = (foam * mix(vec3(0.65),vec3(1.6,1.85,1.95),wash) * surfaceLight + reflectionWeight * reflection

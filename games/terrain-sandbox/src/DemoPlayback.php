@@ -23,6 +23,7 @@ final class DemoPlayback
 		$this->world = new Session;
 		$this->loadWorld($tape->world(0));
 		$this->scene = new Scene($this->terrain,$this->world->water,$this->world->atmosphere,useClipmap:true,retainJourneyBinding:true);
+		$this->scene->weather=$this->world->weather;
 		$this->chapter = 0;
 		$this->appearance();
 	}
@@ -86,6 +87,9 @@ final class DemoPlayback
 		}
 		$this->previous = $frame;
 		$s->time = $frame['time'];
+		$weather=$frame['events']['weather'] ?? null;
+		if($weather !== null && ($weather !== ($before['events']['weather'] ?? null) || $before['world'] !== $frame['world']))
+			$s->weather->restore($weather);
 		$s->mode = $frame['mode'];
 		$s->camera = $frame['camera'];
 		$s->jetView = ($frame['flags'] & 1) ? 'cockpit' : 'chase';

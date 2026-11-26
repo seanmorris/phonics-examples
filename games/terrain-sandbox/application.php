@@ -60,6 +60,7 @@ $engine->clock = new FixedStep(1 / 60, 4);
 $engine->input->bindButton(9, []);
 $engine->input->bindGamepad(9, []);
 $scene = new Scene($session->landscape, $session->water, $session->atmosphere, useClipmap: true, retainJourneyBinding: true);
+$scene->weather = $session->weather;
 $session->prepareMaterial = $scene->prepareMaterial(...);
 $models = [];
 $tracers = null;
@@ -501,7 +502,7 @@ $engine->start(
 			$session->mode === 'car' ? Car::terrainFocus($vehiclePose) : null);
 		$wavesChanged = $scene->showsWater() && $session->time !== $lastRenderedTime;
 		$statusPending = $statusPending || $work || $wavesChanged || !$session->paused;
-		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged;
+		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged || $session->weather->moving($session->time,$lastRenderedTime);
 		$editor = $session->roadEditor;
 		if(($packet = $editor->packet($session)) !== null) $roadStatus(json_encode($packet, JSON_THROW_ON_ERROR));
 		$mapCamera = $editor->open ? [$viewCamera->position[0], $viewCamera->position[2],
