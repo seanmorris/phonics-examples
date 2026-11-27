@@ -13,7 +13,7 @@ final class BurstAcoustics
 	private array $surveys = [];
 	private int $serial = 0;
 
-	/** Delay in seconds, gain, low-pass cutoff in Hz and stereo pan. */
+	/** Delay in seconds, gain, low-pass cutoff in Hz, stereo pan and whether this is the direct arrival. */
 	private static function tap(array $point, Camera $ear, float $outbound = 0., float $reflectivity = 1.): array
 	{
 		[$x,$y,$z] = array_map(static fn($a,$b) => $a-$b, $point, $ear->position);
@@ -22,7 +22,7 @@ final class BurstAcoustics
 		[$rx,$ry,$rz] = $ear->basis()[1];
 		return [$path/343., $reflectivity/(1.+$path/155.),
 			$outbound > 0. ? 280.+1100./(1.+$path/350.) : 1200.+11000./(1.+$path/500.),
-			($rx*$x+$ry*$y+$rz*$z)/max(1.,$distance)];
+			($rx*$x+$ry*$y+$rz*$z)/max(1.,$distance), $outbound===0.];
 	}
 
 	/** Sample lattice nodes on eight spokes. Yield after each probe so cold terrain can be surveyed across frames. */

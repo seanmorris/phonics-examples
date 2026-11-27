@@ -152,8 +152,8 @@ export function startEngine(context, instrument, tone, output = context.destinat
 	};
 }
 
-/** Car audio levels in percent. The player's choice, remembered in this browser. */
-export const AUDIO_DEFAULTS = {master: 80, engine: 100, tires: 100};
+/** Local audio preferences. The three levels are percentages. */
+export const AUDIO_DEFAULTS = {master: 80, engine: 100, tires: 100, burstDelay: false};
 
 /** Settings the soundtrack owns. The pause menu reaches them through the same bridge. */
 const MUSIC_SETTINGS = ['tracks', 'track', 'music'];
@@ -164,14 +164,16 @@ const AUDIO_PREFERENCE = 'terrain-sandbox.audio';
 const fader = percent => (percent/100)**2;
 
 /**
- * Check a stored or requested car audio level.
- * @param {string} name master, engine or tires.
- * @param {*} value Percent from 0 to 100.
+ * Validate a saved or requested audio preference.
+ * @param {string} name Audio preference key.
+ * @param {*} value Level percentage or the direct burst delay switch.
  * @returns {boolean} Whether the value is valid for that level.
  */
 export function audioSetting(name, value)
 {
-	return name in AUDIO_DEFAULTS && Number.isFinite(value) && value >= 0 && value <= 100;
+	if(name === 'burstDelay') return typeof value === 'boolean';
+
+	return Object.hasOwn(AUDIO_DEFAULTS, name) && Number.isFinite(value) && value >= 0 && value <= 100;
 }
 
 /** Join the end of the skid to its beginning over 80 ms. The loop wraps between consecutive original samples. */
@@ -268,6 +270,14 @@ export function activate({module, canvas, archive, signal})
 	catch
 	{
 		/* Without storage the defaults play for this visit. */
+	}
+
+	const burstDelay = canvas.closest?.('.terrain-sandbox')?.querySelector('[data-burst-delay]');
+
+	if(burstDelay)
+	{
+		burstDelay.checked = mix.burstDelay;
+		burstDelay.addEventListener('change', () => module.terrainAudioSet('burstDelay', burstDelay.checked), {signal});
 	}
 
 	module.terrainMusic?.set('master', mix.master);
@@ -462,7 +472,7 @@ export function activate({module, canvas, archive, signal})
 		update();
 	};
 
-	module.terrainBurstSound = (id, delay, gain, cutoff, pan) => {
+	module.terrainBurstSound = (id, delay, gain, cutoff, pan, direct) => {
 		if(!effectsActive || !context || closed || pageHidden || doc.hidden || contextLost || !mix.master) return;
 
 		let event = bursts.get(id);
@@ -489,7 +499,7 @@ export function activate({module, canvas, archive, signal})
 
 		if(context.state !== 'running') return;
 
-		event.pending.push([delay, gain, cutoff, pan]);
+		event.pending.push([direct && !mix.burstDelay ? 0 : delay, gain, cutoff, pan]);
 		flushBursts();
 	};
 
@@ -518,6 +528,8 @@ export function activate({module, canvas, archive, signal})
 		if(!audioSetting(name, value)) return false;
 
 		mix[name] = value;
+
+		if(name === 'burstDelay' && burstDelay) burstDelay.checked = value;
 
 		try
 		{

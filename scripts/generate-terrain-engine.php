@@ -78,29 +78,36 @@ function writeRecording(string $file, string $wav, bool $check): void
 $check = in_array('--check',$argv,true);
 writeRecording($dir.'flat-twelve.wav',$wav,$check);
 
-// Stagger the impact, body and rolling tail; let the tail lose brightness as it spreads.
-// A brief upper partial carries the impact on small speakers.
-// Bake the dry sound once. Each landscape supplies its own reflection times and directions during play.
+// The bright crack leads the pressure thump by 3 ms. Its treble dies first, followed by the midrange and low roll.
 $rate = 32000;
+$duration = .42;
+$frames = (int)round($duration*$rate);
 $pcm = '';
-$air = $bass = $rumble = $drift = $phase = 0.;
-for($i = 0; $i < $rate; $i++) {
+$bright = $mid = $barkBand = $air = $bass = $rumble = $drift = $phase = 0.;
+for($i = 0; $i < $frames; $i++) {
 	$t = $i / $rate;
-	// Smooth the turbulence twice, then remove its subsonic drift. Only the first instant gets the wider air band.
-	$air += .095 * (2.*$random() - 1. - $air);
-	$bandwidth = .012 + .027*exp(-$t/.09);
+	$noise = 2.*$random() - 1.;
+	$bright += .69 * ($noise - $bright);
+	$mid += .24 * ($bright - $mid);
+	$barkBand += .21 * ($mid - $barkBand);
+	$air += .068 * ($barkBand - $air);
+	// Differences between the filtered signals isolate the bands. Only the leading crack gets the brightest one.
+	$crack = 1.3*pressurePulse($t,.00035,.008)*($bright - $mid);
+	$bark = 3.1*pressurePulse($t,.0008,.025)*($barkBand - $air);
+
+	$bandwidth = .012 + .031*exp(-$t/.060);
 	$bass += $bandwidth * ($air - $bass);
 	$rumble += $bandwidth * ($bass - $rumble);
 	$drift += .0055 * ($rumble - $drift);
 
-	$phase += 2.*M_PI*(47. + 17.*exp(-$t/.035))/$rate;
-	$body = pressurePulse(max(0.,$t-.014),.004,.09);
-	$thump = $body * (.81*sin($phase) + .23*sin(2.2*$phase));
-	$edge = pressurePulse($t,.001,.030) * (.32*sin(3.5*$phase) + .23*$air);
-	$roll = pressurePulse(max(0.,$t-.046),.009,.13) + .58*pressurePulse(max(0.,$t-.109),.017,.17);
-	$tail = (2.2*pressurePulse($t,.003,.06) + 7.4*$roll) * ($rumble - $drift);
-	$fade = min(1., (1.-$t)/.04);
-	$pcm .= pack('v',(int)round(30000*tanh($thump + $edge + $tail)*$fade));
+	$phase += 2.*M_PI*(47. + 24.*exp(-$t/.024))/$rate;
+	$body = pressurePulse(max(0.,$t-.003),.0018,.062);
+	$thump = $body * (.91*sin($phase) + .27*sin(2.2*$phase));
+	$edge = .32*pressurePulse($t,.0008,.019)*sin(4.6*$phase);
+	$roll = pressurePulse(max(0.,$t-.021),.004,.072) + .44*pressurePulse(max(0.,$t-.059),.007,.085);
+	$tail = (2.2*pressurePulse($t,.002,.04) + 6.4*$roll) * ($rumble - $drift);
+	$fade = min(1., ($duration-$t)/.02);
+	$pcm .= pack('v',(int)round(30000*tanh($crack + $bark + $thump + $edge + $tail)*$fade));
 }
 $format=pack('vvVVvv',1,1,$rate,$rate*2,2,16);
 $chunks='fmt '.pack('V',strlen($format)).$format.'data'.pack('V',strlen($pcm)).$pcm;

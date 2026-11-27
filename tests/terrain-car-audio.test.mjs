@@ -157,12 +157,16 @@ test('the saved master reaches the soundtrack at startup and when the listener a
 	const stop = activate({module, canvas, archive, signal: controller.signal});
 	assert.deepEqual(writes, [['master', 65]]);
 	assert.equal(module.terrainAudioGet('engine'), 75);
+	assert.equal(module.terrainAudioGet('burstDelay'), false);
+	assert.equal(module.terrainAudioSet('burstDelay', 1), false);
+	assert.equal(module.terrainAudioSet('burstDelay', true), true);
 
 	assert.equal(module.terrainAudioSet('master', 40), true);
 	assert.equal(module.terrainAudioSet('master', -1), false);
 	assert.equal(module.terrainAudioSet('engine', 55), true);
 	assert.deepEqual(writes, [['master', 65], ['master', 40]]);
-	assert.deepEqual(JSON.parse(saved.get('terrain-sandbox.audio')), {master: 40, engine: 55, tires: 100});
+	const settings = JSON.parse(saved.get('terrain-sandbox.audio'));
+	assert.deepEqual(settings, {master: 40, engine: 55, tires: 100, burstDelay: true});
 
 	stop();
 	controller.abort();

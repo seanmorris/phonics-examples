@@ -17,14 +17,14 @@ use TerrainSandbox\FlightTrails;
 	$source->burst([0,2,-34.3],0.);
 	for($i=0;$i<100;$i++) $frame();
 	expect(count($taps)===1 && $modes===[true],'Flat terrain gives one report across redraws.');
-	expect(abs($taps[0][1]-.1)<.0001 && abs($taps[0][4])<.001,'A centered burst travels to the camera at the speed of sound.');
+	expect($taps[0][5] && abs($taps[0][1]-.1)<.0001 && abs($taps[0][4])<.001,'A centered burst travels to the camera at the speed of sound.');
 
 	$world->queue(['type'=>'raise','x'=>224,'z'=>-34,'radius'=>190,'amount'=>100]);
 	$world->commit();
 	$source->burst([0,2,-34.3],0.);
 	for($i=0;$i<100;$i++) $frame();
 	expect(count($taps)===3 && $taps[1][0]===$taps[2][0], 'A new nearby face contributes one distinct return to that burst.');
-	expect($taps[2][1]>$taps[1][1] && $taps[2][2]<$taps[1][2] && $taps[2][3]<$taps[1][3] && $taps[2][4]>.7,
+	expect(!$taps[2][5] && $taps[2][1]>$taps[1][1] && $taps[2][2]<$taps[1][2] && $taps[2][3]<$taps[1][3] && $taps[2][4]>.7,
 		'The right-hand wall returns a later, quieter, darker sound from the right.');
 	$world->queue(['type'=>'raise','x'=>-2560,'z'=>-34,'radius'=>400,'amount'=>360]);
 	$world->commit();
