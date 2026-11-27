@@ -130,7 +130,7 @@ final class AirPatrol
 						$p['x']+$range*sin($yaw),$p['z']+$range*cos($yaw)));
 				}
 			}
-			if($this->aheadFloor>max($car['y']+23.,$p['y']+8.) || $this->slow>=45.-1e-9) {
+			if($this->slow>=45.-1e-9) {
 				$this->phase='departure'; $this->elapsed=0.;
 				$heights=[];
 				foreach([-1,1] as $side) {
@@ -173,6 +173,7 @@ final class AirPatrol
 			$turn=self::angle($desired-$p['yaw']);
 			$bank=max(-1.,min(1.,-2.8*$turn));
 			if($speed>$idleSpeed) $speed=$idleSpeed+min(150.,$speed-$idleSpeed)*max(0.,cos($turn))**2;
+			// Terrain raises the formation altitude. Past the crest the station comes back down to the driver.
 			$height=max($this->aheadFloor+12.,$car['y']+16.+6.*max(0.,1.-abs($across)/20.));
 			$climb=max(-.65,min(.95,atan2($height-$p['y'],max(45.,$p['speed']*.88))/.78));
 			$throttle=max(-1.,min(1.,($speed-Jet::CRUISE)/($speed<Jet::CRUISE ?

@@ -588,13 +588,25 @@ foreach(['car','ground'] as $object) {
 	$game->close();
 }
 
-// Raise a wall on the flight path itself, which can be well away from the driver's path.
-$pilot->resume($checkpoint); $p=$pilot->pose();
-$land->queue(['type'=>'raise','x'=>$p['x']+$p['vx'],'z'=>$p['z']+$p['vz'],'radius'=>45.,'amount'=>90.]);
+// Drive over a raised hill with high ground across the pilot's approach. The same escort climbs and rejoins.
+$pilot->resume($checkpoint); $car=$driver; $p=$pilot->pose();
+$hillZ=$car['z']+180.;
+$land->queue(['type'=>'raise','x'=>$car['x'],'z'=>$hillZ,'radius'=>145.,'amount'=>90.]);
 $land->commit();
-for($i=0;$i<25 && $pilot->snapshot()['phase']!=='departure';$i++) $pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
-expect($pilot->snapshot()['phase']==='departure','Rising ground ahead of the aircraft triggers a peel-away.');
-$before=$pilot->pose();
-for($i=0;$i<60;$i++) $pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
-expect($pilot->pose()['y']>$before['y']+15. && $pilot->pose()['pitch']>.5,'The departing jet raises its nose and climbs.');
+$peak=$p['y']; $carPeak=$car['y']; $approach=false; $joined=false;
+for($i=0;$i<9*60;$i++) {
+	$car['z']+=$car['speed']/60.;
+	$car['y']=$land->height($car['x'],$car['z']);
+	$eye->position=[$car['x'],$car['y']+3.,$car['z']-7.]; $eye->yaw=M_PI;
+	$pilot->step(1/60,$car,$eyeAt,16/9,$land,-10.);
+	$state=$pilot->snapshot(); $new=$state['pose'];
+	expect($state['phase']==='escort','The active patrol stays with the driver on both sides of the crest.');
+	$approach=$approach || $state['flight'][5]>max($car['y']+23.,$p['y']+8.);
+	$peak=max($peak,$new['y']); $carPeak=max($carPeak,$car['y']);
+	if($car['z']>$hillZ+145. && $new['y']<$car['y']+26. && $new['z']>$car['z'] &&
+		hypot($new['x']-$car['x'],$new['z']-$car['z'])<80.) $joined=true;
+	$p=$new;
+}
+expect($approach && $carPeak>80. && $peak>$carPeak+8. && $joined,
+	'The driver crests the hill, the pilot clears it and returns to formation on the far side.');
 $land->close();
