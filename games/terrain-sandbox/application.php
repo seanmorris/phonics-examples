@@ -483,7 +483,7 @@ $engine->start(
 		};
 		if($session->paused) $burstSource?->takeBursts();
 		$acoustics->frame($session->paused ? null : $burstSource,$session->landscape,$viewCamera,
-			$session->water->level(),$burstMode,$burstSound);
+			$session->water->level(),$burstMode,$burstSound,$frameSeconds);
 		$sound = $session->mode === 'car' && !$session->paused && !$vehiclePose['floodedHold']
 			? [(int)round($vehiclePose['rpm']), round($vehiclePose['engineLoad'],3), round($vehiclePose['tireSqueal'],3)] : [0,0,0];
 		if($sound !== $lastSound)

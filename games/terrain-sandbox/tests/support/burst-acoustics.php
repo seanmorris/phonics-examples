@@ -12,8 +12,8 @@ use TerrainSandbox\FlightTrails;
 	$acoustics=new BurstAcoustics;
 	$taps=$modes=[];
 	$mode=static function(bool $enabled) use (&$modes) { $modes[]=$enabled; };
-	$play=static function(...$tap) use (&$taps) { $taps[]=$tap; };
-	$frame=static fn() => $acoustics->frame($source,$world,$ear,-50.,$mode,$play);
+	$play=static function($id,$slot,$fresh,...$mix) use (&$taps) { $taps[]=[$id,...$mix]; return false; };
+	$frame=static fn() => $acoustics->frame($source,$world,$ear,-50.,$mode,$play,1/60);
 	$source->burst([0,2,-34.3],0.);
 	for($i=0;$i<100;$i++) $frame();
 	expect(count($taps)===1 && $modes===[true],'Flat terrain gives one report across redraws.');
@@ -32,11 +32,55 @@ use TerrainSandbox\FlightTrails;
 	for($i=0;$i<100;$i++) $frame();
 	$far=array_filter($taps,static fn($tap) => $tap[0]===3 && $tap[1]>10. && $tap[4]<-.9);
 	expect(count($far)===1,'A distant ridge can send a late return from more than two thousand yards away.');
+	$latest=[];
+	$track=static function($id,$slot,$fresh,...$mix) use (&$latest) { $latest[$slot]=[$fresh,...$mix]; return true; };
+	$source->burst([0,0,0],0.);
+	for($i=0;$i<100;$i++) $acoustics->frame($source,$world,$ear,-50.,$mode,$track,1/60);
+	$before=$latest;
+	$ear->yaw=M_PI;
+	$acoustics->frame($source,$world,$ear,-50.,$mode,$track,1/60);
+	expect(count($latest)>1,'At least one terrain reflection remains tracked alongside the direct sound.');
+	foreach($latest as $slot=>$arrival) {
+		expect(!$arrival[0] && abs($arrival[4]+$before[$slot][4])<.001 && $arrival[2]===$before[$slot][2],
+			'Turning in place reverses the bearing of every active arrival while preserving its range.');
+	}
 	$source->burst([4095,20,4095],0.);
 	$frame();
-	$acoustics->frame(null,$world,$ear,-50.,$mode,$play);
+	$acoustics->frame(null,$world,$ear,-50.,$mode,$play,1/60);
 	expect($modes===[true,false], 'Leaving cancels sounds and outstanding terrain surveys at the map boundary.');
 	$source->burst([0,0,0],0.);
 	$source->burst([2,0,0],0.);
 	expect(count($source->takeBursts())===2 && !$source->takeBursts(),'Separate impacts in the same step each have one sound.');
+})();
+
+(function() {
+	$world=new Landscape(['worldSize'=>1024,'heightScale'=>0,'detailAmplitude'=>0]);
+	$source=new FlightTrails;
+	$ear=new Camera;
+	$ear->position=[0.,2.,0.];
+	$acoustics=new BurstAcoustics;
+	$voices=[]; $playing=true;
+	$play=static function($id,$slot,$fresh,...$mix) use (&$voices,&$playing) {
+		$voices[] = [$id,$slot,$fresh,...$mix];
+		return $playing;
+	};
+	$frame=static fn()=>$acoustics->frame($source,$world,$ear,-5.,static fn($enabled)=>null,$play,.05);
+	$source->burst([60.,2.,0.],0.);
+	$frame();
+	[$id,$slot,$fresh,,$gain,$cutoff,$bearing,,$pitch]=$voices[0];
+	expect($fresh && $bearing===1. && $pitch===1.,'A stationary source on the right starts at its nominal pitch.');
+	$ear->position[0]=3.;
+	$frame();
+	[$id2,$slot2,$fresh,,$nearGain,$nearCutoff,$side,,$pitch]=$voices[1];
+	expect(!$fresh && $id2===$id && $slot2===$slot && $side===$bearing && $nearGain>$gain && $nearCutoff>$cutoff
+		&& abs($pitch-(1.+60./343.))<.00001,'Approaching revises the same voice: brighter, louder, higher and on the same side.');
+	$ear->position[0]=0.; $ear->yaw=M_PI;
+	$frame();
+	expect($voices[2][6]<-.99 && $voices[2][8]<1.,'Turning and moving away switches ears and drops the pitch.');
+	$ear->yaw=M_PI/2; $frame();
+	expect(abs($voices[3][6])<.001 && $voices[3][8]===1.,'Turning in place centers the source without a Doppler shift.');
+	$ear->position[0]=260.; $frame();
+	expect($voices[4][8]===1.,'A camera cut updates location immediately without a false pitch shift.');
+	$playing=false; $frame(); $count=count($voices); $frame();
+	expect(count($voices)===$count,'An ended arrival stops sending mixer updates.');
 })();

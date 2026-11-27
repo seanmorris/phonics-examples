@@ -4114,6 +4114,49 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 	expect(measured.stopped).toBeLessThan(.00001);
 });
 
+test('a single sounding burst moves between ears with a direction-dependent arrival time', async({page}) => {
+	const file = new URL('../../games/terrain-sandbox/browser/car-audio.mjs', import.meta.url);
+	const module = 'data:text/javascript;base64,' + (await fs.readFile(file)).toString('base64');
+	const hits = await page.evaluate(async module => {
+		const {playBurstTap} = await import(module);
+		const rate = 48000, context = new OfflineAudioContext(2, rate, rate);
+		const buffer = context.createBuffer(1, rate, rate);
+		const times = [.04,.28,.53,.78];
+
+		for(const t of times) buffer.getChannelData(0)[Math.round(t*rate)] = .7;
+
+		const voice = playBurstTap(context, buffer, context.destination, 0, 1, .8, 9000, 1);
+		const stops = [.08,.33,.58].map(t => context.suspend(t));
+		const render = context.startRendering();
+		const changes = [[.2,2000,1],[.8,9000,-1],[.8,9000,0]];
+
+		for(const [i, stop] of stops.entries())
+		{
+			await stop;
+			voice.update(...changes[i], 1);
+			await context.resume();
+		}
+
+		const sound = await render;
+		return times.map(t => [0,1].map(channel => {
+			const start = Math.round(t*rate);
+			const samples = sound.getChannelData(channel).slice(start, start+360).map(Math.abs);
+			const peak = Math.max(...samples);
+			return {peak, time: samples.indexOf(peak)};
+		}));
+	}, module);
+
+	const delays = hits.map(([left,right]) => left.time-right.time);
+	expect(delays[0]).toBeCloseTo(115, 0);
+	// Fractional-sample interpolation can move the filtered peak by one sample.
+	expect(Math.abs(delays[1]-delays[0])).toBeLessThanOrEqual(1);
+	expect(delays[2]).toBe(-delays[0]);
+	expect(delays[3]).toBe(0);
+	expect(hits[1][1].peak).toBeLessThan(hits[0][1].peak/4);
+	expect(hits[2][0].peak).toBeGreaterThan(5*hits[2][1].peak);
+	expect(hits[3][0].peak).toBeCloseTo(hits[3][1].peak, 4);
+});
+
 test('record a terrain run, save it, and replay it without moving the live camera', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));

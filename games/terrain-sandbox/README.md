@@ -65,7 +65,7 @@ The aircraft uses “F5” by manilov.ap. The sandbox uses a gear-up mesh with t
 | Enemy Vulcan fire hitting the player in the F5 | [f5-enemy-vulcan-hit.wav](assets/car-audio/f5-enemy-vulcan-hit.wav) |
 | Projectile explosion | [burst.wav](assets/car-audio/burst.wav) |
 
-Regenerate these effects with `php scripts/generate-terrain-impacts.php`. The projectile explosion is a dry recording. The landscape adds the echo during play.
+Regenerate these effects with `php scripts/generate-terrain-impacts.php`. The projectile explosion is a dry recording. The landscape adds echoes during play. As the camera moves, each arrival tracks its world position for stereo pan, far-ear delay, distance attenuation, muffling and Doppler pitch.
 
 ## Race gate models
 

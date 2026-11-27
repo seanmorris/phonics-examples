@@ -11,18 +11,26 @@ final class BurstAcoustics
 	private ?Landscape $world = null;
 	private ?FlightTrails $source = null;
 	private array $surveys = [];
+	/** World-space emission or reflection point, outbound path and reflectivity for each sounding arrival. */
+	private array $voices = [];
+	private ?array $lastPosition = null;
 	private int $serial = 0;
 
-	/** Delay in seconds, gain, low-pass cutoff in Hz, stereo pan and whether this is the direct arrival. */
-	private static function tap(array $point, Camera $ear, float $outbound = 0., float $reflectivity = 1.): array
+	/** Spatial mix for a direct or reflected arrival. Positive bearing points toward the listener's right ear. */
+	private static function tap(array $point, array $ear, array $right, array $velocity,
+		float $outbound, float $reflectivity): array
 	{
-		[$x,$y,$z] = array_map(static fn($a,$b) => $a-$b, $point, $ear->position);
+		$x=$point[0]-$ear[0]; $y=$point[1]-$ear[1]; $z=$point[2]-$ear[2];
 		$distance = sqrt($x*$x+$y*$y+$z*$z);
 		$path = $distance+$outbound;
-		[$rx,$ry,$rz] = $ear->basis()[1];
+		$inverse = $distance > .001 ? 1./$distance : 0.;
+		$bearing = max(-1.,min(1.,($right[0]*$x+$right[1]*$y+$right[2]*$z)*$inverse));
+		$closing = ($velocity[0]*$x+$velocity[1]*$y+$velocity[2]*$z)*$inverse;
+		// Limit the shift to roughly four semitones at jet speeds.
+		$doppler = max(.8,min(1.25,1.+$closing/343.));
 		return [$path/343., $reflectivity/(1.+$path/155.),
 			$outbound > 0. ? 280.+1100./(1.+$path/350.) : 1200.+11000./(1.+$path/500.),
-			($rx*$x+$ry*$y+$rz*$z)/max(1.,$distance), $outbound===0.];
+			$bearing, $outbound===0., $doppler];
 	}
 
 	/** Sample lattice nodes on eight spokes. Yield after each probe so cold terrain can be surveyed across frames. */
@@ -33,6 +41,7 @@ final class BurstAcoustics
 		$half = $recipe['worldSize']/2;
 		$spacing = $recipe['spacing'];
 		$walls = [];
+		$right = $ear->basis()[1];
 		for($i=0; $i<8; $i++) {
 			$dx=cos($i*M_PI/4); $dz=sin($i*M_PI/4);
 			$lastHeight = $y; $lastRange = 0.;
@@ -48,37 +57,59 @@ final class BurstAcoustics
 					// The reflecting face is between the foot and the crest of the sampled slope.
 					$point = [($px+$x+$dx*$lastRange)/2, $y+.45*$rise, ($pz+$z+$dz*$lastRange)/2];
 					$leg = hypot(hypot($point[0]-$x,$point[2]-$z),$point[1]-$y);
-					$walls[] = self::tap($point,$ear,$leg,min(.68,.18+.48*$grade));
+					$path = [$point,$leg,min(.68,.18+.48*$grade)];
+					$walls[] = ['path'=>$path, 'mix'=>self::tap($point,$ear->position,$right,[0.,0.,0.],$leg,$path[2])];
 					break;
 				}
 				$lastHeight=$height; $lastRange=$range;
 			}
 		}
-		usort($walls,static fn($a,$b) => $b[1]<=>$a[1]);
+		usort($walls,static fn($a,$b) => $b['mix'][1]<=>$a['mix'][1]);
 		$returns=[];
-		foreach($walls as $tap) {
+		foreach($walls as $wall) {
 			// Neighboring spokes can hit one face. Avoid doubling indistinguishable arrivals.
-			foreach($returns as $other) if(abs($other[0]-$tap[0])<.075 && abs($other[3]-$tap[3])<.5) continue 2;
-			$returns[]=$tap;
+			foreach($returns as $other) if(abs($other['mix'][0]-$wall['mix'][0])<.075 && abs($other['mix'][3]-$wall['mix'][3])<.5) continue 2;
+			$returns[]=$wall;
 			if(count($returns)===3) break;
 		}
-		return $returns;
+		return array_column($returns,'path');
 	}
 
-	public function frame(?FlightTrails $source, Landscape $world, Camera $ear, float $water, mixed $mode, mixed $play): void
+	public function frame(?FlightTrails $source, Landscape $world, Camera $ear, float $water, mixed $mode, mixed $play,
+		float $seconds): void
 	{
 		if($source!==$this->source || ($source!==null && $world!==$this->world)) {
-			$this->surveys=[];
+			$this->surveys=$this->voices=[];
+			$this->lastPosition=null;
 			$this->world=$source===null ? null : $world;
 			$this->source=$source;
 			$mode($source!==null);
 		}
 		if(!$source) return;
-		foreach($source->takeBursts() as $point) {
+		$previous=$this->lastPosition;
+		$this->lastPosition=$ear->position;
+		$impacts=$source->takeBursts();
+		if(!$impacts && !$this->voices && !$this->surveys) return;
+		$velocity=[0.,0.,0.];
+		if($previous!==null && $seconds>.0001 && $seconds<.25) {
+			foreach($previous as $i=>$v) $velocity[$i]=($ear->position[$i]-$v)/$seconds;
+			// A camera cut or teleport is not a flyby.
+			if($velocity[0]**2+$velocity[1]**2+$velocity[2]**2>400.**2) $velocity=[0.,0.,0.];
+		}
+		$right=$ear->basis()[1];
+		$mix=static fn(array $path)=>self::tap($path[0],$ear->position,$right,$velocity,$path[1],$path[2]);
+		foreach($this->voices as $id=>$paths) {
+			foreach($paths as $slot=>$path) {
+				if(!$play($id,$slot,false,...$mix($path))) unset($this->voices[$id][$slot]);
+			}
+			if(!$this->voices[$id]) unset($this->voices[$id]);
+		}
+		foreach($impacts as $point) {
 			$id=++$this->serial;
-			$direct=self::tap($point,$ear);
+			$path=[$point,0.,1.];
+			$direct=$mix($path);
 			if($direct[1]<.015) continue;
-			$play($id,...$direct);
+			if($play($id,0,true,...$direct)) $this->voices[$id][0]=$path;
 			if(count($this->surveys)>=4) unset($this->surveys[array_key_first($this->surveys)]);
 			$this->surveys[$id]=self::survey($point,clone $ear,$world,$water);
 		}
@@ -89,7 +120,10 @@ final class BurstAcoustics
 				if(hrtime(true)>=$deadline) return;
 				$survey->next();
 			}
-			foreach($survey->getReturn() as $tap) $play($id,...$tap);
+			foreach($survey->getReturn() as $index=>$path) {
+				$slot=$index+1;
+				if($play($id,$slot,true,...$mix($path))) $this->voices[$id][$slot]=$path;
+			}
 			unset($this->surveys[$id]);
 		}
 	}

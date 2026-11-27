@@ -162,25 +162,54 @@ export function joinSkid(context, buffer)
 	return loop;
 }
 
-/** Schedule one arrival on the audio clock, including its distance loss, air absorption and direction. */
-export function playBurstTap(context, buffer, output, at, rate, gain, cutoff, pan)
+/** One world-space arrival. Keep the near ear immediate and leave some signal in the delayed far ear. */
+export function playBurstTap(context, buffer, output, at, rate, gain, cutoff, bearing, doppler = 1)
 {
-	const start = Math.max(at, context.currentTime);
 	const source = context.createBufferSource(), filter = context.createBiquadFilter();
 	const level = context.createGain(), stereo = context.createStereoPanner();
+	const ears = context.createChannelSplitter(2), pair = context.createChannelMerger(2);
+	const left = context.createDelay(.003), right = context.createDelay(.003);
+	const nodes = [source,filter,level,stereo,ears,left,right,pair];
 	source.buffer = buffer;
-	source.playbackRate.value = rate;
-	filter.frequency.value = Math.min(.45*context.sampleRate, cutoff);
 	filter.Q.value = -3;
-	level.gain.value = gain;
-	stereo.pan.value = Math.max(-1, Math.min(1, pan));
-	source.connect(filter).connect(level).connect(stereo).connect(output);
+	source.connect(filter).connect(level).connect(stereo).connect(ears);
+	ears.connect(left, 0).connect(pair, 0, 0);
+	ears.connect(right, 1).connect(pair, 0, 1);
+	pair.connect(output);
 
-	source.onended = () => { for(const node of [source,filter,level,stereo]) node.disconnect(); };
+	let lastGain, lastCutoff, lastBearing, lastDoppler;
 
-	source.start(start);
+	function update(gain, cutoff, bearing, doppler)
+	{
+		const initial = lastGain === undefined, now = context.currentTime;
+		const set = (param, value, smoothing) => {
+			if(initial) param.value = value;
+			else param.setTargetAtTime(value, now, smoothing);
+		};
 
-	return source;
+		if(gain !== lastGain) set(level.gain, gain, .018);
+		if(cutoff !== lastCutoff) set(filter.frequency, Math.min(.45*context.sampleRate, cutoff), .018);
+		if(doppler !== lastDoppler) set(source.playbackRate, rate*doppler, .045);
+
+		if(bearing !== lastBearing)
+		{
+			const side = Math.max(-1, Math.min(1, bearing));
+			set(stereo.pan, .86*side, .018);
+			set(left.delayTime, .0024*Math.max(0, side), .018);
+			set(right.delayTime, .0024*Math.max(0, -side), .018);
+		}
+
+		lastGain = gain;
+		lastCutoff = cutoff;
+		lastBearing = bearing;
+		lastDoppler = doppler;
+	}
+
+	update(gain, cutoff, bearing, doppler);
+	source.onended = () => { for(const node of nodes) node.disconnect(); };
+	source.start(Math.max(at, context.currentTime));
+
+	return {source, update};
 }
 
 export function activate({module, canvas, archive, signal})
@@ -195,9 +224,15 @@ export function activate({module, canvas, archive, signal})
 	let effectsActive = false, burstBuffer, burstLoading;
 	const bursts = new Map();
 
+	function stopBurst(event)
+	{
+		for(const arrival of event.arrivals.values()) arrival.voice?.source.stop();
+		event.arrivals.clear();
+	}
+
 	function clearBursts()
 	{
-		for(const {voices} of bursts.values()) for(const voice of voices) voice.stop();
+		for(const event of bursts.values()) stopBurst(event);
 		bursts.clear();
 	}
 
@@ -207,19 +242,23 @@ export function activate({module, canvas, archive, signal})
 
 		for(const event of bursts.values())
 		{
-			if(!event.pending.length) continue;
-
 			event.origin ??= context.currentTime;
 
-			for(const [delay, gain, cutoff, pan] of event.pending.splice(0))
+			for(const [slot, arrival] of event.arrivals)
 			{
-				const at = event.origin + delay;
+				if(arrival.voice) continue;
+				const at = event.origin + arrival.delay;
 
-				if(at < context.currentTime - .35) continue;
+				if(at < context.currentTime - .35)
+				{
+					event.arrivals.delete(slot);
+					continue;
+				}
 
-				const voice = playBurstTap(context, burstBuffer, buses.master, at, event.rate, gain, cutoff, pan);
-				event.voices.add(voice);
-				voice.addEventListener('ended', () => event.voices.delete(voice), {once: true});
+				const voice = playBurstTap(context, burstBuffer, buses.master, at, event.rate,
+					arrival.gain, arrival.cutoff, arrival.bearing, arrival.doppler);
+				arrival.voice = voice;
+				voice.source.addEventListener('ended', () => event.arrivals.delete(slot), {once: true});
 			}
 		}
 	}
@@ -435,35 +474,41 @@ export function activate({module, canvas, archive, signal})
 		update();
 	};
 
-	module.terrainBurstSound = (id, delay, gain, cutoff, pan, direct) => {
-		if(!effectsActive || !context || closed || pageHidden || doc.hidden || contextLost || !mix.master) return;
+	module.terrainBurstSound = (id, slot, fresh, delay, gain, cutoff, bearing, direct, doppler) => {
+		if(!effectsActive || context?.state !== 'running' || closed || pageHidden || doc.hidden || contextLost)
+		return false;
 
 		let event = bursts.get(id);
+
+		if(!fresh)
+		{
+			const arrival = event?.arrivals.get(slot);
+			if(!arrival) return false;
+
+			if(arrival.voice) arrival.voice.update(gain, cutoff, bearing, doppler);
+			else Object.assign(arrival, {gain, cutoff, bearing, doppler});
+
+			return true;
+		}
+
+		if(!mix.master) return false;
 
 		if(!event)
 		{
 			if(bursts.size >= 8)
 			{
 				const oldest = bursts.keys().next().value;
-
-				for(const voice of bursts.get(oldest).voices) voice.stop();
+				stopBurst(bursts.get(oldest));
 				bursts.delete(oldest);
 			}
 
-			event = {
-				origin: burstBuffer ? context.currentTime : null
-				, rate: .94 + (id*17%13)*.01
-				, pending: []
-				, voices: new Set()
-			};
-
+			event = {origin: burstBuffer ? context.currentTime : null, rate: .94 + (id*17%13)*.01, arrivals: new Map()};
 			bursts.set(id, event);
 		}
 
-		if(context.state !== 'running') return;
-
-		event.pending.push([direct && !mix.burstDelay ? 0 : delay, gain, cutoff, pan]);
+		event.arrivals.set(slot, {delay: direct && !mix.burstDelay ? 0 : delay, gain, cutoff, bearing, doppler});
 		flushBursts();
+		return true;
 	};
 
 	module.terrainCarSound = (cycle, level, cutoff, bite, skid, rate) => {

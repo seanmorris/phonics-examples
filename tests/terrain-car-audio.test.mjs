@@ -168,46 +168,49 @@ test('the saved master reaches the soundtrack at startup and when the listener a
 	controller.abort();
 });
 
-test('a burst arrival schedules the pressure recording through its own filter and stereo pan on the master', () => {
+test('a moving burst updates the same source and delays the ear opposite its bearing', () => {
 	const nodes = [];
-
-	const node = params => {
-		const result = {
-			...params
-
-			, connect(next) { this.next = next; return next; }
-
-
-			, disconnect() { this.next = null; }
-		};
-
+	const param = () => ({setTargetAtTime(value) { this.value = value; }});
+	const node = fields => {
+		const result = {...fields, links: [], connect(next, from = 0, to = 0) {
+			this.links.push([next, from, to]);
+			return next;
+		}, disconnect() { this.links.length = 0; }};
 		nodes.push(result);
-
 		return result;
 	};
-
 	const context = {
-		currentTime: 1
-		, sampleRate: 48000
-		, createBufferSource: () => node({
-			playbackRate: {}
-
-			, start(at) { this.at = at; }
-		})
-		, createGain: () => node({gain: {}})
-		, createBiquadFilter: () => node({frequency: {}, Q: {}})
-		, createStereoPanner: () => node({pan: {}})
+		currentTime: 1, sampleRate: 48000,
+		createBufferSource: () => node({playbackRate: param(), start(at) { this.at = at; }}),
+		createGain: () => node({gain: param()}),
+		createBiquadFilter: () => node({frequency: param(), Q: param()}),
+		createStereoPanner: () => node({pan: param()}),
+		createChannelSplitter: () => node({}), createChannelMerger: () => node({}),
+		createDelay: () => node({delayTime: param()})
 	};
-
-	const buffer = {}, master = {};
-	const source = playBurstTap(context, buffer, master, 2.4, .98, .16, 920, .7);
+	const master = {}, buffer = {};
+	const voice = playBurstTap(context, buffer, master, 2.4, .98, .16, 920, 1);
+	const [source,filter,level,pan,split,merge,left,right] = nodes;
+	assert.equal(source, voice.source);
 	assert.equal(source.buffer, buffer);
 	assert.equal(source.at, 2.4);
-	assert.equal(source.playbackRate.value, .98);
-	assert.equal(source.next.frequency.value, 920);
-	assert.equal(source.next.next.gain.value, .16);
-	assert.equal(source.next.next.next.pan.value, .7);
-	assert.equal(source.next.next.next.next, master);
+	assert.equal(left.delayTime.value, .0024);
+	assert.equal(right.delayTime.value, 0);
+	assert.deepEqual(split.links, [[left,0,0],[right,1,0]]);
+	assert.deepEqual([left.links[0],right.links[0],merge.links[0]], [[merge,0,0],[merge,0,1],[master,0,0]]);
+
+	voice.update(.08, 600, -1, .85);
+	assert.equal(source.playbackRate.value, .98*.85);
+	assert.equal(filter.frequency.value, 600);
+	assert.equal(level.gain.value, .08);
+	assert.equal(pan.pan.value, -.86);
+	assert.equal(left.delayTime.value, 0);
+	assert.equal(right.delayTime.value, .0024);
+	voice.update(.90, 10000, -1, 1.2);
+	assert.equal(right.delayTime.value, .0024);
+	voice.update(.90, 10000, 0, 1);
+	assert.equal(left.delayTime.value, 0);
+	assert.equal(right.delayTime.value, 0);
 	source.onended();
-	assert.ok(nodes.every(node => node.next === null));
+	assert.ok(nodes.every(node => node.links.length === 0));
 });
