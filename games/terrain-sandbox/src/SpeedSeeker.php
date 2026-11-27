@@ -10,10 +10,10 @@ final class SpeedSeeker
 {
 	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 10.;
 	private const LOOM_ABOVE_ROOF = 2.12;
-	// Inside this screen margin a loose prop can coast. At the margin, settle its next animation while visible.
-	private const DECISION_EDGE = .72, LAST_VISIBLE = .92, EDGE_LEAD_SECONDS = .35;
-	private const RETURN_RADIUS = 50., BOOST_RAMP = .24, BOOST_CRUISE = .18;
-	/** An eligible coast tracks this gap; its last value marks the boosted return in recorded takes. */
+	// The loose pass crosses the driving view in one beat, then bursts at the escort's usual lead.
+	private const PASS_SECONDS = .78, BURST_MARGIN = .82, HANDOFF_SECONDS = .10, AIM_ANGLE = 22.;
+	private const BOOST_RAMP = .24;
+	private bool $driftPass=false;
 	private ?float $rearPassGap=null;
 	private string $phase = 'mounted';
 	private int $slot = 0;
@@ -54,44 +54,55 @@ final class SpeedSeeker
 			$this->velocity=[$plane['vx'],$plane['vy'],$plane['vz']];
 			$this->phase='drop'; $this->clock=0.;
 		}
-		if($this->phase==='return' && $plane!==null && $patrol==='escort')
-			return $this->returnToPlane($dt,$plane,$beforeCar ?? $car,$car,$land,$water);
+		if($this->phase==='return' && $plane!==null && $patrol==='escort') {
+			if($this->driftPass) return $this->boostedReturn($dt,$plane,$beforeCar ?? $car,$car,$land,$water);
+			return $this->recordedReturn($dt,$plane,$beforeCar ?? $car,$car,$land,$water);
+		}
 		$rearDrift=$drifting && $this->phase==='chase' && $this->behindBumper($beforeCar ?? $car);
 		if($this->phase!=='missed' && ($rearDrift || $patrol==='departure' || $plane===null)) {
-			$this->rearPassGap=$rearDrift && $plane!==null && $patrol==='escort' ? $this->planeGap($plane) : null;
+			$this->rearPassGap=null;
 			$this->phase='missed'; $this->clock=0.; $this->carFrames=[];
 			$this->start=array_slice($this->start,0,6);
 			$this->velocity ??= self::motionAlongPose($this->pose,$car['speed']);
 			if($rearDrift) {
-				// Give the loose prop one upward flick, then let it coast along the player's drift.
-				$this->pose['pitch']+=deg2rad(5.);
-				$this->velocity[1]+=2.5;
+				$this->driftPass=true;
+				$this->loosePass($car,$patrol==='escort' ? $plane : null);
+				$this->clock=$dt;
 			}
-			$this->passSpeed=sqrt(array_sum(array_map(static fn($v)=>$v*$v,$this->velocity)));
+			$this->passSpeed=hypot(hypot($this->velocity[0],$this->velocity[2]),$this->velocity[1]);
 		}
 		if($this->phase==='missed') {
-			foreach(['x','y','z'] as $i=>$axis) $this->pose[$axis]+=$this->velocity[$i]*$dt;
-			$hit=SeekerContact::first($this->previous,$this->pose,$beforeCar ?? $car,$car,true,$land,$water);
-			if($this->clock>=6. || $hit!==null) return $this->finish($hit);
-			if($this->rearPassGap!==null && $plane!==null && $patrol==='escort') {
-				$gap=$this->planeGap($plane);
-				$camera=$eye ? $eye() : null;
-				$screen=$camera ? self::screenExtent($this->pose,$camera,$aspect) : 0.;
-				$edge=$screen>=self::DECISION_EDGE;
-				$gain=$this->rearPassGap-$gap;
-				// At the edge, give a converging pass a short lead on the usual proximity cue.
-				$anticipated=$edge && $dt>0. ? $gap-self::EDGE_LEAD_SECONDS*$gain/$dt : $gap;
-				if($screen<self::LAST_VISIBLE && ($edge || $this->clock>=.10) && $gain>0. && $anticipated<=self::RETURN_RADIUS) {
-					if($camera && !self::clearSight($this->pose,$camera,$land)) {
-						$this->rearPassGap=null;
-						return null;
-					}
-					$this->phase='return'; $this->clock=0.;
-					$this->start=[$this->pose['x']-$plane['x'],$this->pose['y']-$plane['y'],$this->pose['z']-$plane['z'],
-						$this->pose['yaw'],$this->pose['pitch'],$this->pose['roll'],
-						$this->velocity[0]-$plane['vx'],$this->velocity[1]-$plane['vy'],$this->velocity[2]-$plane['vz'],self::BOOST_RAMP,self::BOOST_CRUISE];
+			$camera=$this->driftPass && $eye ? $eye() : null;
+			$from=$this->pose;
+			$step=$this->driftPass ? min($dt,max(0.,self::PASS_SECONDS-$this->clock+$dt)) : $dt;
+			foreach(['x','y','z'] as $i=>$axis) $this->pose[$axis]+=$this->velocity[$i]*$step;
+			$burst=$this->driftPass && $this->clock>=self::PASS_SECONDS-1e-9;
+			$edge=$camera ? self::screenExtent($this->pose,$camera,$aspect) : 0.;
+			if($camera && $edge>=self::BURST_MARGIN) {
+				$lastEdge=self::screenExtent($from,$camera,$aspect);
+				if($lastEdge<1. && $edge>$lastEdge) {
+					// The flash starts at the last visible pose, even on the outside of a hard turn.
+					$this->pose=$from;
+					$burst=true;
 				}
-				$this->rearPassGap=$edge && $this->phase==='missed' ? null : $gap;
+			}
+			$hit=SeekerContact::first($this->previous,$this->pose,$beforeCar ?? $car,$car,true,$land,$water);
+			if($hit!==null) return $this->finish($hit);
+			if($burst) return $this->finish(['kind'=>'air','point'=>[$this->pose['x'],$this->pose['y'],$this->pose['z']]]);
+			if(!$this->driftPass && $this->clock>=6.) return $this->finish(null);
+			if($this->rearPassGap!==null) {
+				if(!$this->driftPass || $plane===null || $patrol!=='escort' ||
+					$edge>=.92) {
+					$this->rearPassGap=null;
+				} elseif($this->clock>=self::HANDOFF_SECONDS-1e-9) {
+					if($camera && !self::clearSight($this->pose,$camera,$land)) $this->rearPassGap=null;
+					else {
+						$this->rearPassGap=$this->planeGap($plane);
+						$this->start=[$this->pose['x'],$this->pose['y'],$this->pose['z'],
+							$this->pose['yaw'],$this->pose['pitch'],$this->pose['roll']];
+						$this->phase='return'; $this->clock=0.;
+					}
+				}
 			}
 			return null;
 		}
@@ -147,6 +158,29 @@ final class SpeedSeeker
 		return null;
 	}
 
+	/** The driver's flick aims the prop once. It cannot earn a new lock by coasting past the jet later. */
+	private function loosePass(array $car,?array $plane): void
+	{
+		$course=$car['yaw']-$car['drift'];
+		$yaw=$course+max(-.95,min(.95,$car['drift']));
+		$pitch=max(.18,min(.55,($car['pitch'] ?? 0.)+.20));
+		// Travel with the car's original course; add the flick on top so even a sideways miss passes ahead.
+		$lead=AirPatrol::ESCORT_LEAD + Car::BODY_REAR + 1.;
+		$extra=$lead/(self::PASS_SECONDS*cos($yaw-$course));
+		$travel=max(0.,$car['speed'])*cos($car['pitch'] ?? 0.);
+		$vx=$travel*sin($course)+$extra*sin($yaw); $vz=$travel*cos($course)+$extra*cos($yaw);
+		$this->velocity=[$vx,max(0.,$car['speed'])*sin($car['pitch'] ?? 0.)+$extra*tan($pitch),$vz];
+		$this->pose['yaw']=atan2($vx,$vz);
+		$this->pose['pitch']=atan2($this->velocity[1],hypot($vx,$vz));
+		if($plane!==null) {
+			$dx=$plane['x']-$this->pose['x']; $dy=$plane['y']-$this->pose['y']; $dz=$plane['z']-$this->pose['z'];
+			$gap=hypot(hypot($dx,$dz),$dy);
+			[$nx,$ny,$nz]=array_slice(VehicleModel::basis($this->pose),6);
+			$along=$dx*$nx+$dy*$ny+$dz*$nz;
+			if($gap>0. && $gap<=90. && $along>=$gap*cos(deg2rad(self::AIM_ANGLE))) $this->rearPassGap=$gap;
+		}
+	}
+
 	private function behindBumper(array $car): bool
 	{
 		$body=VehicleModel::basis($car+['pitch'=>0.,'roll'=>0.]);
@@ -159,8 +193,31 @@ final class SpeedSeeker
 		return hypot(hypot($this->pose['x']-$plane['x'],$this->pose['z']-$plane['z']),$this->pose['y']-$plane['y']);
 	}
 
-	/** Arcade return animation: curl from the pickup offset into the moving F5. */
-	private function returnToPlane(float $dt,array $plane,array $beforeCar,array $car,Landscape $land,float $water): ?array
+	/** Move the arcade prop from its visible handoff to the escort. */
+	private function boostedReturn(float $dt,array $plane,array $beforeCar,array $car,Landscape $land,float $water): ?array
+	{
+		// Advance the mesh by its carried speed plus an ease-in. The flash replaces the last partial step.
+		$boost=$this->rearPassGap/.30;
+		$distance=$this->passSpeed*$dt+$boost*(self::boostDistance($this->clock)-self::boostDistance(max(0.,$this->clock-$dt)));
+		$gap=$this->planeGap($plane);
+		$blend=$gap>0. ? min(1.,$distance/$gap) : 1.;
+		foreach(['x','y','z'] as $axis) $this->pose[$axis]+=$blend*($plane[$axis]-$this->pose[$axis]);
+		if($dt>0.) {
+			foreach(['x','y','z'] as $i=>$axis) $this->velocity[$i]=($this->pose[$axis]-$this->previous[$axis])/$dt;
+			[$x,$y,$z]=$this->velocity;
+			$tip=self::smooth($this->clock/.10);
+			$turn=atan2($x,$z)-$this->start[3];
+			$this->pose['yaw']=$this->start[3]+$tip*atan2(sin($turn),cos($turn));
+			$this->pose['pitch']=$this->start[4]+$tip*(atan2($y,hypot($x,$z))-$this->start[4]);
+		}
+		$hit=SeekerContact::first($this->previous,$this->pose,$beforeCar,$car,true,$land,$water);
+		if($hit!==null) return $this->finish($hit);
+		if($blend>=1.) return $this->finish(['kind'=>'plane','point'=>[$plane['x'],$plane['y'],$plane['z']]]);
+		return null;
+	}
+
+	/** Preserve the animation for a demo branched mid-return before drift aiming was introduced. */
+	private function recordedReturn(float $dt,array $plane,array $beforeCar,array $car,Landscape $land,float $water): ?array
 	{
 		$carry=0.;
 		$eased=count($this->start)>=9;
@@ -210,8 +267,16 @@ final class SpeedSeeker
 		return null;
 	}
 
+	/** Integral of the ease-in speed curve; independent of the render or simulation rate. */
+	private static function boostDistance(float $time): float
+	{
+		$u=min(1.,$time/self::BOOST_RAMP);
+		return self::BOOST_RAMP*$u**3*(1.-.5*$u)+max(0.,$time-self::BOOST_RAMP);
+	}
+
 	private function finish(?array $hit): ?array
 	{
+		$this->driftPass=false;
 		$this->impact=$hit['point'] ?? null; $this->mount=$hit['mount'] ?? null;
 		$this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[];
 		$this->pose=$this->velocity=$this->rearPassGap=null;
@@ -290,11 +355,12 @@ final class SpeedSeeker
 	{
 		$p=$this->pose;
 		if($alpha<1. && $this->previous!==null && $p!==null) $p=AirPatrol::interpolate($this->previous,$p,$alpha);
-		return ['phase'=>$this->phase,'slot'=>$this->slot,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+($this->rearPassGap!==null ? ['rearPassGap'=>$this->rearPassGap] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
+		return ['phase'=>$this->phase,'slot'=>$this->slot,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+($this->rearPassGap!==null ? ['rearPassGap'=>$this->rearPassGap] : [])+($this->driftPass ? ['driftPass'=>true] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
 	}
 
 	public function resume(array $s): void
 	{
+		$this->driftPass=$s['driftPass'] ?? false;
 		$this->slot=$s['slot'] ?? 0;
 		$this->rearPassGap=$s['rearPassGap'] ?? null;
 		$this->phase=$s['phase']; $this->clock=$s['clock']; $this->start=$s['start']; $this->passSpeed=$s['passSpeed'];

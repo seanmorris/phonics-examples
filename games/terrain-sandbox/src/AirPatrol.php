@@ -10,6 +10,7 @@ final class AirPatrol
 {
 	private string $phase = 'idle';
 	private bool $repelled=false;
+	public const ESCORT_LEAD = 36.;
 	private const WRECK_CLEAR_DISTANCE=500.;
 	private const FLASH_HOLD=.22, GLANCE_END=.50; // Seconds since impact.
 	private float $elapsed = 0., $slow = 0., $side = 1., $circleRemaining = 0.;
@@ -145,7 +146,7 @@ final class AirPatrol
 			// Join from the shoulder, then bank across the road ahead of the driver.
 			$headingError=self::angle($course-$p['yaw']);
 			$joining=$this->phase==='arrival';
-			$station=$joining ? 72. : 36.;
+			$station=$joining ? 72. : self::ESCORT_LEAD;
 			$look=$joining ? 32. : max(42.,.82*$p['speed']);
 			if($joining) {
 				$lane=$this->side*($along<18. ? 64. : (13.+13.*cos(.43*$this->elapsed))*max(0.,1.-1.6*abs($headingError)));

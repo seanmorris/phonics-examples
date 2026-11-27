@@ -167,12 +167,12 @@ $xyz=static fn(array $p)=>[$p['x'],$p['y'],$p['z']];
 expect(abs(abs($back)-M_PI)<1e-8,'Tracking across the rear view takes the short way around.');
 
 // Try the handbrake during the fly-out, the swing down, and from both sides of the rear chase.
-foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,false],[2.65,'KeyD',true,false],[3.25,'KeyD',true,true],[3.,'KeyA',true,true]] as [$delay,$steer,$shakes,$wins]) {
+foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,false],[2.65,'KeyD',true,false],[3.25,'KeyD',true,false],[4.30,'KeyD',true,true],[4.50,'KeyA',true,true]] as [$delay,$steer,$shakes,$wins]) {
 	$game=new Session($flat);
 	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$releaseTime+$delay],'demo-take-control'] as $action)
 		$game->input(['actions'=>[$action]],0.,16/9);
 	$lockedAt=$wonAt=$previousPose=null; $missed=$followed=$driftedOnApproach=false;
-	$returnSpeeds=[]; $declined=false;
+	$returnSpeeds=[]; $releaseAngle=$missLead=null;
 	for($tick=0;$tick<360;$tick++) {
 		if($tick===0 || $tick===24) $game->input(['keys'=>$tick===0 ? ['KeyW'=>1,$steer=>1,'Space'=>1] : ['KeyW'=>1]],0.,16/9);
 		$beforeShot=$game->airPatrol->seeker();
@@ -190,14 +190,19 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 			$body=VehicleModel::basis($beforeCar); $at=$beforeShot['pose'];
 			$along=($at['x']-$beforeCar['x'])*$body[6]+($at['y']-$beforeCar['y'])*$body[7]+($at['z']-$beforeCar['z'])*$body[8];
 			expect($beforeShot['phase']==='chase' && $along<=-Car::BODY_REAR,'A drift only releases the seeker from behind the bumper.');
+			$delta=array_map(static fn($plane,$prop)=>$plane-$prop,$xyz($patrol['pose']),$xyz($shot['pose']));
+			$nose=array_slice(VehicleModel::basis($shot['pose']),6);
+			$cosine=array_sum(array_map(static fn($d,$n)=>$d*$n,$delta,$nose))/hypot(hypot($delta[0],$delta[2]),$delta[1]);
+			$releaseAngle=rad2deg(acos(max(-1.,min(1.,$cosine))));
 		}
-		if(($shot['phase'] ?? '')==='missed' && isset($beforeShot['rearPassGap']) && !isset($shot['rearPassGap'])) {
-			expect($inFrame($game->view(1.)[0],$xyz($shot['pose']),1.),'The loose prop commits to a miss while still visible.');
-			$declined=true;
+		if(($beforeShot['phase'] ?? '')==='missed' && ($shot['phase'] ?? '')==='reload') {
+			$car=$game->car->state(); $heading=$car['yaw']-$car['drift']; $point=$shot['impact'];
+			$missLead=($point[0]-$car['x'])*sin($heading)+($point[2]-$car['z'])*cos($heading);
+			expect($inFrame($game->view(1.)[0],$point,.90),'A missed drift bursts inside the driving view.');
 		}
 		if(($shot['phase'] ?? '')==='return') {
 			$at=$shot['pose'];
-			expect(!$declined && $inFrame($game->view(1.)[0],$xyz($at),.98),
+			expect($inFrame($game->view(1.)[0],$xyz($at),.98),
 				'The driver sees the loose prop change direction and can follow it on every frame of its return.');
 			expect($inFrame($game->view(.5)[0],$xyz($game->airPatrol->seeker(.5)['pose']),1.),
 				'Interpolated chase frames keep the same moving prop in sight.');
@@ -237,12 +242,18 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 	}
 	if($delay<1.95) expect($driftedOnApproach && $followed,'An early handbrake slide still leads into the bumper chase.');
 	expect($missed===$shakes,'A slide that ends before the bumper chase cannot shake the lock later.');
-	if($shakes && !$wins) expect($declined,'A wide drift closes its retarget window before leaving the frame.');
-	expect(($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'Only a drift that brings the loose seeker back near the F5 wins.');
+	if($shakes) expect(($releaseAngle<=22.)===$wins,'Only a flick pointed toward the jet at release can win.');
+	if($shakes && !$wins) expect(abs($missLead-AirPatrol::ESCORT_LEAD)<6.,'The miss flashes ahead at the usual patrol lead.');
+	expect(($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'The aimed flick returns to the jet and the other flicks miss.');
 	if($wins) {
-		expect($returnSpeeds[1]<1.3 && $returnSpeeds[8]>$returnSpeeds[2] && $returnSpeeds[14]>$returnSpeeds[8],
+		$last=1.;
+		foreach($returnSpeeds as $speed) {
+			expect($speed>=$last-.00001,'The mesh covers at least as much ground each tick from the moment of handoff.');
+			$last=$speed;
+		}
+		expect($returnSpeeds[1]<1.3 && $last>1.2,
 			'The returning prop carries its drift into a short, eased acceleration.');
-		expect(abs($wonAt-$lockedAt-.42)<.04,'The faster return reaches the plane in about four tenths of a second.');
+		expect($wonAt-$lockedAt<.50 && $wonAt-$lockedAt>.10,'The visible return reaches the jet in under half a second.');
 		[$pan,$tilt]=$game->airPatrol->snapshot()['glance'] ?? [0.,0.];
 		expect(max(abs($pan),abs($tilt))<.02,'The view eases back to the road after the flash.');
 		$away=new AirPatrol; $away->resume($hitPatrol);
@@ -293,11 +304,11 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 		$game->input(['actions'=>['demo-stop']],0.,16/9);
 		$recording=$game->demo->export(); $result=DemoTape::import($recording);
 		expect($result->frame($wonAt+.1)['events']['airPatrol']['repelled'],'The recorded win survives export and a seek.');
-		foreach([['type'=>'demo-open','json'=>$recording],['type'=>'demo-seek','seconds'=>$lockedAt+.25],'demo-take-control'] as $action)
+		foreach([['type'=>'demo-open','json'=>$recording],['type'=>'demo-seek','seconds'=>($lockedAt+$wonAt)/2],'demo-take-control'] as $action)
 			$game->input(['actions'=>[$action]],0.,16/9);
 		for($tick=0;$tick<42;$tick++) $game->step(1/60);
 		expect($game->airPatrol->snapshot()['repelled'] ?? false,'Taking control halfway through a recorded return completes the encounter.');
-		foreach([$lockedAt+.20,$wonAt+.12] as $at) {
+		foreach([($lockedAt+$wonAt)/2,$wonAt+.12] as $at) {
 			foreach(['demo-stop',['type'=>'demo-open','json'=>$recording],['type'=>'demo-seek','seconds'=>$at],'demo-take-control'] as $action)
 				$game->input(['actions'=>[$action]],0.,16/9);
 			$recorded=$result->frame($game->demo->duration())['camera']; $view=$game->view(1.)[0];
@@ -323,6 +334,16 @@ $car['yaw']=-M_PI/2; $car['drift']=0.;
 for($i=0;$i<8;$i++) $prop->step(1/60,$car,$plane,'escort',$land,-10.);
 expect($prop->state()['phase']==='return','Turning the car after a rear release keeps the converging seeker eligible for the F5.');
 
+// A crossing after the release cannot turn an unaimed flick into a win, even at close range.
+$awayPlane=array_replace($plane,['x'=>0.,'z'=>15.]);
+$car['yaw']=M_PI/2; $car['drift']=.3;
+$prop->resume(['phase'=>'chase','clock'=>0.,'start'=>array_fill(0,6,0.),'pose'=>$pose,'velocity'=>[1.,0.,0.],'passSpeed'=>1.]);
+$prop->step(1/60,$car,$awayPlane,'escort',$land,-10.);
+expect(!isset($prop->state()['rearPassGap']),'A nearby jet across the drift direction receives no lock.');
+$hit=null;
+for($i=0;$i<60 && !$hit;$i++) $hit=$prop->step(1/60,$car,$plane,'escort',$land,-10.);
+expect($hit['kind']==='air','A jet crossing the released path later still leaves an ordinary airburst.');
+
 // Looking away during the loose pass closes the handoff, including after branching a recording.
 $watch=new Camera; $watch->position=[0.,4.,-14.]; $watch->yaw=0.;
 $prop->resume($released);
@@ -330,11 +351,16 @@ $prop->step(1/60,$car,$plane,'escort',$land,-10.,null,fn()=>$watch,4/3);
 $lost=$prop->state();
 expect($lost['phase']==='missed' && !isset($lost['rearPassGap']),'An offscreen pass loses its return cue.');
 $prop->resume($lost); $watch->yaw=M_PI;
-for($i=0;$i<20;$i++) $prop->step(1/60,$car,$plane,'escort',$land,-10.,null,fn()=>$watch,4/3);
-expect($prop->state()['phase']==='missed','Bringing the prop back into view cannot restart a missed handoff.');
+$burst=null;
+for($i=0;$i<60 && $burst===null;$i++) {
+	$burst=$prop->step(1/60,$car,$plane,'escort',$land,-10.,null,fn()=>$watch,4/3);
+	expect($prop->state()['phase']!=='return','Bringing the prop back into view cannot restart a missed handoff.');
+}
+expect($burst['kind']==='air' && $i<40 && $inFrame($watch,$burst['point'],.96),
+	'A sideways pass flashes before it leaves the viewport, ahead of its normal expiry.');
 
 // Early takes used passGap for releases that could happen beside the wing.
-unset($released['rearPassGap']);
+unset($released['rearPassGap'],$released['driftPass']);
 $released['passGap']=25.; $released['clock']=.2;
 $prop->resume($released); $prop->step(1/60,$car,$plane,'escort',$land,-10.);
 expect($prop->state()['phase']==='missed','Resuming an old wing-side release does not grant a rear release.');
@@ -496,19 +522,18 @@ expect($miss['phase']==='missed','A real slide immediately shakes the current se
 $coast=new SpeedSeeker; $coast->resume($checkpoint['seeker']);
 $coast->step(1/60,$driver,null,'departure',$land,-10.);
 $plain=$coast->state();
-expect(abs($miss['pose']['pitch']-$plain['pose']['pitch']-deg2rad(5.))<1e-9 &&
-	$miss['velocity'][1]>$plain['velocity'][1]+2. && $miss['pose']['y']>$plain['pose']['y'] &&
-	$miss['velocity'][0]===$plain['velocity'][0] && $miss['velocity'][2]===$plain['velocity'][2],
-	'Shaking the seeker lifts its nose and its path while carrying the sideways drift.');
+expect($miss['pose']['pitch']>$plain['pose']['pitch'] && $miss['velocity'][1]>$plain['velocity'][1]+2. &&
+	$miss['pose']['y']>$plain['pose']['y'] && $miss['passSpeed']>$driver['speed'],
+	'The shaken prop lifts above the roof and overtakes the driver.');
 $widePass=$pilot->snapshot(); $widePass['pose']['x']+=180.; // Keep the F5 out of retargeting range on both paths.
 $pilot->resume($widePass); $other=new AirPatrol; $other->resume($widePass);
-for($i=0;$i<60;$i++) {
+for($i=0;$i<12;$i++) {
 	$pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
 	$other->step(1/60,$displaced,$eyeAt,16/9,$land,-10.);
 }
-expect($pilot->seeker()['pose']===$other->seeker()['pose'] && $pilot->seeker()['pose']['z']>$miss['pose']['z']+30. &&
-	abs($pilot->seeker()['pose']['y']-$miss['pose']['y']-$miss['velocity'][1])<.0001,
-	'Once shaken, the prop sails past on the same course whichever way the car turns.');
+expect($pilot->seeker()['pose']===$other->seeker()['pose'] && $pilot->seeker()['pose']['z']>$miss['pose']['z'] &&
+	abs($pilot->seeker()['pose']['y']-$miss['pose']['y']-.2*$miss['velocity'][1])<.0001,
+	'The shaken prop holds its release course even when the driver changes direction.');
 // With the patrol peeling away, the same loose shot expires and cannot score a return.
 $escaping=new SpeedSeeker; $escaping->resume($miss);
 for($i=0;$i<370;$i++) $escaping->step(1/60,$driver,null,'departure',$land,-10.);
