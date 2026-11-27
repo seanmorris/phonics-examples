@@ -84,3 +84,24 @@ use TerrainSandbox\FlightTrails;
 	$playing=false; $frame(); $count=count($voices); $frame();
 	expect(count($voices)===$count,'An ended arrival stops sending mixer updates.');
 })();
+
+(function() {
+	$land=new Landscape(['worldSize'=>2048,'heightScale'=>0,'detailAmplitude'=>0]);
+	$ear=new Camera;
+	$ear->position=[0.,2.,0.];
+	$source=new FlightTrails;
+	$acoustics=new BurstAcoustics;
+	$levels=[];
+	$play=static function($id,$slot,$fresh,$delay,$gain,$cutoff) use (&$levels) {
+		if($fresh && $slot===0) $levels[]=[$gain,$cutoff];
+		return false;
+	};
+	foreach([10.,250.,500.] as $meters) {
+		$source->burst([0.,2.,-$meters],0.);
+		$acoustics->frame($source,$land,$ear,-5.,static fn($enabled)=>null,$play,1/60);
+	}
+	[[$near,$clear],[$middle,$muffled],[$far,$dull]]=$levels;
+	expect($near>.9 && $clear>11000.,'A nearby impact retains its level and the crack at the top of the spectrum.');
+	expect($middle<.2*$near && $muffled<2000.,'At 250 meters the report recedes and the sharp crack is muffled.');
+	expect($far<.6*$middle && $dull<1000.,'At 500 meters the quieter bass tail carries farther than the crack.');
+})();

@@ -28,9 +28,12 @@ final class BurstAcoustics
 		$closing = ($velocity[0]*$x+$velocity[1]*$y+$velocity[2]*$z)*$inverse;
 		// Limit the shift to roughly four semitones at jet speeds.
 		$doppler = max(.8,min(1.25,1.+$closing/343.));
-		return [$path/343., $reflectivity/(1.+$path/155.),
-			$outbound > 0. ? 280.+1100./(1.+$path/350.) : 1200.+11000./(1.+$path/500.),
-			$bearing, $outbound===0., $doppler];
+		// Keep the nearby crack. Beyond 12 meters the high end carries less far than the bass.
+		$far = max(0.,$path-12.);
+		$gain = $reflectivity/(1.+$path/155.+$far/75.);
+		$air = 1./(1.+$far/110.);
+		$cutoff = $outbound > 0. ? 180.+1200.*$air : 380.+11820.*$air*$air;
+		return [$path/343., $gain, $cutoff, $bearing, $outbound===0., $doppler];
 	}
 
 	/** Sample lattice nodes on eight spokes. Yield after each probe so cold terrain can be surveyed across frames. */
