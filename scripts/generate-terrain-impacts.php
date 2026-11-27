@@ -50,7 +50,7 @@ writeTerrainPcm('f5-enemy-vulcan-hit.wav',1,$rate,$pcm,$check);
 
 // Projectile explosion. A broad band of turbulent bass rolls down in frequency while the brighter tearing sound
 // breaks up and dies away. The landscape supplies the echoes at playback.
-$duration = 2.8;
+$duration = 1.68;
 $frames = (int)round($duration*$rate);
 $pcm = '';
 $state = 6288.;
@@ -63,7 +63,7 @@ $low = $band = $drift = $grit = $mid = $midFloor = $flutter = 0.;
 for($i = 0; $i < $frames; $i++) {
 	$t = $i/$rate;
 	// Broad, noise-driven resonance. The center moves from about 125 Hz toward 25 Hz.
-	$tuning = .0048 + .020*exp(-$t/.66);
+	$tuning = .0048 + .020*exp(-$t/.40);
 	$low += $tuning*$band;
 	$band += $tuning*($noise() - $low - .94*$band);
 	$drift += .0063*($low-$drift);
@@ -73,11 +73,12 @@ for($i = 0; $i < $frames; $i++) {
 	$mid += .122*($grit-$mid);
 	$midFloor += .025*($mid-$midFloor);
 	$flutter += .0011*($noise()-$flutter);
-	$tearing = (1.78*($mid-$midFloor) + (.54+1.03*pressurePulse($t,.18,.51))*exp(-$t/.85)*($grit-$mid))
+	$tearing = (1.78*($mid-$midFloor) + (.54+1.30*exp(-$t/.055))*exp(-$t/.48)*($grit-$mid))
 		* max(.45, 1.+13.*$flutter);
 
-	$late = max(0.,$t-1.23);
-	$level = (1.-exp(-$t/.025))*(.89+.11*exp(-$t/.35))*exp(-.10*$t-.71*$late-.86*$late*$late);
+	// The crack peaks in the first few milliseconds; the heavier bass rolls off behind it.
+	$late = max(0.,$t-.75);
+	$level = (1.-exp(-$t/.003))*(.43*exp(-$t/.11)+.57*exp(-$t/.85))*exp(-1.6*$late-1.25*$late*$late);
 	$fade = min(1.,($duration-$t)/.075);
 	$pcm .= pack('v',(int)round(28800*$level*tanh(1.6*($roar+$tearing))*$fade));
 }
