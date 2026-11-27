@@ -206,16 +206,19 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 				'The driver sees the loose prop change direction and can follow it on every frame of its return.');
 			expect($inFrame($game->view(.5)[0],$xyz($game->airPatrol->seeker(.5)['pose']),1.),
 				'Interpolated chase frames keep the same moving prop in sight.');
-			// Measure the pan and tilt from the same unassisted eye, independent of the car's yaw this tick.
-			$base=$game->carView(1.)[0]; $end=$game->view(1.)[0];
-			[$x,$y,$z]=array_map(static fn($v,$o)=>$v-$o,$xyz($at),$base->position);
-			$yaw=$base->yaw+$beforeGlance[0]; $pitch=$base->pitch+$beforeGlance[1];
-			$wrap=static fn($a)=>atan2(sin($a),cos($a));
-			$toX=$wrap(atan2($x,-$z)-$yaw); $toY=atan2($y,hypot($x,$z))-$pitch;
-			$pan=$wrap($end->yaw-$yaw); $tilt=$end->pitch-$pitch;
-			expect($pan*$toX+$tilt*$toY>=0. && abs($pan*$toY-$tilt*$toX)<.00004 &&
-				hypot($toX-$pan,$toY-$tilt)<=hypot($toX,$toY)*.99+.00002,
-				'On each return tick both camera axes ease toward the moving seeker.');
+			$glance=$patrol['glance'] ?? [0.,0.];
+			$change=hypot($glance[0]-$beforeGlance[0],$glance[1]-$beforeGlance[1]);
+			expect($change<deg2rad($shot['clock']<.02 ? .15 : 1.8),
+				'The handoff starts gently and the chase camera pans smoothly through the return.');
+			if($shot['clock']>=.15) {
+				$base=$game->carView(1.)[0];
+				[$x,$y,$z]=array_map(static fn($v,$o)=>$v-$o,$xyz($at),$base->position);
+				$yaw=atan2($x,-$z)-$base->yaw;
+				$pan=atan2(sin($yaw),cos($yaw)); $tilt=atan2($y,hypot($x,$z))-$base->pitch;
+				$remaining=hypot($pan-$glance[0],$tilt-$glance[1])/hypot($pan,$tilt);
+				expect($remaining>.25 && $remaining<.90,
+					'The camera turns partway from the road toward the seeker, leaving it visibly off-center.');
+			}
 			if($shot['clock']>=.20) {
 				$view=$game->view(1.)[0];
 				expect($inFrame($view,$xyz($at),.75) && $inFrame($view,$xyz($patrol['pose']),.75),
@@ -237,8 +240,13 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 		}
 		if($wonAt!==null && $game->demo->duration()-$lockedAt>=.95)
 			expect(!isset($patrol['glance']), 'The complete camera cue is over within a second of the lock.');
-		if($wonAt!==null && isset($shot['impact']) && $shot['clock']<=.20)
-			expect($inFrame($game->view(1.)[0],$shot['impact'],.22),'The camera holds the world-space flash as the car drives on.');
+		if($wonAt!==null && isset($shot['impact']) && $shot['clock']<=.50) {
+			$glance=$patrol['glance'] ?? [0.,0.];
+			expect(hypot($glance[0]-$beforeGlance[0],$glance[1]-$beforeGlance[1])<deg2rad(1.8),
+				'The flash and the return to the road keep the same gentle camera movement.');
+			if($shot['clock']<=.20) expect($inFrame($game->view(1.)[0],$shot['impact'],.85),
+				'The flash stays visible from the driving view as the car passes.');
+		}
 	}
 	if($delay<1.95) expect($driftedOnApproach && $followed,'An early handbrake slide still leads into the bumper chase.');
 	expect($missed===$shakes,'A slide that ends before the bumper chase cannot shake the lock later.');
@@ -387,6 +395,30 @@ foreach([0.,100.] as $speed) {
 	expect(!$effects->showsLodgedSeeker() && $effects->active() && ($speed===0. ? abs($age-.87)<.02 : abs($age-.16)<.02),
 		'The shell clears while the burst is still visible, including when the car outruns it.');
 }
+// The car patrol maneuvers on a faster clock while covering the same distance per tick as a player.
+foreach([-.35,.35] as $climb) {
+	$camera=new Camera; $camera->position=[0.,500.,0.];
+	$player=new Jet; $player->board($camera,$land,-10.); $patrolJet=clone $player;
+	for($tick=1;$tick<=180;$tick++) {
+		$before=$patrolJet->state();
+		$player->step(1/60.,0.,.55,$climb,$camera,$land,-10.);
+		$patrolJet->fly(1/60.,0.,.55,$climb,$land,-10.,maneuverRate:2.);
+		$p=$patrolJet->state(); $regular=$player->state();
+		$distance=hypot(hypot($p['x']-$before['x'],$p['z']-$before['z']),$p['y']-$before['y']);
+		expect($p['speed']===$regular['speed'] && $p['power']===$regular['power'] && abs($distance-$p['speed']/60.)<1e-8,
+			'Patrol maneuvers spend the same airspeed and engine power as the player.');
+		if($tick===1) {
+			$firstRoll=$p['roll'];
+			expect(abs($firstRoll)>1.9*abs($regular['roll']),'The CPU banks more sharply on the first tick of steering.');
+		}
+		if($tick===2) expect(abs($firstRoll-$regular['roll'])<1e-9,'One CPU roll tick gives two ticks of player roll response.');
+	}
+	$grade=$p['vy']/hypot($p['vx'],$p['vz']); $normalGrade=$regular['vy']/hypot($regular['vx'],$regular['vz']);
+	expect(abs($grade/$normalGrade-2.)<.10,'A sustained patrol climb or descent takes about twice the player’s grade.');
+	expect(abs($p['yaw']-$before['yaw']-2.*sin($p['roll'])*Jet::BANKED_TURN_RATE/60.)<1e-8,
+		'At a given bank, the powered patrol turns at twice the normal rate.');
+}
+
 // Measure the aircraft the player sees, across several passes and in the car's own travel direction.
 foreach([[28.,M_PI/2],[72.,0.],[106.,M_PI]] as [$speed,$heading]) {
 	$pilot=new AirPatrol; $eye=new Camera; $eye->yaw=M_PI-$heading; $eye->fov=1.36;
@@ -509,7 +541,8 @@ foreach(['hairpin','stop'] as $maneuver) {
 		expect($p!==null && $p['speed']>=Jet::SLOWEST && abs($p['speed']-$before['speed'])<=Jet::ACCELERATION/60.+.05,
 			'Even when shaken, the pilot keeps flying with the F5 engine limits.');
 		$x=$p['x']-$car['x']; $z=$p['z']-$car['z']; $range=hypot($x,$z); $wide=max($wide,$range);
-		if($wide>140. && abs($x*$g-$z*$f)<25. && $x*$f+$z*$g>25. && $range<62. && cos($p['yaw']-$car['yaw'])>.75) $rejoined=true;
+		// The normal 10-to-2 sweep reaches 72 m. A 90 m separation is clear of formation.
+		if($wide>90. && abs($x*$g-$z*$f)<25. && $x*$f+$z*$g>25. && $range<62. && cos($p['yaw']-$car['yaw'])>.75) $rejoined=true;
 	}
 	expect($rejoined,"The same pilot loses formation on a $maneuver and recovers the chase.");
 }

@@ -22,6 +22,7 @@ final class Jet
 	private const SPOOL_UP = .36, SPOOL_DOWN = .27, SPEED_LAG = .18;
 	/** Seconds for the direction of travel to close about two thirds of a small change in nose direction. */
 	private const FLIGHT_PATH_LAG = .36;
+	public const BANKED_TURN_RATE = .68;
 	/** Expert body rates at full deflection in radians a second, and the time constant with which they follow it. */
 	public const ROLL_RATE = 2.8, PITCH_RATE = 1.05, YAW_RATE = .35, RATE_LAG = .12;
 	/** Time constant in seconds with which the Expert chase camera swings in behind the nose. */
@@ -118,7 +119,7 @@ final class Jet
 
 	/** Advance the airframe and control surfaces one tick, independent of who is piloting or watching it. */
 	public function fly(float $dt, float $throttle, float $bank, float $climb, Landscape $land,
-		float $water, float $rudder = 0., float $idleSpeed = self::SLOWEST): bool
+		float $water, float $rudder = 0., float $idleSpeed = self::SLOWEST, float $maneuverRate = 1.): bool
 	{
 		$this->survey($land);
 		$this->previous = $this->pose;
@@ -136,23 +137,27 @@ final class Jet
 		$change = min(self::ACCELERATION * $dt, abs($gap) * (1 - exp(-$dt / self::SPEED_LAG)));
 		$p['speed'] = abs($gap) < .04 ? $target : $p['speed'] + ($gap <=> 0) * $change;
 		$travel = $p['speed'] * $dt;
+		// Maneuver time changes attitude and direction. Engine response and distance use elapsed time.
+		$maneuverDt = $dt * $maneuverRate;
 		if($this->expert)
 			[, , $nose] = $this->rotate($dt, $bank, $climb, $rudder);
 		else
 		{
 			// Roll and pitch close on their targets at a rate in proportion to the angle still to go.
 			$rollDemand = -$bank * 1.10 - $p['roll'];
-			$pitchDemand = $climb * .78 - $p['pitch'];
-			$p['roll'] += $rollDemand * (1 - exp(-3.6 * $dt));
-			$p['pitch'] += $pitchDemand * (1 - exp(-2.1 * $dt));
-			$turn = sin($p['roll']) * .68;
-			$p['yaw'] += $turn * $dt;
-			$this->deflect($dt, $rollDemand, $pitchDemand, $turn);
+			$pitch = $climb * .78;
+			if($maneuverRate !== 1.) $pitch = atan($maneuverRate * tan($pitch));
+			$pitchDemand = $pitch - $p['pitch'];
+			$p['roll'] += $rollDemand * (1 - exp(-3.6 * $maneuverDt));
+			$p['pitch'] += $pitchDemand * (1 - exp(-2.1 * $maneuverDt));
+			$turn = sin($p['roll']) * self::BANKED_TURN_RATE;
+			$p['yaw'] += $turn * $maneuverDt;
+			$this->deflect($maneuverDt, $rollDemand, $pitchDemand, $turn);
 			$nose = [sin($p['yaw'])*cos($p['pitch']), sin($p['pitch']), cos($p['yaw'])*cos($p['pitch'])];
 		}
 		// Turning the body redirects travel over time. Ground clearance can lift a single step without
 		// imparting a permanent upward velocity when the terrain is edited below a flying jet.
-		$follow = 1 - exp(-$dt / self::FLIGHT_PATH_LAG);
+		$follow = 1 - exp(-$maneuverDt / self::FLIGHT_PATH_LAG);
 		[$dx,$dy,$dz] = $this->flightDirection;
 		$dx += ($nose[0] - $dx)*$follow;
 		$dy += ($nose[1] - $dy)*$follow;

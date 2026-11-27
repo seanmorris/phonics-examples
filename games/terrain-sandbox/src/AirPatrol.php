@@ -11,8 +11,10 @@ final class AirPatrol
 	private string $phase = 'idle';
 	private bool $repelled=false;
 	public const ESCORT_LEAD = 36.;
+	private const MANEUVER_RATE = 2.;
 	private const WRECK_CLEAR_DISTANCE=500.;
-	private const FLASH_HOLD=.22, GLANCE_END=.50; // Seconds since impact.
+	private const RETURN_FRAMING=.55, FOLLOW_HALF_LIFE=.08, EASE_IN=.14;
+	private const FLASH_HOLD=.16, GLANCE_END=.50; // Seconds since impact.
 	private float $elapsed = 0., $slow = 0., $side = 1., $circleRemaining = 0.;
 	private float $probeIn = 0., $aheadFloor = 0.;
 	public ?FlightTrails $smoke=null;
@@ -123,7 +125,7 @@ final class AirPatrol
 				$this->aheadFloor=$water;
 				$track=atan2($p['vx'],$p['vz']);
 				foreach([.45,.95,1.6] as $seconds) {
-					$yaw=$track+.5*$seconds*.68*sin($p['roll']);
+					$yaw=$track+.5*$seconds*Jet::BANKED_TURN_RATE*self::MANEUVER_RATE*sin($p['roll']);
 					$range=$seconds*$p['speed'];
 					$this->aheadFloor=max($this->aheadFloor,self::floor($land,$water,
 						$p['x']+$range*sin($yaw),$p['z']+$range*cos($yaw)));
@@ -147,7 +149,7 @@ final class AirPatrol
 			$headingError=self::angle($course-$p['yaw']);
 			$joining=$this->phase==='arrival';
 			$station=$joining ? 72. : self::ESCORT_LEAD;
-			$look=$joining ? 32. : max(42.,.82*$p['speed']);
+			$look=$joining ? 32. : max(39.,.82*$p['speed']);
 			if($joining) {
 				$lane=$this->side*($along<18. ? 64. : (13.+13.*cos(.43*$this->elapsed))*max(0.,1.-1.6*abs($headingError)));
 			} else {
@@ -181,7 +183,7 @@ final class AirPatrol
 				$this->phase='escort'; $this->elapsed=0.;
 			}
 		}
-		$flying=$this->jet->fly($dt,$throttle,$bank,$climb,$land,$water,idleSpeed:$idleSpeed);
+		$flying=$this->jet->fly($dt,$throttle,$bank,$climb,$land,$water,idleSpeed:$idleSpeed,maneuverRate:self::MANEUVER_RATE);
 		$next=$this->jet->state();
 		$this->advanceSeeker($dt,$car,$next,$flying ? $this->phase : 'departure',$land,$water,$beforeCar,$eye,$aspect);
 		if($this->circleRemaining>0.) $this->circleRemaining=max(0.,$this->circleRemaining-
@@ -246,6 +248,13 @@ final class AirPatrol
 		return [self::angle($from[0]+$t*self::angle($to[0]-$from[0])), $from[1]+$t*($to[1]-$from[1])];
 	}
 
+	/** Smoothstep with level tangents at the beginning and end of the camera cue. */
+	private static function ease(float $t): float
+	{
+		$t=max(0.,min(1.,$t));
+		return $t*$t*(3.-2.*$t);
+	}
+
 	/** Pan the driver's view without moving the boom or changing steering. */
 	public function advanceGlance(callable $getEye,array $car,bool $manual,float $dt): bool
 	{
@@ -259,19 +268,22 @@ final class AirPatrol
 		$point=$shot['pose'] ?? null;
 		$goal=self::NEUTRAL_GLANCE;
 		$keep=2**(-$dt/.12);
-		if(($shot['phase'] ?? null)==='return') {
-			$goal=self::lookOffset($getEye(),$point['x'],$point['y'],$point['z']);
-			$keep=2**(-$dt/.035);
-		} elseif($this->repelled && isset($shot['impact'])) {
-			if($shot['clock']<self::FLASH_HOLD) {
-				$goal=self::lookOffset($getEye(),...$shot['impact']);
-				$keep=2**(-$dt/.050);
-			} else {
-				// Ease the remaining angle to exactly zero half a second after impact.
-				$left=max(0.,self::GLANCE_END-$shot['clock']);
-				$before=min(self::GLANCE_END-self::FLASH_HOLD,$left+$dt);
-				$keep=$before>0. ? ($left/$before)**2 : 0.;
-			}
+		$returning=($shot['phase'] ?? null)==='return';
+		$flash=$this->repelled && isset($shot['impact']);
+		if($returning || ($flash && $shot['clock']<self::FLASH_HOLD)) {
+			$mark=$returning ? [$point['x'],$point['y'],$point['z']] : $shot['impact'];
+			[$pan,$tilt]=self::lookOffset($getEye(),...$mark);
+			// A flash passing behind the car crosses the yaw wrap without reversing the pan.
+			$goal=[self::RETURN_FRAMING*sin($pan),self::RETURN_FRAMING*$tilt];
+			// Build tracking speed from rest, then let it taper off while the flash is visible.
+			$rate=$returning ? self::ease($shot['clock']/self::EASE_IN) : 1.-self::ease($shot['clock']/self::FLASH_HOLD);
+			$keep=2**(-$dt*$rate/self::FOLLOW_HALF_LIFE);
+		} elseif($flash) {
+			// Apply the remaining fraction of the ease-out, including the exact last frame.
+			$duration=self::GLANCE_END-self::FLASH_HOLD;
+			$left=self::GLANCE_END-$shot['clock'];
+			$before=self::ease(($left+$dt)/$duration);
+			$keep=$before>0. ? self::ease($left/$duration)/$before : 0.;
 		} elseif($point!==null && ($shot['phase']!=='missed' || isset($shot['rearPassGap']))) {
 			[$pan,$tilt]=self::lookOffset($getEye(),$point['x'],$point['y'],$point['z']);
 			$weight=max(0.,min(1.,(M_PI/2-abs($pan))/.35));
