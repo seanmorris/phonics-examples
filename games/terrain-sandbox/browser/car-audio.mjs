@@ -188,7 +188,7 @@ export function activate({module, canvas, archive, signal})
 	const doc = canvas.ownerDocument, page = doc.defaultView;
 	const Context = page.AudioContext ?? page.webkitAudioContext;
 	const resources = archive.store.scope(signal);
-	let context, instrument, engine, tireBuffer, tire, parkTimer, loading, buses;
+	let context, engineBuffer, engine, tireBuffer, tire, parkTimer, loading, buses;
 	let closed = false, contextLost = false, pageHidden = false, parked = false;
 	let tone = {cycle: 0}, tireLevel = 0, tireRate = 1;
 	const mix = {...AUDIO_DEFAULTS};
@@ -347,7 +347,7 @@ export function activate({module, canvas, archive, signal})
 			loading = true;
 
 			const sounds = [
-				['flat-twelve.wav', buffer => { instrument = buffer; }]
+				['flat-twelve.wav', buffer => { engineBuffer = buffer; }]
 				, ['tires_squal_loop.wav', buffer => { tireBuffer = joinSkid(context, buffer); }]
 			];
 
@@ -358,7 +358,7 @@ export function activate({module, canvas, archive, signal})
 		}
 
 		if(engine) engine.update(tone);
-		else if(instrument) engine = startEngine(context, recording, tone, buses.engine);
+		else if(engineBuffer) engine = startEngine(context, engineBuffer, tone, buses.engine);
 
 		if(!tireBuffer || tireLevel < .00025)
 		{
