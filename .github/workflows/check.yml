@@ -56,12 +56,13 @@ jobs:
           retention-days: 7
 
   browser-terrain:
-    # Software WebGL draws the terrain several times slower here than on a workstation. One test runs at a time so
-    # it has the whole runner, PHONICS_TEST_SLOW scales every time limit the specs set, and the tests are divided
-    # between jobs one by one, not file by file, because one file holds most of them.
+    # Software WebGL draws the terrain several times slower here than on a workstation, and the game advances at
+    # most a tenth of a second for each frame it draws. One test runs at a time so it has the whole runner,
+    # PHONICS_TEST_SLOW scales every time limit the specs set, and the tests are divided between jobs one by one,
+    # not file by file, because one file holds most of them.
     name: browser (terrain ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -85,7 +86,7 @@ jobs:
           --fully-parallel --workers=1
           --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         env:
-          PHONICS_TEST_SLOW: 4
+          PHONICS_TEST_SLOW: 16
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
