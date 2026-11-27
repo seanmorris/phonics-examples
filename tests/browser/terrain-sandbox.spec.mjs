@@ -2136,7 +2136,12 @@ test('both taillights brighten visibly in daylight for running lights and brakin
 	await load(page, dry);
 	await view.evaluate(el => el.terrainSandboxDebug.action({type: 'car'}));
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
-	await page.addStyleTag({content: '.terrain-panel, .terrain-hud { visibility: hidden !important; }'});
+
+	// The soundtrack's credit appears over the lower half of the car for a few seconds after the first input.
+	await page.addStyleTag({
+		content: '.terrain-panel, .terrain-hud, .terrain-control-hints, .terrain-credit-space, .terrain-speedometer'
+			+ ' { visibility: hidden !important; }'
+	});
 
 	async function rearLights(headlights, brake)
 	{
@@ -2159,12 +2164,13 @@ test('both taillights brighten visibly in daylight for running lights and brakin
 	const braking = await rearLights('on', true);
 
 	// Compare each rear strip on the stationary car. Isolated bright lens pixels can disappear behind the grille.
+	// The strips lie between rows 358 and 370 at this size; the band leaves room either side.
 	for(const [before, after] of [[dark, running], [running, braking]])
 	for(const left of [330, 440])
 	{
 		let brighter = 0;
 
-		for(let y = 340; y < 360; ++y)
+		for(let y = 350; y < 380; ++y)
 		for(let x = left; x < left + 50; ++x)
 		{
 			const i = 4 * (y * after.width + x);
@@ -3500,6 +3506,12 @@ test('the signed clipmap grid covers the ground after relocation', async({page})
 	doc.version = 4;
 	doc.layers = [{color: '#da492b'}];
 
+	// The control hints, the pause button and the panel are bluish and would count as sky in the crop below.
+	await page.addStyleTag({
+		content: '.terrain-panel, .terrain-hud, .terrain-control-hints, .terrain-menu-button'
+			+ ' { visibility: hidden !important; }'
+	});
+
 	for(const position of [[-701, 550, -703], [709, 550, 717]])
 	{
 		doc.camera = {position, yaw: .71, pitch: -1.52};
@@ -3830,6 +3842,7 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 	await page.addInitScript(() => {
 		// Observe the PHAR's running audio graph, including PCM at the output.
 		const probe = window.driveAudio = {buffers: 0, live: new Set(), starts: 0, skids: 0, analyser: null};
+		const taps = new Map();
 		const decode = BaseAudioContext.prototype.decodeAudioData;
 
 		BaseAudioContext.prototype.decodeAudioData = async function(...args) {
@@ -3844,10 +3857,16 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 		AudioNode.prototype.connect = function(destination, ...args) {
 			if(destination instanceof AudioDestinationNode && this instanceof GainNode)
 			{
-				probe.analyser ??= this.context.createAnalyser();
-				probe.analyser.fftSize = 8192;
-				probe.analyser.smoothingTimeConstant = 0;
-				connect.call(this, probe.analyser);
+				// The page holds more than one audio context, and a node can only feed an analyser of its own.
+				if(!taps.has(this.context))
+				{
+					const analyser = this.context.createAnalyser();
+					analyser.fftSize = 8192;
+					analyser.smoothingTimeConstant = 0;
+					taps.set(this.context, analyser);
+				}
+
+				connect.call(this, taps.get(this.context));
 			}
 
 			return connect.call(this, destination, ...args);
@@ -3860,7 +3879,12 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 			{
 				probe.live.add(this);
 
-				if(this.buffer.numberOfChannels === 4) probe.starts++;
+				// The four-channel loop is the engine's. Its context is the one whose output the test measures.
+				if(this.buffer.numberOfChannels === 4)
+				{
+					probe.starts++;
+					probe.analyser = taps.get(this.context) ?? probe.analyser;
+				}
 
 				if(Math.abs(this.buffer.duration - 2.92) < .001) probe.skids++;
 
