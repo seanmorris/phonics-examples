@@ -424,10 +424,12 @@ foreach([[28.,M_PI/2],[72.,0.],[106.,M_PI]] as [$speed,$heading]) {
 	$pilot=new AirPatrol; $eye=new Camera; $eye->yaw=M_PI-$heading; $eye->fov=1.36;
 	$f=sin($heading); $g=cos($heading);
 	$car=['x'=>-18.*$speed*$f,'y'=>0.,'z'=>-18.*$speed*$g,'yaw'=>$heading,'drift'=>0.,'speed'=>$speed];
-	$left=180.; $right=-180.; $lead=INF; $crossings=[]; $side=0; $releases=[]; $reloaded=false;
+	$left=180.; $right=-180.; $lead=INF; $low=INF; $high=-INF; $crossings=[]; $side=0; $releases=[]; $reloaded=false;
 	for($tick=0;$tick<36*60;$tick++) {
 		$car['x']+=$speed*$f/60.; $car['z']+=$speed*$g/60.;
-		$eye->position=[$car['x']-7.*$f,3.,$car['z']-7.*$g];
+		// Include short chassis bumps during the middle-speed run on the same flat road.
+		if($speed===72. && $tick>=15*60) $car['y']=2.*max(0.,sin(3.*$tick/60.));
+		$eye->position=[$car['x']-7.*$f,$car['y']+3.,$car['z']-7.*$g];
 		$pilot->step(1/60,$car,fn()=>$eye,16/9,$land,-10.);
 		$shot=$pilot->seeker();
 		if($shot['phase']==='mounted' && $releases) $reloaded=SpeedSeeker::mountedSlots($shot)===[0,1];
@@ -445,6 +447,7 @@ foreach([[28.,M_PI/2],[72.,0.],[106.,M_PI]] as [$speed,$heading]) {
 		if($p===null) throw new RuntimeException('The patrol left the flat-road crossing fixture.');
 		$x=$p['x']-$car['x']; $z=$p['z']-$car['z'];
 		$along=$x*$f+$z*$g; $across=$x*$g-$z*$f; $bearing=rad2deg(atan2($across,$along));
+		$low=min($low,$p['y']); $high=max($high,$p['y']);
 		$left=min($left,$bearing); $right=max($right,$bearing); $lead=min($lead,$along);
 		$newSide=$across<=>0.; if($side!==0 && $newSide!==$side) $crossings[]=$tick/60.;
 		$side=$newSide;
@@ -452,6 +455,7 @@ foreach([[28.,M_PI/2],[72.,0.],[106.,M_PI]] as [$speed,$heading]) {
 	expect($releases===[0,1] && $reloaded,'Both wings reload and fire in turn on the same patrol.');
 	expect($lead>20. && $left<-55. && $left>-68. && $right>55. && $right<68.,
 		"The F5 stays ahead and reaches both 10 and 2 o'clock at $speed m/s.");
+	expect($high-$low<.25,"Banking across a level road at $speed m/s keeps a steady patrol altitude.");
 	expect(count($crossings)>=3,'The pilot keeps alternating shoulders.');
 	for($i=1;$i<count($crossings);$i++) expect(abs(($crossings[$i]-$crossings[$i-1])-5.24)<.4,
 		'Each crossing gives the driver another predictable drift opportunity.');
@@ -703,7 +707,7 @@ $pilot->resume($checkpoint); $car=$driver; $p=$pilot->pose();
 $hillZ=$car['z']+180.;
 $land->queue(['type'=>'raise','x'=>$car['x'],'z'=>$hillZ,'radius'=>145.,'amount'=>90.]);
 $land->commit();
-$peak=$p['y']; $carPeak=$car['y']; $approach=false; $joined=false;
+$peak=$p['y']; $carPeak=$car['y']; $approach=false; $joined=false; $climbing=false; $descending=false;
 for($i=0;$i<9*60;$i++) {
 	$car['z']+=$car['speed']/60.;
 	$car['y']=$land->height($car['x'],$car['z']);
@@ -712,11 +716,16 @@ for($i=0;$i<9*60;$i++) {
 	$state=$pilot->snapshot(); $new=$state['pose'];
 	expect($state['phase']==='escort','The active patrol stays with the driver on both sides of the crest.');
 	$approach=$approach || $state['flight'][5]>max($car['y']+23.,$p['y']+8.);
+	if($new['vy']>1.) {
+		expect(!$descending,'The pilot climbs once for the crest without a second pitch-up.');
+		$climbing=true;
+	}
+	if($climbing && $new['vy']< -1.) $descending=true;
 	$peak=max($peak,$new['y']); $carPeak=max($carPeak,$car['y']);
 	if($car['z']>$hillZ+145. && $new['y']<$car['y']+26. && $new['z']>$car['z'] &&
 		hypot($new['x']-$car['x'],$new['z']-$car['z'])<80.) $joined=true;
 	$p=$new;
 }
-expect($approach && $carPeak>80. && $peak>$carPeak+8. && $joined,
+expect($approach && $descending && $carPeak>80. && $peak>$carPeak+8. && $joined,
 	'The driver crests the hill, the pilot clears it and returns to formation on the far side.');
 $land->close();

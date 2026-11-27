@@ -12,6 +12,7 @@ final class AirPatrol
 	private bool $repelled=false;
 	public const ESCORT_LEAD = 36.;
 	private const MANEUVER_RATE = 2.;
+	private const TERRAIN_PROBE_SECONDS=.18, DESCENT_HALF_LIFE=.65, FORMATION_HEIGHT=18.;
 	private const WRECK_CLEAR_DISTANCE=500.;
 	private const RETURN_FRAMING=.55, FOLLOW_HALF_LIFE=.08, EASE_IN=.14;
 	private const FLASH_HOLD=.16, GLANCE_END=.50; // Seconds since impact.
@@ -118,19 +119,23 @@ final class AirPatrol
 		$across = $dx*$g-$dz*$f;
 		$this->slow = $car['speed']<55.*Car::MPS_PER_MPH ? $this->slow+$dt : 0.;
 		if($this->phase!=='departure') {
-			$this->probeIn -= $dt;
-			if($this->probeIn<=0.) {
-				$this->probeIn=.18;
+			if($this->probeIn<=$dt) {
 				// Look down the aircraft's actual flight path, including the turn its bank is starting.
-				$this->aheadFloor=$water;
+				$half=$land->recipe()['worldSize']/2.;
+				$floor=max($water,$land->height(max(-$half,min($half,$car['x'])),max(-$half,min($half,$car['z']))));
 				$track=atan2($p['vx'],$p['vz']);
 				foreach([.45,.95,1.6] as $seconds) {
 					$yaw=$track+.5*$seconds*Jet::BANKED_TURN_RATE*self::MANEUVER_RATE*sin($p['roll']);
 					$range=$seconds*$p['speed'];
-					$this->aheadFloor=max($this->aheadFloor,self::floor($land,$water,
+					$floor=max($floor,self::floor($land,$water,
 						$p['x']+$range*sin($yaw),$p['z']+$range*cos($yaw)));
 				}
-			}
+				// Take rising ground immediately. Ease down from a crest or a gap between samples.
+				$interval=self::TERRAIN_PROBE_SECONDS-$this->probeIn+$dt;
+				$keep=$this->probeIn>0. ? 2**(-$interval/self::DESCENT_HALF_LIFE) : 0.;
+				$this->aheadFloor=$floor+$keep*max(0.,$this->aheadFloor-$floor);
+				$this->probeIn=self::TERRAIN_PROBE_SECONDS;
+			} else $this->probeIn-=$dt;
 			if($this->slow>=45.-1e-9) {
 				$this->phase='departure'; $this->elapsed=0.;
 				$heights=[];
@@ -174,9 +179,9 @@ final class AirPatrol
 			$turn=self::angle($desired-$p['yaw']);
 			$bank=max(-1.,min(1.,-2.8*$turn));
 			if($speed>$idleSpeed) $speed=$idleSpeed+min(150.,$speed-$idleSpeed)*max(0.,cos($turn))**2;
-			// Terrain raises the formation altitude. Past the crest the station comes back down to the driver.
-			$height=max($this->aheadFloor+12.,$car['y']+16.+6.*max(0.,1.-abs($across)/20.));
-			$climb=max(-.65,min(.95,atan2($height-$p['y'],max(45.,$p['speed']*.88))/.78));
+			// Bank across the road at one altitude. Begin leveling before reaching it.
+			$heightError=$this->aheadFloor+self::FORMATION_HEIGHT-($p['y']+.35*$p['vy']);
+			$climb=max(-.65,min(.95,atan2($heightError,max(45.,$p['speed']*.88))/.78));
 			$throttle=max(-1.,min(1.,($speed-Jet::CRUISE)/($speed<Jet::CRUISE ?
 				Jet::CRUISE-$idleSpeed : Jet::FASTEST-Jet::CRUISE)));
 			if($this->phase==='arrival' && $along>=32. && abs($across)<25.) {
