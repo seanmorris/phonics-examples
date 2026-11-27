@@ -10,6 +10,7 @@ final class SpeedSeeker
 {
 	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 10.;
 	private const LOOM_ABOVE_ROOF = 2.12;
+	private const TUMBLE_CLOSE_SECONDS = .25;
 	/** Meters forward of mesh center on the four-meter prop (60 cm behind the nose). */
 	private const CENTER_OF_GRAVITY = 1.40;
 	// Preserve the original release speed and handoff beat. A miss carries on for two escort lengths.
@@ -17,6 +18,7 @@ final class SpeedSeeker
 	private const MISS_LEAD = 2.*AirPatrol::ESCORT_LEAD, MISS_PAST_JET = 32.;
 	private const BOOST_RAMP = .24;
 	private bool $driftPass=false;
+	private float $tumbleClose=0.;
 	private ?float $rearPassGap=null;
 	private string $phase = 'mounted';
 	private int $slot = 0;
@@ -37,7 +39,8 @@ final class SpeedSeeker
 		$this->previousAirtime=$this->airtime ?? 0.;
 		if($this->airtime!==null) $this->airtime+=$dt;
 		$this->clock+=$dt;
-		$drifting=abs($car['drift'])>=self::SLIP && ($car['motion'] ?? 'driving')==='driving';
+		$motion=$car['motion'] ?? 'driving';
+		$drifting=abs($car['drift'])>=self::SLIP && $motion==='driving';
 		if($this->phase==='reload') {
 			if($this->clock>=FlightTrails::LODGED_LIFE) $this->mount=null;
 			if($patrol==='glide' || $patrol==='slide') { $this->clock=min($this->clock,self::RELOAD_SECONDS); return null; }
@@ -66,9 +69,10 @@ final class SpeedSeeker
 			if($this->driftPass) return $this->boostedReturn($dt,$plane,$beforeCar ?? $car,$car,$land,$water);
 			return $this->recordedReturn($dt,$plane,$beforeCar ?? $car,$car,$land,$water);
 		}
-		$rearDrift=$drifting && $this->phase==='chase' && $this->behindBumper($beforeCar ?? $car);
+		$rearDrift=$drifting && $this->phase==='chase' && $this->tumbleClose===0. && $this->behindBumper($beforeCar ?? $car);
 		if($this->phase!=='missed' && ($rearDrift || $patrol==='departure' || $plane===null)) {
 			$this->rearPassGap=null;
+			$this->tumbleClose=0.;
 			$this->phase='missed'; $this->clock=0.; $this->carFrames=[];
 			$this->start=array_slice($this->start,0,6);
 			$this->velocity ??= self::motionAlongPose($this->pose,$car['speed']);
@@ -122,6 +126,17 @@ final class SpeedSeeker
 			Car::BODY_HEIGHT+$clearance-($clearance+.16)*$closing**1.8, -Car::BODY_REAR-.9+1.08*$closing];
 		$p=$carFrame;
 		foreach(['x','y','z'] as $i=>$axis) $p[$axis]+=$body[$i]*$mark[0]+$body[$i+3]*$mark[1]+$body[$i+6]*$mark[2];
+		// A rolling car has no steady bumper station. Blend the end of this pass into the
+		// chassis, including if the tires catch again before contact.
+		if($this->tumbleClose>0. || $motion==='tumbling' || $motion==='overturned') {
+			$this->tumbleClose=min(1.,$this->tumbleClose+$dt/self::TUMBLE_CLOSE_SECONDS);
+			$blend=self::smooth($this->tumbleClose);
+			$chassis=VehicleModel::basis($car+['pitch'=>0.,'roll'=>0.]);
+			foreach(['x','y','z'] as $i=>$axis) {
+				$center=$car[$axis]+.5*Car::BODY_HEIGHT*$chassis[3+$i];
+				$p[$axis]+=$blend*($center-$p[$axis]);
+			}
+		}
 		if($drop) {
 			// The first beat uses the moving wing as its reference. The next beat arcs around the rear quarter.
 			$wing=Jet::projectileMount($plane,$this->slot);
@@ -150,12 +165,13 @@ final class SpeedSeeker
 				$p['pitch']+=$bankIntoArc*(atan2($p['y']-$this->previous['y'],$run)-$p['pitch']);
 			}
 		}
-		$p['y']=max($p['y'],SeekerContact::floor($p,$land,$water)+1.25-.85*$closing);
+		$direct=$this->tumbleClose*($drop ? $down : 1.);
+		$p['y']=max($p['y'],SeekerContact::floor($p,$land,$water)+(1.25-.85*$closing)*(1.-$direct));
 		if($this->previous!==null && $dt>0.) {
 			$this->velocity=[($p['x']-$this->previous['x'])/$dt,($p['y']-$this->previous['y'])/$dt,
 				($p['z']-$this->previous['z'])/$dt];
 		}
-		if($this->previous!==null && ($hit=SeekerContact::first($this->previous,$p,$beforeCar ?? $car,$car,false,$land,$water))!==null) {
+		if($this->previous!==null && ($hit=SeekerContact::first($this->previous,$p,$beforeCar ?? $car,$car,$direct>0.,$land,$water))!==null) {
 			return $this->finish($hit);
 		}
 		$this->pose=$p;
@@ -333,6 +349,7 @@ final class SpeedSeeker
 	private function finish(?array $hit): ?array
 	{
 		$this->driftPass=false;
+		$this->tumbleClose=0.;
 		$this->impact=$hit['point'] ?? null; $this->mount=$hit['mount'] ?? null;
 		$this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[];
 		$this->pose=$this->velocity=$this->rearPassGap=$this->airtime=null;
@@ -436,7 +453,8 @@ final class SpeedSeeker
 		$p=$this->pose;
 		if($alpha<1. && $this->previous!==null && $p!==null) $p=AirPatrol::interpolate($this->previous,$p,$alpha);
 		$airtime=$this->airtime!==null ? ['airtime'=>$this->previousAirtime+$alpha*($this->airtime-$this->previousAirtime)] : [];
-		return ['phase'=>$this->phase,'slot'=>$this->slot,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+$airtime+($this->rearPassGap!==null ? ['rearPassGap'=>$this->rearPassGap] : [])+($this->driftPass ? ['driftPass'=>true] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
+		return ['phase'=>$this->phase,'slot'=>$this->slot,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+$airtime
+			+($this->tumbleClose>0. ? ['tumbleClose'=>$this->tumbleClose] : [])+($this->rearPassGap!==null ? ['rearPassGap'=>$this->rearPassGap] : [])+($this->driftPass ? ['driftPass'=>true] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
 	}
 
 	public function resume(array $s): void
@@ -444,6 +462,7 @@ final class SpeedSeeker
 		$this->airtime=$s['airtime'] ?? null;
 		$this->previousAirtime=$this->airtime ?? 0.;
 		$this->driftPass=$s['driftPass'] ?? false;
+		$this->tumbleClose=$s['tumbleClose'] ?? 0.;
 		$this->slot=$s['slot'] ?? 0;
 		$this->rearPassGap=$s['rearPassGap'] ?? null;
 		$this->phase=$s['phase']; $this->clock=$s['clock']; $this->start=$s['start']; $this->passSpeed=$s['passSpeed'];

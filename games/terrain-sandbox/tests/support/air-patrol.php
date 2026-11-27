@@ -683,6 +683,58 @@ expect($checkpoint['phase']==='escort' && $checkpoint['seeker']['phase']==='chas
 $tail=$checkpoint['seeker']['pose'];
 expect($driver['z']-$tail['z']>2. && $driver['z']-$tail['z']<3.2 && abs($tail['x'])<1.5 &&
 	abs($tail['y']-$driver['y']-Car::BODY_HEIGHT-2.12)<.02,'The seeker looms above the roof over the rear bumper.');
+// The tumble skips the warning hover during both the approach and the bumper chase.
+(static function(array $driver,array $checkpoint,Landscape $land): void {
+	$eye=new Camera; $eye->yaw=M_PI; $eye->pitch=.32; $eye->fov=1.36;
+	foreach(['driving','airborne','tumbling','overturned'] as $motion) {
+		$shot=new SpeedSeeker;
+		$car=array_replace($driver,['x'=>0.,'y'=>4.,'z'=>0.,'yaw'=>0.,'pitch'=>0.,'roll'=>0.,'speed'=>40.,'drift'=>0.,'motion'=>'driving']);
+		$plane=$checkpoint['pose']; $plane['yaw']=$plane['pitch']=$plane['roll']=0.;
+		$release=null; $loom=false; $hit=null;
+		for($tick=0;$tick<450;$tick++) {
+			$old=$car; $car['z']+=$car['speed']/60.;
+			// The car changes state halfway through the visible approach.
+			if($release!==null && $tick-$release>=60) {
+				$car['motion']=$motion;
+				if($motion==='overturned') $car['roll']=M_PI;
+				if($motion==='tumbling') $car['roll']+=.035;
+			}
+			$plane['x']=6.; $plane['z']=$car['z']+40.; $plane['y']=22.;
+			$eye->position=[0.,7.,$car['z']-7.];
+			$hit=$shot->step(1/60,$car,$plane,'escort',$land,-10.,$old,fn()=>$eye,16/9);
+			$s=$shot->state();
+			if($s['phase']==='drop') $release??=$tick;
+			$loom=$loom || $s['phase']==='chase';
+			if($hit!==null) break;
+		}
+		$rolling=in_array($motion,['tumbling','overturned'],true);
+		expect($release!==null && ($hit['kind'] ?? null)==='car' && isset($hit['mount']),'Each approach ends on actual chassis contact.');
+		$flight=($tick-$release)/60.;
+		expect($rolling ? !$loom && $flight<=1.95 : $loom && $flight>5.,'A roll or overturned chassis skips the hover while an upright jump keeps the ordinary pass.');
+	}
+	foreach([30,60,120] as $hz) {
+		$shot=new SpeedSeeker; $shot->resume($checkpoint['seeker']); $car=$driver; $branch=null;
+		for($tick=0;$tick<$hz;$tick++) {
+			$old=$car; $car['z']+=$car['speed']/$hz;
+			$car['motion']=$tick<2 ? 'tumbling' : 'driving';
+			$car['drift']=$tick<2 ? 0. : .30;
+			$hit=$shot->step(1/$hz,$car,$checkpoint['pose'],'escort',$land,-10.,$old);
+			if($branch!==null) {
+				$again=$branch->step(1/$hz,$car,$checkpoint['pose'],'escort',$land,-10.,$old);
+				expect($again==$hit && $branch->state()==$shot->state(),'Taking control of a demo mid-close preserves the contact.');
+			}
+			if($tick===0) {
+				$frame=$checkpoint; $frame['seeker']=$shot->state();
+				$events=DemoEvents::import([[0,json_encode(['airPatrol'=>$frame],JSON_THROW_ON_ERROR)]],1);
+				$branch=new SpeedSeeker; $branch->resume($events->at(0,0.,'car')['airPatrol']['seeker']);
+			}
+			if($hit!==null) break;
+		}
+		expect(($hit['kind'] ?? null)==='car' && ($tick+1)/$hz<=.25 && !isset($shot->state()['tumbleClose']),
+			'A tumble interrupts an existing hover and finishes the pass even after the wheels catch.');
+	}
+})($driver,$checkpoint,$land);
+
 // A take recorded before the higher pass should continue at its original height when branched.
 $oldTail=$checkpoint['seeker'];
 array_pop($oldTail['start']); $oldTail['pose']['y']-=.8;
