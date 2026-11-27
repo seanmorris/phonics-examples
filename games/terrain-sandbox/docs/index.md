@@ -215,7 +215,7 @@ Open **Landscape Lab → Journey** to edit a **Multi-stage network**. For a shor
 
 In free flight, choose **Build and drive**. This builds every stage, including both approaches to a shared destination. The progress bar counts completed stages and names the one under construction. Once all stages are ready, you start at the western edge. Each map defaults to 10.2 miles per side. Choose 20.4 or 40.7 miles for longer stretches between forks. Between maps, a separate 2.55-mile stretch shares a common sea level. Valley floors, cliff widths, and ridge profiles change gradually through the fork. Patches of each landscape’s surface materials mingle across the transition. After building, select a map under **Inspect stage**. **Drive from west edge** starts you on that map’s western road. On stages with two exits, **Drive from fork** starts you just before the split.
 
-A checkered **START** banner spans the road just ahead of the first spawn. Each final destination has a **FINISH** banner near its eastern edge. Look for the bunches of colored balloons tied to both ends of the overhead frame.
+A checkered **START** banner spans the road just ahead of the first spawn. At each final destination, a checkered banner reads **FINISH** from both directions. Bunches of colored balloons mark the two corners of the finish gantry.
 
 Automatically generated journeys and circuits add gentle S-bends where the road would otherwise run straight for more than three miles. The bends narrow or turn inland where a wider sweep would enter water or require a deep cut.
 

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
+require __DIR__.'/support/gate-mesh.php';
 
 use TerrainPhonics\{Edits,JoinedTerrain,Landscape};
 use TerrainSandbox\{JourneyClock,JourneyNetwork,JourneySignModel,JourneySigns};
@@ -25,6 +26,27 @@ function road(Landscape $land,array $a,array $b,float $width=28.): void
 	$land->queue(['type'=>'road','width'=>$width,'stationSpacing'=>8.,'shoulder'=>4.,'points'=>[$a,$b]]);
 }
 function kinds(array $signs,string $kind): array { return array_values(array_filter($signs,fn($s)=>$s['kind']===$kind)); }
+
+$asset=dirname(__DIR__).'/assets/roads/journey-signs';
+$mesh=readGateMesh($asset.'.mesh.bin.gz');
+$ranges=json_decode(file_get_contents($asset.'.json'),true,flags:JSON_THROW_ON_ERROR)['ranges'];
+foreach(['start','finish'] as $kind) {
+	$parts=$label=[];
+	foreach(array_unique(array_slice($mesh['corners'],...$ranges[$kind])) as $corner) {
+		$v=$mesh['vertices'][$corner];
+		$parts[$v['tag']]=true;
+		if($v['tag']===7) {
+			$side=$v['normal'][2]<0. ? 'front' : 'back';
+			$right=-$v['normal'][2]*$v['position'][0]>0.;
+			$label[$side][(int)$right]=$v['uv'][0];
+		}
+	}
+	expectSign(isset($parts[9])===($kind==='finish'),'Only the finish carries tethered balloons.');
+	expectSign(isset($parts[5])===($kind==='start'),'Only the start has a reverse warning panel.');
+	expectSign(isset($label['front']) && isset($label['back'])===($kind==='finish'),'The finish has a printed face on both sides.');
+	foreach($label as $uv) expectSign($uv[0]<$uv[1],'The lettering reads left to right on every printed face.');
+}
+unset($mesh);
 
 $leaf=['start'=>false,'finishes'=>[0]];
 $form=['preset'=>'coast','waterLevel'=>-200.,'heightScale'=>0.,'detailAmplitude'=>0.];

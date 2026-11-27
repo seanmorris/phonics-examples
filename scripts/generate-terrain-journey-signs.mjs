@@ -150,8 +150,8 @@ for(const [sourceY,targetY] of [[0,printY],[2*bandHeight,finishY]]) {
 	}
 }
 
-function raceBoard() {
-	const ids=new Map();
+function raceBoard(normalZ) {
+	const ids=new Map(), board=[];
 	for(let i=0;i<gate.readUInt32LE(4);i+=3) {
 		const face=[0,1,2].map(j=>gate.readUInt16LE(oldIndices+2*(i+j)));
 		const p=16+28*face[0], part=gate[p+27]&63;
@@ -159,16 +159,17 @@ function raceBoard() {
 		for(const index of face) {
 			if(!ids.has(index)) {
 				const v=16+28*index;
-				// The highway shader's local +X points to the approaching driver's right.
-				const x=-gate.readFloatLE(v), y=gate.readFloatLE(v+4)+3.2, z=gate.readFloatLE(v+8)-.055;
+				// Turn the entire print around for the reverse approach so the lettering reads left to right.
+				const x=normalZ*gate.readFloatLE(v), y=gate.readFloatLE(v+4)+3.2, z=normalZ*(.055-gate.readFloatLE(v+8));
 				const u=gate.readUInt16LE(v+18)/65535, t=gate.readUInt16LE(v+20)/65535;
-				ids.set(index,vertex([x,y,z],[0,0,-1],
+				ids.set(index,vertex([x,y,z],[0,0,normalZ],
 					[(printX+u*originalWidth/2)/width,(printY+t*originalHeight/2)/height],
 					part===1 ? tag.gateLabel : tag.gateCheck));
 			}
-			indices.push(ids.get(index));
+			board.push(ids.get(index));
 		}
 	}
+	return board;
 }
 
 const balloon=gunzipSync(await fs.readFile(new URL('balloon/mesh.bin.gz',assets)));
@@ -214,17 +215,20 @@ function tiedBalloon(anchor,dx,dy,dz,scale,color) {
 	}
 }
 
+const frontBoard=raceBoard(-1);
 range('start',()=>{
-	indices.push(...bracket);
-	raceBoard();
+	indices.push(...bracket,...frontBoard);
 	panel(wrongWay,0,6.46,2.2,.56,1);
+});
+range('finish',()=>{
+	indices.push(...bracket,...frontBoard,...raceBoard(1));
 	const palette=[[244,61,75],[255,189,38],[29,193,214],[153,83,223],[53,201,117]];
 	const bunch=[[-1.48,1.80,-.10,.115],[1.40,1.95,-.28,.128],[-.75,3.45,.85,.123],[.86,3.62,.72,.117],[.04,4.85,-.48,.135]];
 	for(const side of [-1,1]) bunch.forEach(([x,y,z,s],i)=>
 		tiedBalloon([side*7.062,8.475,0],x*side,y,z,s,palette[(i+(side>0 ? 2 : 0))%palette.length]));
 });
-ranges.finish=ranges.start;
-mounts.start=mounts.finish={fitWidth:6,span:0,top:16.2,lift:0,overhang:4};
+mounts.start={fitWidth:6,span:0,top:8.5,lift:0};
+mounts.finish={fitWidth:6,span:0,top:16.2,lift:0,overhang:4};
 
 const header=Buffer.alloc(16), indexBytes=Buffer.alloc(2*indices.length);
 [vertices.length,indices.length,width,height].forEach((v,i)=>header.writeUInt32LE(v,i*4));

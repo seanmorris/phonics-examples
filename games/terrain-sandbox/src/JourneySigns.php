@@ -106,7 +106,7 @@ final class JourneySigns
 				foreach($endpoints['finishes'] as $square) {
 					[$cx,$cz]=$squares[$square];
 					if(abs($endX-($cx+$half))>=1. || abs($endZ-$cz)>$half) continue;
-					$sites['finish:'.$b]=['kind'=>'finish']+$at($length-$inset,$gantries);
+					$sites['finish:'.$b]=['kind'=>'finish']+$at($length-$inset);
 					break;
 				}
 			}
