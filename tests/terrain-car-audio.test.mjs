@@ -10,14 +10,14 @@ function buffer(channels, length, sampleRate)
 	return {numberOfChannels: channels, length, sampleRate, getChannelData: channel => data[channel]};
 }
 
-test('each collector receives its own six firings per cycle, flow gates both, and the loop wraps continuously', () => {
+test('each collector receives its own six firings per cycle and the loop wraps continuously', () => {
 	const file = readFileSync(new URL('../games/terrain-sandbox/assets/car-audio/flat-twelve.wav', import.meta.url));
 	const start = file.indexOf('data') + 8;
-	const frames = file.readUInt32LE(start-4)/8;
-	assert.equal(file.readUInt16LE(22), 4);
+	const frames = file.readUInt32LE(start-4)/4;
+	assert.equal(file.readUInt16LE(22), 2);
 	assert.equal(frames, 64*512);
 
-	const pressure = (frame, channel) => file.readInt16LE(start + ((frame+frames)%frames)*8 + 2*channel)/32768;
+	const pressure = (frame, channel) => file.readInt16LE(start + ((frame+frames)%frames)*4 + 2*channel)/32768;
 
 	const strengths = Array.from({length: 12}, () => []);
 
@@ -31,7 +31,6 @@ test('each collector receives its own six firings per cycle, flow gates both, an
 		const surge = channel => Math.max(...Array.from({length: 12}, (_, i) => pressure(at+i, channel)));
 		const peak = surge(bank);
 		assert.ok(peak > 4*surge(1-bank), `cylinder ${cylinder}, cycle ${cycle}`);
-		assert.ok(surge(2) > .15);
 		strengths[cylinder].push(peak);
 	}
 
@@ -50,10 +49,7 @@ test('each collector receives its own six firings per cycle, flow gates both, an
 	// The banks balance, so their interleaved firings sum to the twelve-cylinder note, not one bank's.
 	assert.ok(Math.abs(bank(0)/bank(1)-1) < .03);
 
-	// Collector flow is a speed. It never reverses.
-	for(let frame = 0; frame < frames; frame += 7) assert.ok(pressure(frame, 2) >= 0);
-
-	for(let channel = 0; channel < 3; channel++) assert.ok(Math.abs(pressure(0, channel)-pressure(-1, channel)) < .05);
+	for(let channel = 0; channel < 2; channel++) assert.ok(Math.abs(pressure(0, channel)-pressure(-1, channel)) < .05);
 });
 
 test('the real skid recording wraps across adjacent samples and retains its level through the overlap', () => {
@@ -118,7 +114,7 @@ test('a browser awaiting an audio gesture receives one resume request across dri
 
 	const stop = activate({module, canvas, archive, signal: controller.signal});
 
-	for(let i = 0; i<90; i++) module.terrainCarSound(8+i, .1, 700, .01, 80, 0, 1);
+	for(let i = 0; i<90; i++) module.terrainCarSound(8+i, .1, 700, .01, 0, 1);
 	assert.equal(attempts, 1);
 	doc.dispatchEvent(new Event('keydown'));
 	assert.equal(attempts, 2);

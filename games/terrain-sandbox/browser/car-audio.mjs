@@ -1,17 +1,5 @@
-/** The PHP-generated recording contains 64 four-stroke cycles at its reference speed. */
-export function prepareEngine(context, recording)
-{
-	const noise = context.createBuffer(1, recording.length, recording.sampleRate);
-	noise.copyToChannel(recording.getChannelData(3), 0);
-
-	return {pressure: recording, rate: 64/recording.duration, noise};
-}
-
 /** The far bank's share of the note. Each bank's six firings set the pitch; the near pipe carries most of it. */
 const FAR_BANK = .15;
-
-/** Center of the tailpipe rasp for a four-stroke cycle rate in hertz. */
-const raspHz = cycle => 500 + 12*cycle;
 
 /**
  * Feed the collectors into a pipe whose open end reflects pressure back inverted. The round trip is fixed in time,
@@ -30,26 +18,21 @@ function pipe(context, nodes, input, output, roundTrip, reflection)
 	nodes.push(sum, delay, damping, back);
 }
 
-export function startEngine(context, instrument, tone, output = context.destination)
+export function startEngine(context, recording, tone, output = context.destination)
 {
-	const crank = context.createBufferSource(), noise = context.createBufferSource();
-	const banks = context.createChannelSplitter(4), volume = context.createGain();
-	const collector = context.createGain(), far = context.createGain(), port = context.createGain();
+	const crank = context.createBufferSource();
+	const cycleRate = 64/recording.duration;
+	const banks = context.createChannelSplitter(2), volume = context.createGain();
+	const collector = context.createGain(), far = context.createGain();
 	const tailpipes = context.createGain(), body = context.createBiquadFilter(), rumble = context.createBiquadFilter();
 	const muffler = context.createBiquadFilter(), baffle = context.createBiquadFilter();
-	const rasp = context.createBiquadFilter(), tear = context.createBiquadFilter();
-	const gate = context.createGain(), flow = context.createGain();
-	const scatter = context.createBiquadFilter(), scatterGain = context.createGain();
-	const nodes = [banks,volume,collector,far,port,tailpipes,body,rumble,muffler,baffle];
-	nodes.push(rasp, tear, gate, flow, scatter, scatterGain);
+	const bark = context.createBiquadFilter(), bite = context.createGain();
+	const nodes = [banks,volume,collector,far,tailpipes,body,rumble,muffler,baffle,bark,bite];
 
-	crank.buffer = instrument.pressure;
-	crank.playbackRate.value = tone.cycle/instrument.rate;
+	crank.buffer = recording;
+	crank.playbackRate.value = tone.cycle/cycleRate;
 	crank.loop = true;
 	crank.connect(banks);
-	noise.buffer = instrument.noise;
-	noise.playbackRate.value = .5;
-	noise.loop = true;
 
 	// The near bank's pipe carries the note: its six firings per cycle, rpm/20. The far bank's firings fall between
 	// them and add the octave above.
@@ -57,28 +40,16 @@ export function startEngine(context, instrument, tone, output = context.destinat
 	far.gain.value = FAR_BANK;
 	banks.connect(far, 1).connect(collector);
 
-	// Gas tears out of the tailpipes with each discharge.
-	// The rasp leaves after the muffler, and faster gas rasps higher.
-	rasp.type = 'bandpass';
-	rasp.frequency.value = raspHz(tone.cycle);
-	rasp.Q.value = .7;
-	tear.frequency.value = 3200;
-	tear.Q.value = -3;
-	gate.gain.value = .12;
-	banks.connect(gate.gain, 2);
-	flow.gain.value = tone.flow;
-	noise.connect(rasp).connect(tear).connect(gate).connect(flow).connect(volume);
-
-	// Airflow varies the pressure at the pipes from one firing to the next.
-	scatter.frequency.value = 220;
-	scatter.Q.value = -3;
-	scatterGain.gain.value = tone.scatter;
-	noise.connect(scatter).connect(scatterGain).connect(port.gain);
-	collector.connect(port);
+	// Open throttle brings out upper harmonics of the same exhaust discharges.
+	bark.type = 'bandpass';
+	bark.frequency.value = 1400;
+	bark.Q.value = .8;
+	bite.gain.value = tone.bite;
+	collector.connect(bark).connect(bite).connect(volume);
 
 	// Left and right tailpipes of different lengths, heard together.
-	pipe(context, nodes, port, tailpipes, .0053, -.42);
-	pipe(context, nodes, port, tailpipes, .0069, -.34);
+	pipe(context, nodes, collector, tailpipes, .0053, -.42);
+	pipe(context, nodes, collector, tailpipes, .0069, -.34);
 	// Sets the exhaust's loudness against the tire recordings.
 	tailpipes.gain.value = 1.7;
 
@@ -95,7 +66,7 @@ export function startEngine(context, instrument, tone, output = context.destinat
 	throat.frequency.value = 170;
 	throat.Q.value = -3;
 	growl.gain.value = .85;
-	port.connect(throat);
+	collector.connect(throat);
 	pipe(context, nodes, throat, growl, .0086, -.55);
 	growl.connect(volume);
 	nodes.push(throat, growl);
@@ -113,7 +84,6 @@ export function startEngine(context, instrument, tone, output = context.destinat
 
 	const now = context.currentTime;
 	crank.start(now);
-	noise.start(now);
 	volume.gain.setTargetAtTime(tone.level, now, .018);
 
 	return {
@@ -121,20 +91,14 @@ export function startEngine(context, instrument, tone, output = context.destinat
 		update(next) {
 			const at = context.currentTime;
 
-			if(next.cycle !== tone.cycle)
-			{
-				crank.playbackRate.setTargetAtTime(next.cycle/instrument.rate, at, .018);
-				rasp.frequency.setTargetAtTime(raspHz(next.cycle), at, .035);
-			}
+			if(next.cycle !== tone.cycle) crank.playbackRate.setTargetAtTime(next.cycle/cycleRate, at, .018);
 
 			if(next.level !== tone.level) volume.gain.setTargetAtTime(next.level, at, .033);
 
 			if(next.cutoff !== tone.cutoff)
 			for(const stage of [muffler, baffle]) stage.frequency.setTargetAtTime(next.cutoff, at, .035);
 
-			if(next.flow !== tone.flow) flow.gain.setTargetAtTime(next.flow, at, .035);
-
-			if(next.scatter !== tone.scatter) scatterGain.gain.setTargetAtTime(next.scatter, at, .045);
+			if(next.bite !== tone.bite) bite.gain.setTargetAtTime(next.bite, at, .035);
 
 			tone = next;
 		}
@@ -144,10 +108,9 @@ export function startEngine(context, instrument, tone, output = context.destinat
 			const at = context.currentTime;
 			volume.gain.setTargetAtTime(0, at, .012);
 
-			crank.onended = () => { for(const node of [crank,noise,...nodes]) node.disconnect(); };
+			crank.onended = () => { for(const node of [crank,...nodes]) node.disconnect(); };
 
 			crank.stop(at + .075);
-			noise.stop(at + .075);
 		}
 	};
 }
@@ -384,7 +347,7 @@ export function activate({module, canvas, archive, signal})
 			loading = true;
 
 			const sounds = [
-				['flat-twelve.wav', buffer => { instrument = prepareEngine(context, buffer); }]
+				['flat-twelve.wav', buffer => { instrument = buffer; }]
 				, ['tires_squal_loop.wav', buffer => { tireBuffer = joinSkid(context, buffer); }]
 			];
 
@@ -395,7 +358,7 @@ export function activate({module, canvas, archive, signal})
 		}
 
 		if(engine) engine.update(tone);
-		else if(instrument) engine = startEngine(context, instrument, tone, buses.engine);
+		else if(instrument) engine = startEngine(context, recording, tone, buses.engine);
 
 		if(!tireBuffer || tireLevel < .00025)
 		{
@@ -503,8 +466,8 @@ export function activate({module, canvas, archive, signal})
 		flushBursts();
 	};
 
-	module.terrainCarSound = (cycle, level, cutoff, flow, scatter, skid, rate) => {
-		tone = {cycle, level, cutoff, flow, scatter};
+	module.terrainCarSound = (cycle, level, cutoff, bite, skid, rate) => {
+		tone = {cycle, level, cutoff, bite};
 		tireLevel = skid;
 		tireRate = rate;
 		update();

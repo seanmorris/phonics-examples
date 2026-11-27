@@ -3838,7 +3838,7 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 			{
 				probe.live.add(this);
 
-				if(this.buffer.numberOfChannels === 4) probe.starts++;
+				if(this.buffer.numberOfChannels === 2 && Math.abs(this.buffer.duration - 1) < .001) probe.starts++;
 
 				if(Math.abs(this.buffer.duration - 2.92) < .001) probe.skids++;
 
@@ -3977,14 +3977,13 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 	], {encoding: 'utf8'}));
 
 	const measured = await page.evaluate(async({module, wav, targets}) => {
-		const {prepareEngine, startEngine} = await import(module);
+		const {startEngine} = await import(module);
 		const sampleRate = 44100, context = new OfflineAudioContext(1, 5*sampleRate, sampleRate);
 		const recording = await context.decodeAudioData(Uint8Array.from(atob(wav), char => char.charCodeAt(0)).buffer);
-		const instrument = prepareEngine(context, recording);
 
-		const tones = targets.map(([cycle,level,cutoff,flow,scatter]) => ({cycle, level, cutoff, flow, scatter}));
+		const tones = targets.map(([cycle,level,cutoff,bite]) => ({cycle, level, cutoff, bite}));
 
-		const engine = startEngine(context, instrument, tones[0]);
+		const engine = startEngine(context, recording, tones[0]);
 		const stops = [.9,1.6,2.45,3.05,3.65,4.45].map(t => context.suspend(t));
 		const rendered = context.startRendering();
 
@@ -4011,10 +4010,10 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 		{
 			const samples = section(time, .36);
 			const wave = samples.map((v, i) => v*(.5-.5*Math.cos(2*Math.PI*i/(samples.length-1))));
-			const binHz = sampleRate/wave.length;
+			const binHz = sampleRate/wave.length, cycleHz = shaftHz/2;
 			// Parseval's identity gives total one-sided power with the same normalization as the bins below.
 			const total = wave.reduce((sum, x) => sum+x*x, 0)*wave.length/2;
-			let loudest = 0, peak = 0, bass = 0, overtones = 0, mid = 0, betweenOrders = 0;
+			let loudest = 0, peak = 0, bass = 0, overtones = 0, broadband = 0;
 			// Strongest bin within one bin of the shaft rate, the growl, the note (one bank's firings) and its octave.
 			const lines = {shaft: 0, growl: 0, note: 0, octave: 0};
 
@@ -4044,12 +4043,10 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 
 				if(hz >= 1000) overtones += energy;
 
-				if(hz >= 350 && hz <= 3200)
+				// Exclude the Hann main lobe around each harmonic of the four-stroke cycle.
+				if(hz >= 700 && hz <= 4000 && Math.abs(hz - Math.round(hz/cycleHz)*cycleHz) > 2*binHz)
 				{
-					mid += energy;
-					const order = hz/shaftHz;
-
-					if(Math.abs(order-Math.round(order)) > .15) betweenOrders += energy;
+					broadband += energy;
 				}
 
 				if(energy > loudest)
@@ -4064,7 +4061,7 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 				, note: peak/(3*shaftHz)
 				, bass: bass/total
 				, overtones: overtones/total
-				, betweenOrders: betweenOrders/mid
+				, broadband: broadband/total
 				, growl: 10*Math.log10(lines.growl/lines.note)
 				, octave: 10*Math.log10(lines.octave/lines.note)
 				, shaft: 10*Math.log10(lines.shaft/lines.note)
@@ -4093,18 +4090,17 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 		expect(spectrum.shaft).toBeLessThan(-18);
 	}
 
-	// Under load at high revs the tailpipes rasp a little above the note, kept low so the note sounds clean.
+	// At high revs the exhaust grows brighter while the power stays in the firing harmonics.
 	for(const i of [2,5])
 	{
 		expect(measured.spectra[i].bass).toBeLessThan(.05);
 		expect(measured.spectra[i].overtones).toBeGreaterThan(.015);
 		expect(measured.spectra[i].overtones).toBeLessThan(.15);
+		expect(measured.spectra[i].broadband).toBeLessThan(.002);
 	}
 
-	// The throttle cut quiets the rasp.
+	// The throttle cut quiets the upper harmonics.
 	expect(measured.spectra[3].overtones).toBeLessThan(.6*measured.spectra[4].overtones);
-
-	for(const i of [2,5]) expect(measured.spectra[i].betweenOrders).toBeGreaterThan(.03);
 
 	expect(measured.variation).toBeLessThan(1.5);
 	expect(measured.pull).toBeGreaterThan(1.3*measured.coast);
