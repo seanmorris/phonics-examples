@@ -3817,15 +3817,17 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 			return buffer;
 		};
 
+		const analysers = new WeakMap();
 		const connect = AudioNode.prototype.connect;
 
 		AudioNode.prototype.connect = function(destination, ...args) {
-			if(destination instanceof AudioDestinationNode && this instanceof GainNode)
+			if(destination instanceof AudioDestinationNode && this instanceof GainNode && !analysers.has(this.context))
 			{
-				probe.analyser ??= this.context.createAnalyser();
-				probe.analyser.fftSize = 8192;
-				probe.analyser.smoothingTimeConstant = 0;
-				connect.call(this, probe.analyser);
+				const analyser = this.context.createAnalyser();
+				analyser.fftSize = 8192;
+				analyser.smoothingTimeConstant = 0;
+				connect.call(this, analyser);
+				analysers.set(this.context, analyser);
 			}
 
 			return connect.call(this, destination, ...args);
@@ -3838,7 +3840,11 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 			{
 				probe.live.add(this);
 
-				if(this.buffer.numberOfChannels === 2 && Math.abs(this.buffer.duration - 1) < .001) probe.starts++;
+				if(this.buffer.numberOfChannels === 2 && Math.abs(this.buffer.duration - 1) < .001)
+				{
+					probe.analyser = analysers.get(this.context);
+					probe.starts++;
+				}
 
 				if(Math.abs(this.buffer.duration - 2.92) < .001) probe.skids++;
 
