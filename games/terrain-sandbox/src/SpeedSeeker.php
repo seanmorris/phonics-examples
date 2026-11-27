@@ -12,8 +12,9 @@ final class SpeedSeeker
 	private const LOOM_ABOVE_ROOF = 2.12;
 	/** Meters forward of mesh center on the four-meter prop (60 cm behind the nose). */
 	private const CENTER_OF_GRAVITY = 1.40;
-	// The loose pass crosses the driving view in one beat, then bursts at the escort's usual lead.
-	private const PASS_SECONDS = .78, BURST_MARGIN = .82, HANDOFF_SECONDS = .10, AIM_ANGLE = 22.;
+	// Preserve the original release speed and handoff beat. A miss carries on for two escort lengths.
+	private const PASS_SECONDS = .78, MISS_SECONDS = 1.52, MISS_FRAME = .64, HANDOFF_SECONDS = .10, AIM_ANGLE = 22.;
+	private const MISS_LEAD = 2.*AirPatrol::ESCORT_LEAD, MISS_PAST_JET = 32.;
 	private const BOOST_RAMP = .24;
 	private bool $driftPass=false;
 	private ?float $rearPassGap=null;
@@ -80,26 +81,23 @@ final class SpeedSeeker
 		}
 		if($this->phase==='missed') {
 			$camera=$this->driftPass && $eye ? $eye() : null;
-			$from=$this->pose;
-			$step=$this->driftPass ? min($dt,max(0.,self::PASS_SECONDS-$this->clock+$dt)) : $dt;
-			foreach(['x','y','z'] as $i=>$axis) $this->pose[$axis]+=$this->velocity[$i]*$step;
-			$burst=$this->driftPass && $this->clock>=self::PASS_SECONDS-1e-9;
-			$edge=$camera ? self::screenExtent($this->pose,$camera,$aspect) : 0.;
-			if($camera && $edge>=self::BURST_MARGIN) {
-				$lastEdge=self::screenExtent($from,$camera,$aspect);
-				if($lastEdge<1. && $edge>$lastEdge) {
-					// The flash starts at the last visible pose, even on the outside of a hard turn.
-					$this->pose=$from;
-					$burst=true;
-				}
+			$remaining=max(0.,self::MISS_SECONDS-$this->clock+$dt);
+			$step=$this->driftPass ? min($dt,$remaining) : $dt;
+			$velocity=$this->velocity;
+			if($camera && $this->rearPassGap===null && $this->clock>=self::HANDOFF_SECONDS && $remaining>0.) {
+				$velocity=$this->framedMiss($camera,$aspect,$car,$beforeCar,$plane,$remaining,$dt);
+				$this->pose['yaw']=atan2($velocity[0],$velocity[2]);
+				$this->pose['pitch']=atan2($velocity[1],hypot($velocity[0],$velocity[2]));
 			}
+			foreach(['x','y','z'] as $i=>$axis) $this->pose[$axis]+=$velocity[$i]*$step;
+			$burst=$this->driftPass && $this->clock>=self::MISS_SECONDS-1e-9;
 			$hit=SeekerContact::first($this->previous,$this->pose,$beforeCar ?? $car,$car,true,$land,$water);
 			if($hit!==null) return $this->finish($hit);
 			if($burst) return $this->finish(['kind'=>'air','point'=>[$this->pose['x'],$this->pose['y'],$this->pose['z']]]);
 			if(!$this->driftPass && $this->clock>=6.) return $this->finish(null);
 			if($this->rearPassGap!==null) {
 				if(!$this->driftPass || $plane===null || $patrol!=='escort' ||
-					$edge>=.92) {
+					($camera && self::screenExtent($this->pose,$camera,$aspect)>=.92)) {
 					$this->rearPassGap=null;
 				} elseif($this->clock>=self::HANDOFF_SECONDS-1e-9) {
 					if($camera && !self::clearSight($this->pose,$camera,$land)) $this->rearPassGap=null;
@@ -186,6 +184,57 @@ final class SpeedSeeker
 			$along=$dx*$nx+$dy*$ny+$dz*$nz;
 			if($gap>0. && $gap<=90. && $along>=$gap*cos(deg2rad(self::AIM_ANGLE))) $this->rearPassGap=$gap;
 		}
+	}
+
+	/** Frame the end of a missed pass in the moving driver's view. The release stays visible through a bend. */
+	private function framedMiss(Camera $eye,float $aspect,array $car,?array $beforeCar,?array $plane,float $remaining,float $dt): array
+	{
+		[$forward,$right,$up]=$eye->basis();
+		// Project the natural burst relative to where the camera will be when it happens.
+		$offset=[];
+		foreach(['x','y','z'] as $i=>$axis) {
+			$cameraSpeed=$dt>0. && $beforeCar ? ($car[$axis]-$beforeCar[$axis])/$dt : 0.;
+			$offset[]=$this->pose[$axis]-$eye->position[$i]+($this->velocity[$i]-$cameraSpeed)*$remaining;
+		}
+		$dot=static fn(array $v,array $axis)=>$axis[0]*$v[0]+$axis[1]*$v[1]+$axis[2]*$v[2];
+		$depth=$dot($offset,$forward);
+		$depthScale=max(1.,$depth);
+		$half=tan($eye->fov/2)*self::MISS_FRAME;
+		$x=max(-$half*$aspect,min($half*$aspect,$dot($offset,$right)/$depthScale));
+		$y=max(-$half,min($half,$dot($offset,$up)/$depthScale));
+		$ray=[];
+		foreach($forward as $i=>$f) $ray[]=$f+$x*$right[$i]+$y*$up[$i];
+
+		// In the driving view, place the flash down the road beyond both the car and the moving escort.
+		$heading=$car['yaw']-$car['drift'];
+		$fx=sin($heading); $fz=cos($heading);
+		$along=$ray[0]*$fx+$ray[2]*$fz;
+		$range=max($depth,self::MISS_LEAD);
+		if($along>.5) {
+			$lead=self::MISS_LEAD;
+			if($plane!==null) $lead=max($lead,self::MISS_PAST_JET+($plane['x']-$car['x'])*$fx+($plane['z']-$car['z'])*$fz);
+			$carDepth=($car['x']-$eye->position[0])*$fx+($car['z']-$eye->position[2])*$fz;
+			$range=max($range,($carDepth+$lead)/$along);
+		} elseif($plane!==null) {
+			// With manual look pointed across the road, keep the burst visibly deeper than the jet.
+			$planeDepth=($plane['x']-$eye->position[0])*$forward[0]+($plane['y']-$eye->position[1])*$forward[1]+($plane['z']-$eye->position[2])*$forward[2];
+			$range=max($range,$planeDepth+self::MISS_PAST_JET);
+		}
+		$velocity=$this->velocity;
+		foreach($ray as $i=>$v) $velocity[$i]+=($range*$v-$offset[$i])/$remaining;
+		// The camera can pan faster than the distant aim point pulls the tail across the screen.
+		// Keep the next short stretch inside the frame too, using a little more room than the burst.
+		$look=min($remaining,.06);
+		$near=[];
+		foreach(['x','y','z'] as $i=>$axis) $near[]=$this->pose[$axis]-$eye->position[$i]+$velocity[$i]*$look;
+		$limit=$dot($near,$forward)*tan($eye->fov/2)*.80;
+		if($limit>0.) {
+			$side=$dot($near,$right); $height=$dot($near,$up);
+			$dx=max(-$limit*$aspect,min($limit*$aspect,$side))-$side;
+			$dy=max(-$limit,min($limit,$height))-$height;
+			foreach($velocity as $i=>$v) $velocity[$i]+=($dx*$right[$i]+$dy*$up[$i])/$look;
+		}
+		return $velocity;
 	}
 
 	private function behindBumper(array $car): bool
@@ -363,9 +412,16 @@ final class SpeedSeeker
 		$wave=.78*sin(2.*M_PI*1.35*$t)+.22*sin(2.*M_PI*2.15*$t);
 		$yaw=$p['yaw'];
 		$p['yaw']+=$side*deg2rad(8.)*self::smooth($t/.24)*$wave;
-		$pivot=self::CENTER_OF_GRAVITY*cos($p['pitch']);
-		$p['x']+=$pivot*(sin($yaw)-sin($p['yaw']));
-		$p['z']+=$pivot*(cos($yaw)-cos($p['yaw']));
+		$pitch=$p['pitch'];
+		if(($shot['phase'] ?? '')==='missed') {
+			$beat=sin(2.*M_PI*1.72*$t+.6);
+			$p['pitch']+=deg2rad(7.)*self::smooth((($shot['clock'] ?? 0.)-self::HANDOFF_SECONDS)/.20)*$beat;
+		}
+		$oldRadius=self::CENTER_OF_GRAVITY*cos($pitch);
+		$newRadius=self::CENTER_OF_GRAVITY*cos($p['pitch']);
+		$p['x']+=$oldRadius*sin($yaw)-$newRadius*sin($p['yaw']);
+		$p['y']+=self::CENTER_OF_GRAVITY*(sin($pitch)-sin($p['pitch']));
+		$p['z']+=$oldRadius*cos($yaw)-$newRadius*cos($p['yaw']);
 		return $p;
 	}
 

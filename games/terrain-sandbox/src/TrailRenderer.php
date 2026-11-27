@@ -30,6 +30,7 @@ out vec2 disk;
 out float opacity;
 out float pattern;
 out float burstLife;
+out float ember;
 void main() {
 	bool dust = style.x == 3.;
 	bool burst = style.x == 2.;
@@ -42,16 +43,17 @@ void main() {
 	float life = age / style.y;
 	disk = sampleCorner.xy;
 	burstLife = -1.;
-	if (style.x >= 4.) {
-		bool puff = style.x == 5.;
-		if (puff && sampleCorner.z > .084) { gl_Position = vec4(2.,2.,2.,1.); return; }
+	ember = 0.;
+	if (style.x == 5.) {
+		if (sampleCorner.z > .084) { gl_Position = vec4(2.,2.,2.,1.); return; }
 		pattern = 6.283 * fract(dot(point.xz,vec2(.131,.117)));
-		vec3 drift = puff ? vec3(.45*sin(pattern),1.35,.45*cos(pattern))*age : vec3(0.);
+		vec3 drift = vec3(.45*sin(pattern),1.35,.45*cos(pattern))*age;
 		vec4 p = viewProjection * vec4(point.xyz-eye+drift,1.);
-		float radius = puff ? .85+1.65*life : .23+.22*life;
+		float radius = .85+1.65*life;
 		p.xy += disk*projectionScale*radius;
 		gl_Position = p;
-		burstLife = puff ? -3. : -4.;
+		burstLife = -3.;
+		ember = 1.-smoothstep(.025,.30,age);
 		opacity = style.z*(1.-smoothstep(.10,1.,life));
 		return;
 	}
@@ -103,16 +105,16 @@ in vec2 disk;
 in float opacity;
 in float pattern;
 in float burstLife;
+in float ember;
 uniform vec3 tint;
 out vec4 color;
 void main() {
 	float d = length(disk);
 	float r = d + .065*sin(5.*disk.x+pattern)*sin(4.*disk.y-pattern);
 	vec3 ink = tint;
-	if (burstLife < -3.5) ink = vec3(.86,.40,.16);
-	else if (burstLife < -2.5) {
-		ink = tint*.27;
+	if (burstLife < -2.5) {
 		r += .13*sin(5.*disk.x+pattern)*cos(6.*disk.y-pattern);
+		ink = mix(tint*.27,vec3(1.,.51,.15),ember*(1.-smoothstep(.12,.92,r)));
 	} else if (burstLife < -1.5) {
 		ink *= mix(vec3(.55,.43,.31),vec3(.82,.73,.59),.5+.5*sin(pattern));
 		r += .08*sin(8.*disk.y+pattern)*cos(7.*disk.x-pattern);

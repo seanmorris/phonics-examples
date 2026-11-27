@@ -233,6 +233,8 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 		if(($beforeShot['phase'] ?? '')==='missed' && ($shot['phase'] ?? '')==='reload') {
 			$car=$game->car->state(); $heading=$car['yaw']-$car['drift']; $point=$shot['impact'];
 			$missLead=($point[0]-$car['x'])*sin($heading)+($point[2]-$car['z'])*cos($heading);
+			$planeLead=($patrol['pose']['x']-$car['x'])*sin($heading)+($patrol['pose']['z']-$car['z'])*cos($heading);
+			expect($missLead-$planeLead>=31.,'A missed drift passes visibly beyond the moving F5.');
 			expect($inFrame($game->view(1.)[0],$point,.90),'A missed drift bursts inside the driving view.');
 		}
 		if(($shot['phase'] ?? '')==='return') {
@@ -270,6 +272,7 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 		$previousPose=$shot['pose'] ?? null;
 		if(($patrol['repelled'] ?? false) && $wonAt===null) {
 			$wonAt=$game->demo->duration(); $hitPatrol=$patrol;
+			expect($game->airPatrol->pose(.25)['power']===0.,'The afterburner goes dark on the first interpolated crash frame.');
 			expect($shot['impact']===[$patrol['pose']['x'],$patrol['pose']['y'],$patrol['pose']['z']] &&
 				$patrol['phase']==='glide' && $patrol['pose']['power']===0. && $game->airPatrol->carImpact===null,'The return bursts on the F5 and cuts its engines.');
 		}
@@ -286,7 +289,7 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 	if($delay<1.95) expect($driftedOnApproach && $followed,'An early handbrake slide still leads into the bumper chase.');
 	expect($missed===$shakes,'A slide that ends before the bumper chase cannot shake the lock later.');
 	if($shakes) expect(($releaseAngle<=22.)===$wins,'Only a flick pointed toward the jet at release can win.');
-	if($shakes && !$wins) expect(abs($missLead-AirPatrol::ESCORT_LEAD)<6.,'The miss flashes ahead at the usual patrol lead.');
+	if($shakes && !$wins) expect(abs($missLead-2.*AirPatrol::ESCORT_LEAD)<6.,'The miss flashes about two escort lengths ahead of the driver.');
 	expect(($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'The aimed flick returns to the jet and the other flicks miss.');
 	if($wins) {
 		$last=1.;
@@ -331,8 +334,8 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 				if($p['speed']===0.) break;
 			}
 		}
-		expect($touch && $flare && $puffs && $streak && $p['speed']===0. && hypot($p['x']-$touch['x'],$p['z']-$touch['z'])>20.,
-			'The powerless aircraft trails smoke, flares, travels along the ground, then stops.');
+		expect($touch && $flare && $puffs && !$streak && $p['speed']===0. && hypot($p['x']-$touch['x'],$p['z']-$touch['z'])>20.,
+			'The powerless aircraft sheds separate puffs with the exhaust streak off, flares, slides and stops.');
 		$fast['x']=$p['x']; $fast['z']=$p['z']+650.; $watch->position=[$fast['x'],$p['y'],$fast['z']]; $watch->yaw=0.;
 		$away->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
 		expect($away->pose()!==null,'A distant wreck stays as long as the camera can see it.');
@@ -384,7 +387,7 @@ $prop->resume(['phase'=>'chase','clock'=>0.,'start'=>array_fill(0,6,0.),'pose'=>
 $prop->step(1/60,$car,$awayPlane,'escort',$land,-10.);
 expect(!isset($prop->state()['rearPassGap']),'A nearby jet across the drift direction receives no lock.');
 $hit=null;
-for($i=0;$i<60 && !$hit;$i++) $hit=$prop->step(1/60,$car,$plane,'escort',$land,-10.);
+for($i=0;$i<120 && !$hit;$i++) $hit=$prop->step(1/60,$car,$plane,'escort',$land,-10.);
 expect($hit['kind']==='air','A jet crossing the released path later still leaves an ordinary airburst.');
 
 // Looking away during the loose pass closes the handoff, including after branching a recording.
@@ -395,12 +398,43 @@ $lost=$prop->state();
 expect($lost['phase']==='missed' && !isset($lost['rearPassGap']),'An offscreen pass loses its return cue.');
 $prop->resume($lost); $watch->yaw=M_PI;
 $burst=null;
-for($i=0;$i<60 && $burst===null;$i++) {
+for($i=0;$i<120 && $burst===null;$i++) {
 	$burst=$prop->step(1/60,$car,$plane,'escort',$land,-10.,null,fn()=>$watch,4/3);
 	expect($prop->state()['phase']!=='return','Bringing the prop back into view cannot restart a missed handoff.');
 }
-expect($burst['kind']==='air' && $i<40 && $inFrame($watch,$burst['point'],.96),
-	'A sideways pass flashes before it leaves the viewport, ahead of its normal expiry.');
+expect($burst['kind']==='air' && $i>60 && $inFrame($watch,$burst['point'],.74),
+	'A sideways miss tracks an interior point in the new view all the way to its distant flash.');
+
+// Pan through the loose pass while the escort pulls far ahead. Check the actual render projection.
+foreach([.60,1.,16/9] as $aspect) foreach([30,120] as $hz) {
+	$watch=new Camera; $watch->pitch=-.08; $watch->fov=1.1;
+	$driverPose=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>0.,'pitch'=>0.,'roll'=>0.,'speed'=>42.,'drift'=>0.];
+	$shot=new SpeedSeeker;
+	$shot->resume(['phase'=>'missed','slot'=>0,'clock'=>.12,'driftPass'=>true,'airtime'=>3.,
+		'start'=>[],'passSpeed'=>87.,'velocity'=>[-18.,9.,85.],'pose'=>array_replace($pose,['x'=>0.,'y'=>5.,'z'=>3.])]);
+	$minPitch=INF; $maxPitch=-INF; $burst=null;
+	for($i=1;$i<2*$hz && !$burst;$i++) {
+		$old=$driverPose;
+		$driverPose['z']+=42./$hz;
+		$watch->position=[0.,4.,$driverPose['z']-12.]; $watch->yaw=M_PI-.38*sin(1.8*$i/$hz);
+		$ahead=array_replace($plane,['x'=>14.,'z'=>$driverPose['z']+65.+3.*$i/$hz]);
+		$burst=$shot->step(1./$hz,$driverPose,$ahead,'escort',$land,-10.,$old,fn()=>$watch,$aspect);
+		$state=$shot->state();
+		$point=$burst['point'] ?? $xyz($state['pose']);
+		$m=$watch->viewProjection((int)round(900*$aspect),900);
+		[$x,$y,$z]=array_map(static fn($a,$b)=>$a-$b,$point,$watch->position);
+		$w=$m[3]*$x+$m[7]*$y+$m[11]*$z;
+		expect($w>0. && max(abs($m[0]*$x+$m[4]*$y+$m[8]*$z),abs($m[1]*$x+$m[5]*$y+$m[9]*$z))<.91*$w,
+			'The extended miss stays visible as a narrow or wide viewport pans.');
+		if($burst) break;
+		$model=SpeedSeeker::modelPose($state);
+		$pitch=$model['pitch']-$state['pose']['pitch'];
+		$minPitch=min($minPitch,$pitch); $maxPitch=max($maxPitch,$pitch);
+		expect($displacement($state['pose'],$model,1.4)<1.e-8,'A vertical fishtail pivots about the same forward balance point.');
+	}
+	expect($burst['kind']==='air' && $point[2]-$ahead['z']>=31.,'The burst clears even an escort far beyond its usual station.');
+	expect($minPitch<-.09 && $maxPitch>.09,'The tail swings visibly both up and down during a miss.');
+}
 
 // Early takes used passGap for releases that could happen beside the wing.
 unset($released['rearPassGap'],$released['driftPass']);
@@ -597,15 +631,14 @@ $plain=$coast->state();
 expect($miss['pose']['pitch']>$plain['pose']['pitch'] && $miss['velocity'][1]>$plain['velocity'][1]+2. &&
 	$miss['pose']['y']>$plain['pose']['y'] && $miss['passSpeed']>$driver['speed'],
 	'The shaken prop lifts above the roof and overtakes the driver.');
-$widePass=$pilot->snapshot(); $widePass['pose']['x']+=180.; // Keep the F5 out of retargeting range on both paths.
+$widePass=$pilot->snapshot(); $widePass['pose']['x']+=180.;
 $pilot->resume($widePass); $other=new AirPatrol; $other->resume($widePass);
 for($i=0;$i<12;$i++) {
 	$pilot->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
-	$other->step(1/60,$displaced,$eyeAt,16/9,$land,-10.);
+	$other->step(1/60,$driver,$eyeAt,16/9,$land,-10.);
 }
-expect($pilot->seeker()['pose']===$other->seeker()['pose'] && $pilot->seeker()['pose']['z']>$miss['pose']['z'] &&
-	abs($pilot->seeker()['pose']['y']-$miss['pose']['y']-.2*$miss['velocity'][1])<.0001,
-	'The shaken prop holds its release course even when the driver changes direction.');
+expect($pilot->seeker()['pose']===$other->seeker()['pose'] && $pilot->seeker()['pose']['z']>$miss['pose']['z'],
+	'The miss carries forward continuously after branching a recording.');
 // With the patrol peeling away, the same loose shot expires and cannot score a return.
 $escaping=new SpeedSeeker; $escaping->resume($miss);
 for($i=0;$i<370;$i++) $escaping->step(1/60,$driver,null,'departure',$land,-10.);
@@ -697,6 +730,27 @@ foreach(['car','ground'] as $object) {
 		($object==='car' ? $hits===1 && $peak>3. : $hits===0 && $peak<.5),
 		'Only a direct hit throws the car, and the normal landing or recovery returns control.');
 	$game->close();
+}
+
+// Match the surge to the first visible puff. Check that it decays before the next cough and does not accumulate.
+foreach([30,60,120] as $hz) {
+	$wreck=new Jet;
+	$wreck->resumeFlight(array_replace($checkpoint['pose'],['x'=>0.,'y'=>25.,'z'=>0.,'yaw'=>0.,'roll'=>.3,
+		'pitch'=>0.,'speed'=>80.,'power'=>0.,'vx'=>0.,'vy'=>0.,'vz'=>80.]));
+	$effects=new FlightTrails; $firstPuff=null; $surge=0.;
+	for($i=1;$i<8*$hz;$i++) {
+		$t=$i/$hz; $before=$wreck->state();
+		$touch=$wreck->landUnpowered(1./$hz,$land,-10.,false,$t); $p=$wreck->state();
+		$effects->step(1./$hz,null,null);
+		$effects->damagedExhaust($before,$p,$t,1./$hz);
+		if($effects->instances()!=='') $firstPuff??=$t;
+		if($t<.45) expect($p['vz']<$before['vz'] && $firstPuff===null,'The engine stays dark and the aircraft coasts between impact and the first cough.');
+		if($t>.46 && $t<.57) $surge=max($surge,$p['vz']);
+		if(abs($t-.8)<.5/$hz) expect($surge-$p['vz']>5.,'The short forward lurch subsides before the next puff.');
+		if($touch) break;
+	}
+	expect(abs($firstPuff-.46)<=1./$hz && $surge>84.,'The first puff and forward surge coincide.');
+	expect($touch && $t>4.25 && $t<4.65 && $p['z']>330. && $p['vz']>69.,'The powerless glide carries speed to a later touchdown.');
 }
 
 // A raised roadbed gives a reproducible canyon wall with a level approach, a steep face and a flat top.

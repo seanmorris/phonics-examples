@@ -140,28 +140,20 @@ final class FlightTrails
 		return $tip;
 	}
 
-	/** A short ember streak from the dead exhaust, with individual sooty puffs left along its path. */
+	/** Leave one cooling puff at the exhaust on each cough of the failed engine. */
 	public function damagedExhaust(array $before,array $after,float $glideAge,float $dt): void
 	{
-		$ends=[];
-		foreach([$before,$after] as $pose) {
-			$axes=VehicleModel::basis($pose);
-			$point=[$pose['x'],$pose['y'],$pose['z']];
-			foreach($point as $i=>$v) $point[$i]=$v-.23*$axes[3+$i]-6.30*$axes[6+$i];
-			$ends[]=$point;
-		}
-		[$a,$b]=$ends;
-		$bytes=pack('g*',$a[0],$a[1],$a[2],$this->stepStart,$b[0],$b[1],$b[2],$this->now,4.,.14,.65);
-		$interval=.46;
+		$interval=Jet::EXHAUST_PUFF_INTERVAL;
 		$puffTime=floor(($glideAge+1.e-7)/$interval)*$interval;
-		if($puffTime>0. && $puffTime>$glideAge-$dt+1.e-7) {
-			$f=min(1.,max(0.,1.-($glideAge-$puffTime)/$dt));
-			foreach($a as $i=>$v) $a[$i]=$v+$f*($b[$i]-$v);
-			$birth=$this->stepStart+$f*$dt;
-			$bytes.=pack('g*',$a[0],$a[1],$a[2],$birth,$a[0],$a[1],$a[2],$birth,5.,1.35,.70);
-		}
+		if($puffTime<=0. || $puffTime<=$glideAge-$dt+1.e-7) return;
+		$f=min(1.,max(0.,1.-($glideAge-$puffTime)/$dt));
+		$pose=AirPatrol::interpolate($before,$after,$f);
+		$axes=VehicleModel::basis($pose);
+		$point=[$pose['x'],$pose['y'],$pose['z']];
+		foreach($point as $i=>$v) $point[$i]=$v-.23*$axes[3+$i]-6.30*$axes[6+$i];
+		$sample=[...$point,$this->stepStart+$f*$dt];
 		$this->smoke[$this->tick] ??= [$this->now,''];
-		$this->smoke[$this->tick][1].=$bytes;
+		$this->smoke[$this->tick][1].=pack('g*',...array_merge($sample,$sample,[5.,1.35,.70]));
 		$this->revision++;
 	}
 

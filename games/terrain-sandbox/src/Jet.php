@@ -31,6 +31,7 @@ final class Jet
 	private const CHASE_TURN = 4.0;
 	/** Steeper than about 35 degrees, the wreck pushes against the hillside instead of riding up it. */
 	private const LANDING_GRADE = .7;
+	public const EXHAUST_PUFF_INTERVAL = .46;
 	/** Underside contact points in model space: belly, tail, nose and both wingtips. */
 	private const SKIDS = [[0.,-.83,-2.30],[0.,-.49,-6.27],[0.,-.20,8.],[-4.17,-.48,-2.16],[4.17,-.48,-2.16]];
 	/** Smallest and largest square blocks, in lattice cells, whose height bound can replace an exact sample. */
@@ -186,7 +187,7 @@ final class Jet
 	public function cutEngine(): void { $this->pose['power']=0.; }
 
 	/** Carry the hit aircraft's velocity through a wings-level glide, flare and gear-up rollout. */
-	public function landUnpowered(float $dt,Landscape $land,float $water,bool $sliding): bool
+	public function landUnpowered(float $dt,Landscape $land,float $water,bool $sliding,float $glideAge=0.): bool
 	{
 		if($sliding && $this->pose['speed']===0.) return true;
 		$this->previous=$this->pose;
@@ -194,17 +195,29 @@ final class Jet
 		// A fast slide must meet the face before a contact point can cross it onto the plateau.
 		$run=min(self::FASTEST,hypot($this->pose['vx'],$this->pose['vz']));
 		$steps=max(1,(int)ceil($dt*$run/(.5*$recipe['spacing'])));
+		$step=$dt/$steps;
 		for($i=0;$i<$steps;$i++)
-			$sliding=$this->landingStep($dt/$steps,$land,$water,$recipe['worldSize']/2.,$sliding);
+			$sliding=$this->landingStep($step,$land,$water,$recipe['worldSize']/2.,$sliding,$glideAge-($steps-1-$i)*$step);
 		return $sliding;
 	}
 
-	private function landingStep(float $dt,Landscape $land,float $water,float $half,bool $sliding): bool
+	/** Each exhaust cough briefly carries the aircraft forward, then it settles back to glide speed. */
+	private static function glidePulse(float $age): float
+	{
+		if($age<self::EXHAUST_PUFF_INTERVAL) return 1.;
+		$t=fmod($age,self::EXHAUST_PUFF_INTERVAL);
+		if($t>=.24) return 1.;
+		$rise=min(1.,$t/.05);
+		$fall=min(1.,(.24-$t)/.19);
+		return 1.+.09*$rise*$rise*(3.-2.*$rise)*$fall*$fall*(3.-2.*$fall);
+	}
+
+	private function landingStep(float $dt,Landscape $land,float $water,float $half,bool $sliding,float $glideAge): bool
 	{
 		$p=&$this->pose;
 		$oldY=$p['y'];
 		$run=hypot($p['vx'],$p['vz']);
-		$speed=$sliding ? max(0.,$run-(9.+.18*$run)*$dt) : $run*exp(-.045*$dt);
+		$speed=$sliding ? max(0.,$run-(9.+.18*$run)*$dt) : $run*exp(-.026*$dt)*self::glidePulse($glideAge)/self::glidePulse($glideAge-$dt);
 		$drag=$run>0. ? $speed/$run : 0.;
 		foreach(['x','z'] as $axis) {
 			$v='v'.$axis; $p[$v]*=$drag;
@@ -225,7 +238,7 @@ final class Jet
 		$across=$dx*cos($p['yaw'])-$dz*sin($p['yaw']);
 		$clearance=$p['y']-$surface-.83;
 		$flare=max(0.,min(1.,1.-$clearance/10.));
-		$sink=max(3.,.11*$speed);
+		$sink=max(2.6,.092*$speed);
 		$desiredVy=-$sink+(max(-$sink,min(-1.2,$speed*$along-1.6))+$sink)*$flare;
 		$p['vy']+=($desiredVy-$p['vy'])*(1.-exp(-$dt/.38));
 		$pitch=$sliding ? atan($along) : atan2($p['vy'],max(1.,$speed))*(1.-$flare)+.085*$flare;

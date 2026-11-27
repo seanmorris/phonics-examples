@@ -97,7 +97,7 @@ final class AirPatrol
 			$moving=$this->phase==='glide' || $p['speed']>0.;
 			if($moving) {
 				$this->elapsed+=$dt;
-				$phase=$this->jet->landUnpowered($dt,$land,$water,$this->phase==='slide') ? 'slide' : 'glide';
+				$phase=$this->jet->landUnpowered($dt,$land,$water,$this->phase==='slide',$this->elapsed) ? 'slide' : 'glide';
 				if($phase!==$this->phase) { $this->phase=$phase; $this->elapsed=0.; }
 			}
 			$next=$this->jet->state();
@@ -223,6 +223,7 @@ final class AirPatrol
 		$this->stepSmoke($dt,$before,$this->seeker?->state(),$car,$beforeCar,$this->previous,$plane,$phase==='glide' ? $this->elapsed : null);
 		if(($hit['kind'] ?? null)==='plane') {
 			$this->jet->cutEngine();
+			$this->previous['power']=0.;
 			$this->repelled=true; $this->phase='glide'; $this->elapsed=0.;
 		}
 		if(($hit['kind'] ?? null)==='car') $this->carImpact=$hit['point'];
