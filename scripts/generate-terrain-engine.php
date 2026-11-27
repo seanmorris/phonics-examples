@@ -7,6 +7,11 @@ declare(strict_types=1);
 const CYCLES = 64, SAMPLES_PER_CYCLE = 512, SAMPLE_RATE = 32768;
 // Blowdown: pressure builds over a couple of degrees as the exhaust valve opens, then the cylinder empties over about
 // seven. The rounded pulse keeps the note full; the browser adds the tailpipe rasp as noise.
+function pressurePulse(float $age, float $rise, float $decay): float
+{
+	return (1. - exp(-$age/$rise))*exp(-$age/$decay);
+}
+
 const RISE = 3., DECAY = 10., TAIL = 96;
 // Cylinders 0–11 fire 60° apart and alternate banks. Each has its own charge and primary pipe length, so the
 // firings differ in strength and arrival time. Within a bank, cylinders alternate richer and leaner, so every other
@@ -35,7 +40,7 @@ for($cycle = 0; $cycle < CYCLES; $cycle++)
 			$age = $first + $j - $at;
 			// Wrap the last firing's tail into the start of the next pass.
 			$index = ($first + $j + $length) % $length;
-			$tracks[$bank][$index] += .38*$pressure*(1. - exp(-$age/RISE))*exp(-$age/DECAY);
+			$tracks[$bank][$index] += .38*$pressure*pressurePulse($age,RISE,DECAY);
 			// Gas speed through the collectors. The browser gates turbulent noise with it.
 			$tracks[2][$index] += .22*$pressure*exp(-$age/(2.*DECAY));
 		}
@@ -62,13 +67,38 @@ $format = pack('vvVVvvvvV',0xfffe,4,SAMPLE_RATE,SAMPLE_RATE*8,8,16,22,16,0x33)
 	. hex2bin('0100000000001000800000aa00389b71');
 $chunks = 'fmt '.pack('V',strlen($format)).$format.'data'.pack('V',strlen($pcm)).$pcm;
 $wav = 'RIFF'.pack('V',strlen($chunks)+4).'WAVE'.$chunks;
-$file = dirname(__DIR__).'/games/terrain-sandbox/assets/car-audio/flat-twelve.wav';
-if(in_array('--check',$argv,true))
+$dir = dirname(__DIR__).'/games/terrain-sandbox/assets/car-audio/';
+function writeRecording(string $file, string $wav, bool $check): void
 {
-	if(!is_file($file) || file_get_contents($file) !== $wav)
-	{
-		fwrite(STDERR,"Regenerate the terrain engine with php scripts/generate-terrain-engine.php.\n");
-		exit(1);
-	}
+	if($check) {
+		if(!is_file($file) || file_get_contents($file) !== $wav)
+			throw new RuntimeException("Regenerate $file with php scripts/generate-terrain-engine.php");
+	} elseif(file_put_contents($file,$wav) !== strlen($wav)) throw new RuntimeException("Could not write $file");
 }
-elseif(file_put_contents($file,$wav) !== strlen($wav)) throw new RuntimeException("Could not write $file");
+$check = in_array('--check',$argv,true);
+writeRecording($dir.'flat-twelve.wav',$wav,$check);
+
+// A short pressure front, a low body and a ragged air tail. The same pressure envelope drives each exhaust firing.
+// Bake the dry sound once. Each landscape supplies its own reflection times and directions during play.
+$rate=32000;
+$pcm='';
+$low=$mid=$slow=0.;
+$phase=0.;
+for($i=0; $i<$rate; $i++) {
+	$t=$i/$rate;
+	$n=2.*$random()-1.;
+	$low+=.018*($n-$low);
+	$mid+=.19*($n-$mid);
+	$slow+=.0022*($n-$slow);
+	$phase+=2*M_PI*(43.+42.*exp(-$t/.046))/$rate;
+	$front=pressurePulse($t,.0008,.022);
+	$body=pressurePulse($t,.005,.12);
+	$tail=pressurePulse($t,.017,.17);
+	$value=$front*(.49*$n+.34*$mid) + $body*(.45*sin($phase)+2.6*($low-$slow))
+		+ $tail*(1.3*($mid-$low)+2.2*$slow);
+	$fade=min(1.,(1.-$t)/.04);
+	$pcm.=pack('v',(int)round(30000*tanh($value)*$fade));
+}
+$format=pack('vvVVvv',1,1,$rate,$rate*2,2,16);
+$chunks='fmt '.pack('V',strlen($format)).$format.'data'.pack('V',strlen($pcm)).$pcm;
+writeRecording($dir.'burst.wav','RIFF'.pack('V',strlen($chunks)+4).'WAVE'.$chunks,$check);

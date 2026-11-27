@@ -231,6 +231,7 @@ final class DemoTape
 			if($t===$time) break;
 			$last=$f;
 		}
+		$patrol->smoke?->takeBursts(); // Seeking rebuilds visible smoke silently.
 	}
 
 	/** Interpolate at presentation time. Cuts between maps, vehicles and viewpoints stay instantaneous. */

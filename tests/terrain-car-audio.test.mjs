@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import test from 'node:test';
-import {activate, joinSkid} from '../games/terrain-sandbox/browser/car-audio.mjs';
+import {activate, joinSkid, playBurstTap} from '../games/terrain-sandbox/browser/car-audio.mjs';
 
 function buffer(channels, length, sampleRate)
 {
@@ -166,4 +166,48 @@ test('the saved master reaches the soundtrack at startup and when the listener a
 
 	stop();
 	controller.abort();
+});
+
+test('a burst arrival schedules the pressure recording through its own filter and stereo pan on the master', () => {
+	const nodes = [];
+
+	const node = params => {
+		const result = {
+			...params
+
+			, connect(next) { this.next = next; return next; }
+
+
+			, disconnect() { this.next = null; }
+		};
+
+		nodes.push(result);
+
+		return result;
+	};
+
+	const context = {
+		currentTime: 1
+		, sampleRate: 48000
+		, createBufferSource: () => node({
+			playbackRate: {}
+
+			, start(at) { this.at = at; }
+		})
+		, createGain: () => node({gain: {}})
+		, createBiquadFilter: () => node({frequency: {}, Q: {}})
+		, createStereoPanner: () => node({pan: {}})
+	};
+
+	const buffer = {}, master = {};
+	const source = playBurstTap(context, buffer, master, 2.4, .98, .16, 920, .7);
+	assert.equal(source.buffer, buffer);
+	assert.equal(source.at, 2.4);
+	assert.equal(source.playbackRate.value, .98);
+	assert.equal(source.next.frequency.value, 920);
+	assert.equal(source.next.next.gain.value, .16);
+	assert.equal(source.next.next.next.pan.value, .7);
+	assert.equal(source.next.next.next.next, master);
+	source.onended();
+	assert.ok(nodes.every(node => node.next === null));
 });

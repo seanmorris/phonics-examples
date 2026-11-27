@@ -12,6 +12,15 @@ final class FlightTrails
 	private array $smoke = [], $vapor = [], $bursts = [];
 	private float $now = 0.0, $stepStart = 0.0, $density = 0.0;
 	private int $tick = 0;
+	private array $newBursts = [];
+
+	/** Consume impact births once, independently of redraws or the moving car flash. */
+	public function takeBursts(): array
+	{
+		$points=$this->newBursts;
+		$this->newBursts=[];
+		return $points;
+	}
 	private const FLASH_HOLD = .080;
 	public const LODGED_LIFE = self::BURST_LIFE - .080;
 
@@ -174,6 +183,8 @@ final class FlightTrails
 	/** A world-space flash and smoke bloom born at the instant of contact within this step. */
 	public function burst(array $point, float $duration): void
 	{
+		if(count($this->newBursts)>=8) array_shift($this->newBursts);
+		$this->newBursts[]=$point;
 		[$x,$y,$z] = $point;
 		$birth = min($this->now,$this->stepStart+$duration);
 		$this->bursts[$this->tick] ??= [$this->now,''];

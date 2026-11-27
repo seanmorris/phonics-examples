@@ -2590,5 +2590,6 @@ expect($pauseMenu->finish($paused) && !$paused->menu && $paused->paused && end($
 $paused->close();
 
 require __DIR__.'/support/air-patrol.php';
+require __DIR__.'/support/burst-acoustics.php';
 
 echo "Landscape sandbox session: $checks checks passed\n";

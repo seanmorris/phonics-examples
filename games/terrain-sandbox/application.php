@@ -112,6 +112,9 @@ $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainVehicleFrame');
 $carSound = vrzno_env('terrainCarSound');
+$acoustics = new TerrainSandbox\BurstAcoustics;
+$burstMode = vrzno_env('terrainBurstMode');
+$burstSound = vrzno_env('terrainBurstSound');
 // The pause menu reads and sets audio in the page, and asks it to open the Landscape Lab or leave.
 $pauseMenu = new SandboxMenu(vrzno_env('terrainAudioGet'), vrzno_env('terrainAudioSet'), vrzno_env('terrainPage'));
 $lastSound = [0,0,0];
@@ -430,7 +433,7 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$liveSession, $liveScene, &$playback, &$hiddenGates, $drawOpaque, &$traffic, &$lightSources, &$flightLights, $gates, $curveSigns, $journeySigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound,
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound, $acoustics, $burstMode, $burstSound,
 		$pauseMenu, &$displayTerrain, $journeyAtlas, $atlasResult
 	): void {
 		$tape = $liveSession->demo;
@@ -475,6 +478,12 @@ $engine->start(
 			$vehiclePose['motion'] = 'driving';
 			$vehiclePose['floodedHold'] = false;
 		}
+		$burstSource = match($session->mode) {
+			'car' => $session->airPatrol->smoke, 'jet' => $session->flightTrails, default => null
+		};
+		if($session->paused) $burstSource?->takeBursts();
+		$acoustics->frame($session->paused ? null : $burstSource,$session->landscape,$viewCamera,
+			$session->water->level(),$burstMode,$burstSound);
 		$sound = $session->mode === 'car' && !$session->paused && !$vehiclePose['floodedHold']
 			? [(int)round($vehiclePose['rpm']), round($vehiclePose['engineLoad'],3), round($vehiclePose['tireSqueal'],3)] : [0,0,0];
 		if($sound !== $lastSound)

@@ -90,6 +90,16 @@ export function startEngine(context, instrument, tone, output = context.destinat
 	rumble.frequency.value = 30;
 	rumble.Q.value = -3;
 
+	// A longer metal exhaust passage gives repeated collector pulses a low, fixed resonance under the note.
+	const throat = context.createBiquadFilter(), growl = context.createGain();
+	throat.frequency.value = 170;
+	throat.Q.value = -3;
+	growl.gain.value = .85;
+	port.connect(throat);
+	pipe(context, nodes, throat, growl, .0086, -.55);
+	growl.connect(volume);
+	nodes.push(throat, growl);
+
 	// Two baffles round the note off steeply above its cutoff.
 	for(const stage of [muffler, baffle])
 	{
@@ -187,6 +197,27 @@ export function joinSkid(context, buffer)
 	return loop;
 }
 
+/** Schedule one arrival on the audio clock, including its distance loss, air absorption and direction. */
+export function playBurstTap(context, buffer, output, at, rate, gain, cutoff, pan)
+{
+	const start = Math.max(at, context.currentTime);
+	const source = context.createBufferSource(), filter = context.createBiquadFilter();
+	const level = context.createGain(), stereo = context.createStereoPanner();
+	source.buffer = buffer;
+	source.playbackRate.value = rate;
+	filter.frequency.value = Math.min(.45*context.sampleRate, cutoff);
+	filter.Q.value = -3;
+	level.gain.value = gain;
+	stereo.pan.value = Math.max(-1, Math.min(1, pan));
+	source.connect(filter).connect(level).connect(stereo).connect(output);
+
+	source.onended = () => { for(const node of [source,filter,level,stereo]) node.disconnect(); };
+
+	source.start(start);
+
+	return source;
+}
+
 export function activate({module, canvas, archive, signal})
 {
 	const doc = canvas.ownerDocument, page = doc.defaultView;
@@ -196,6 +227,37 @@ export function activate({module, canvas, archive, signal})
 	let closed = false, contextLost = false, pageHidden = false, parked = false;
 	let tone = {cycle: 0}, tireLevel = 0, tireRate = 1;
 	const mix = {...AUDIO_DEFAULTS};
+	let effectsActive = false, burstBuffer, burstLoading;
+	const bursts = new Map();
+
+	function clearBursts()
+	{
+		for(const {voices} of bursts.values()) for(const voice of voices) voice.stop();
+		bursts.clear();
+	}
+
+	function flushBursts()
+	{
+		if(!burstBuffer || context?.state !== 'running') return;
+
+		for(const event of bursts.values())
+		{
+			if(!event.pending.length) continue;
+
+			event.origin ??= context.currentTime;
+
+			for(const [delay, gain, cutoff, pan] of event.pending.splice(0))
+			{
+				const at = event.origin + delay;
+
+				if(at < context.currentTime - .35) continue;
+
+				const voice = playBurstTap(context, burstBuffer, buses.master, at, event.rate, gain, cutoff, pan);
+				event.voices.add(voice);
+				voice.addEventListener('ended', () => event.voices.delete(voice), {once: true});
+			}
+		}
+	}
 
 	try
 	{
@@ -262,8 +324,9 @@ export function activate({module, canvas, archive, signal})
 	{
 		if(closed || !Context) return;
 
-		if(!tone.cycle || pageHidden || doc.hidden || contextLost)
+		if((!tone.cycle && !effectsActive) || pageHidden || doc.hidden || contextLost)
 		{
+			clearBursts();
 			engine?.stop();
 			engine = undefined;
 			stopTire();
@@ -287,6 +350,23 @@ export function activate({module, canvas, archive, signal})
 		if(!context || parked && context.state === 'suspended') unlock();
 
 		if(context?.state !== 'running') return;
+
+		if(effectsActive && !burstBuffer && !burstLoading)
+		{
+			burstLoading = Promise.resolve().then(
+				() => loadSound('burst.wav', buffer => { burstBuffer = buffer; flushBursts(); })
+			)
+				.catch(error => { if(!closed) console.error('Burst audio could not load', error); });
+		}
+
+		if(!tone.cycle)
+		{
+			engine?.stop();
+			engine = undefined;
+			stopTire();
+
+			return;
+		}
 
 		// Start archive reads after the PHP frame returns. Either sound can start as soon as it is ready.
 		if(!loading)
@@ -363,8 +443,8 @@ export function activate({module, canvas, archive, signal})
 
 	function gesture(event)
 	{
-		if(tone.cycle || event.code === 'KeyC'
-			|| event.target?.closest?.('[data-action="car"],[data-action="delivery"]')
+		if(tone.cycle || effectsActive || event.code === 'KeyC' || event.code === 'KeyJ'
+			|| event.target?.closest?.('[data-action="car"],[data-action="jet"],[data-action="delivery"]')
 		)
 		unlock();
 	}
@@ -375,6 +455,43 @@ export function activate({module, canvas, archive, signal})
 	page.addEventListener('pageshow', () => { pageHidden = false; update(); }, {signal});
 	canvas.addEventListener('webglcontextlost', () => { contextLost = true; update(); }, {signal});
 	canvas.addEventListener('webglcontextrestored', () => { contextLost = false; update(); }, {signal});
+
+	module.terrainBurstMode = enabled => {
+		clearBursts();
+		effectsActive = enabled;
+		update();
+	};
+
+	module.terrainBurstSound = (id, delay, gain, cutoff, pan) => {
+		if(!effectsActive || !context || closed || pageHidden || doc.hidden || contextLost || !mix.master) return;
+
+		let event = bursts.get(id);
+
+		if(!event)
+		{
+			if(bursts.size >= 8)
+			{
+				const oldest = bursts.keys().next().value;
+
+				for(const voice of bursts.get(oldest).voices) voice.stop();
+				bursts.delete(oldest);
+			}
+
+			event = {
+				origin: burstBuffer ? context.currentTime : null
+				, rate: .94 + (id*17%13)*.01
+				, pending: []
+				, voices: new Set()
+			};
+
+			bursts.set(id, event);
+		}
+
+		if(context.state !== 'running') return;
+
+		event.pending.push([delay, gain, cutoff, pan]);
+		flushBursts();
+	};
 
 	module.terrainCarSound = (cycle, level, cutoff, flow, scatter, skid, rate) => {
 		tone = {cycle, level, cutoff, flow, scatter};
@@ -421,6 +538,9 @@ export function activate({module, canvas, archive, signal})
 	return () => {
 		closed = true;
 		page.clearTimeout(parkTimer);
+		delete module.terrainBurstMode;
+		delete module.terrainBurstSound;
+		clearBursts();
 		delete module.terrainCarSound;
 		delete module.terrainAudioGet;
 		delete module.terrainAudioSet;
