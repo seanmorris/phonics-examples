@@ -134,6 +134,8 @@ final class DemoEvents
 			if($v===null) return true;
 			if(!is_array($v) || !array_key_exists('pose',$v)) return false;
 			$legacy=self::vector($v['flight'] ?? null,9);
+			if(isset($v['laneBearing']) && ($legacy || !in_array($v['phase'] ?? null,['arrival','escort'],true)
+				|| !self::vector([$v['laneBearing']],1) || abs($v['laneBearing'])>.7)) return false;
 			if(isset($v['glance']) && (!self::vector($v['glance'],2) || max(abs($v['glance'][0]),abs($v['glance'][1]))>M_PI+.00001)) return false;
 			if(isset($v['repelled']) && (!is_bool($v['repelled']) || !in_array($v['phase'] ?? null,['departure','glide','slide','idle'],true))) return false;
 			if(in_array($v['phase'] ?? null,['glide','slide'],true) && ($legacy || !($v['repelled'] ?? false))) return false;

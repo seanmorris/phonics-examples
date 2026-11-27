@@ -19,6 +19,72 @@ foreach([0.,M_PI/2,M_PI,3*M_PI/2] as $eye->yaw) {
 		['x'=>$p['x']-9.,'z'=>$p['z']-9.,'size'=>18.],$p['y']-9.,$p['y']+9.),'The whole aircraft spawns outside the current look direction.');
 }
 
+// Sampled openings in the car's steering cone must also admit an off-camera approach.
+(static function(array $flat,array $driver,Camera $eye): void {
+	$eye=clone $eye; $eye->yaw=M_PI;
+	$wall=static function(Landscape $land,float $x,float $z,float $endX,float $endZ,float $width): void {
+		$land->queue(['type'=>'road','points'=>[[$x,48.,$z],[$endX,48.,$endZ]],'width'=>$width,'shoulder'=>2.,'crown'=>0.]);
+	};
+	$step=static fn(AirPatrol $pilot,array $car,Landscape $land)=>$pilot->step(1/60,$car,fn()=>$eye,16/9,$land,-10.);
+	$channel=new Landscape($flat);
+	foreach([-39.,39.] as $x) $wall($channel,$x,-150.,$x,155.,55.);
+	$channel->commit();
+	$pilot=new AirPatrol; $car=$driver;
+	$step($pilot,$car,$channel);
+	$entry=$pilot->pose();
+	expect($entry!==null && $entry['x']===0. && $entry['z']< -100.,'A narrow open center admits an off-camera arrival between two high shoulders.');
+	for($i=0;$i<125;$i++) {
+		$car['z']+=$car['speed']/60.; $eye->position[2]=$car['z']-7.;
+		$step($pilot,$car,$channel);
+	}
+	$p=$pilot->pose();
+	expect($pilot->snapshot()['phase']==='escort' && abs($p['x'])<6. && $p['y']<25.,'The pilot flies the open valley into formation below its walls.');
+	$channel->undo();
+	for($i=0;$i<90;$i++) {
+		$car['z']+=$car['speed']/60.; $eye->position[2]=$car['z']-7.;
+		$step($pilot,$car,$channel);
+	}
+	expect(!isset($pilot->snapshot()['laneBearing']) && abs($pilot->pose()['x'])>8.,'The same escort resumes its normal sweep when the walls end.');
+	$channel->close(); $eye->position[2]=-7.;
+
+	foreach([-1.,1.] as $openSide) {
+		$bend=new Landscape($flat);
+		$wall($bend,-100.*$openSide,63.,7.*$openSide,63.,16.);
+		$bend->commit();
+		$pilot=new AirPatrol; $step($pilot,$driver,$bend);
+		$selected=$pilot->snapshot();
+		expect(($selected['laneBearing'] ?? 0.)*$openSide>.2 && $selected['pose']['yaw']===$selected['laneBearing'],
+			'A blocked center sends the arrival towards the opening on either side.');
+		$events=DemoEvents::import([[0,json_encode(['airPatrol'=>$selected],JSON_THROW_ON_ERROR)]],1);
+		$copy=new AirPatrol; $copy->resume($events->at(0,0.,'car')['airPatrol']);
+		foreach([$pilot,$copy] as $flight) $step($flight,$driver,$bend);
+		expect($pilot->snapshot()==$copy->snapshot() && $pilot->snapshot()['laneBearing']===$selected['laneBearing'],
+			'Taking over a recording continues the selected approach through the next terrain check.');
+		$bend->close();
+	}
+	$blocked=new Landscape($flat); $wall($blocked,-120.,63.,120.,63.,16.); $blocked->commit();
+	$pilot=new AirPatrol; $step($pilot,$driver,$blocked);
+	expect($pilot->pose()===null,'A ridge across the whole steering cone holds the arrival.');
+	$blocked->undo();
+	for($i=0;$i<122 && $pilot->pose()===null;$i++) $step($pilot,$driver,$blocked);
+	expect($pilot->pose()!==null,'The next retry can use a newly opened path.');
+	$wall($blocked,30.,-55.,67.,-55.,16.); $blocked->commit();
+	$pilot=new AirPatrol; $step($pilot,$driver,$blocked);
+	expect($pilot->pose()['x']<0.,'A wall halfway along the preferred entry sends the aircraft to the other shoulder.');
+	$blocked->close();
+	$open=new Landscape($flat);
+	foreach([-1.,1.] as $turn) {
+		$car=$driver; $car['steering']=$turn*Car::steeringLimit($car['speed']);
+		$pilot=new AirPatrol; $step($pilot,$car,$open);
+		$low=$pilot->pose()['yaw']*$turn;
+		$car['speed']*=2.; $car['steering']=$turn*Car::steeringLimit($car['speed']);
+		$pilot=new AirPatrol; $step($pilot,$car,$open);
+		$high=$pilot->pose()['yaw']*$turn;
+		expect($low>$high && $high>0.,'Open alternatives favor the driver’s current steer with a narrower cone at higher speed.');
+	}
+	$open->close();
+})($flat,$driver,$eye);
+
 // Observe a level F5 from each sector and inspect the lights sent to the renderer.
 $level=['x'=>0.,'y'=>10.,'z'=>0.,'yaw'=>0.,'pitch'=>0.,'roll'=>0.,'power'=>0.];
 $lightEye=new Camera;

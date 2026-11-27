@@ -18,6 +18,7 @@ final class AirPatrol
 	private const FLASH_HOLD=.16, GLANCE_END=.50; // Seconds since impact.
 	private float $elapsed = 0., $slow = 0., $side = 1., $circleRemaining = 0.;
 	private float $probeIn = 0., $aheadFloor = 0.;
+	private ?float $laneBearing = null;
 	public ?FlightTrails $smoke=null;
 	public ?array $carImpact=null;
 	private ?Jet $jet = null;
@@ -54,25 +55,62 @@ final class AirPatrol
 			['x'=>$p['x']-9.,'z'=>$p['z']-9.,'size'=>18.],$p['y']-9.,$p['y']+9.);
 	}
 
+	/** Probe the middle and both sides of a strip at formation height. */
+	private static function clearStrip(Landscape $land,float $water,float $ceiling,float $x,float $z,float $endX,float $endZ): bool
+	{
+		$half=$land->recipe()['worldSize']/2.-5.;
+		if(max(abs($x),abs($z),abs($endX),abs($endZ))>$half) return false;
+		$dx=$endX-$x; $dz=$endZ-$z; $length=hypot($dx,$dz);
+		$steps=max(1,(int)ceil($length/16.));
+		$wingX=5.*$dz/max(1.,$length); $wingZ=-5.*$dx/max(1.,$length);
+		for($i=0;$i<=$steps;$i++) {
+			$px=$x+$dx*$i/$steps; $pz=$z+$dz*$i/$steps;
+			if(self::floor($land,$water,$px,$pz)>$ceiling ||
+				self::floor($land,$water,$px+$wingX,$pz+$wingZ)>$ceiling ||
+				self::floor($land,$water,$px-$wingX,$pz-$wingZ)>$ceiling) return false;
+		}
+		return true;
+	}
+
+	/** Search towards the driver's steering input first, then fan out within the turn the car can make. */
+	private static function corridors(array $car,float $course,float $side,Landscape $land,float $water): \Generator
+	{
+		$speed=abs($car['speed']); $reach=max(72.,min(150.,2.*$speed));
+		$lock=Car::steeringLimit($speed);
+		$curvature=min(tan($lock)/Car::WHEELBASE,Session::DRIVING_GRAVITY/max(1.,$speed*$speed));
+		// The bearing to the end of a circular arc turns through half of its swept angle.
+		$limit=min(.7,.5*$reach*$curvature);
+		$steer=max(-1.,min(1.,($car['steering'] ?? 0.)/$lock));
+		$outer=$limit*($steer==0. ? $side : ($steer <=> 0.));
+		foreach(array_unique([$steer*$limit,0.,.5*$outer,-.5*$outer,$outer,-$outer],SORT_REGULAR) as $bearing) {
+			$x=$car['x']+$reach*sin($course+$bearing); $z=$car['z']+$reach*cos($course+$bearing);
+			if(self::clearStrip($land,$water,$car['y']+self::FORMATION_HEIGHT,$car['x'],$car['z'],$x,$z))
+				yield [$bearing,$x,$z];
+		}
+	}
+
 	private function arrive(array $car, Camera $eye, float $aspect, Landscape $land, float $water): bool
 	{
 		$heading = $car['yaw']-$car['drift'];
 		$f = sin($heading); $g = cos($heading);
 		$left = self::floor($land,$water,$car['x']+32*$f-21*$g,$car['z']+32*$g+21*$f);
 		$right = self::floor($land,$water,$car['x']+32*$f+21*$g,$car['z']+32*$g-21*$f);
-		if(min($left,$right)>$car['y']+18.) return false;
 		$preferred = abs($left-$right)>2. ? ($right<$left ? 1. : -1.)
 			: (cos(.017*$car['x']+.009*$car['z'])>=0. ? 1. : -1.);
-		foreach([[-112.,$preferred],[-112.,-$preferred],[70.,$preferred],[70.,-$preferred]] as [$along,$side]) {
-			$x = $car['x']+$along*$f+64*$side*$g; $z = $car['z']+$along*$g-64*$side*$f;
-			$floor = self::floor($land,$water,$x,$z);
-			if($floor>$car['y']+30.) continue;
-			$p = ['x'=>$x,'y'=>max($car['y']+22.,$floor+10.),'z'=>$z,'yaw'=>$heading,'pitch'=>0.,'roll'=>0.];
-			if(self::visible($p,$eye,$aspect)) continue;
-			$this->phase='arrival'; $this->elapsed=$this->slow=$this->probeIn=0.;
-			$this->side=$side; $this->circleRemaining=0.;
-			$this->launch($p,min(Jet::FASTEST,$car['speed']+75.));
-			return true;
+		foreach(self::corridors($car,$heading,$preferred,$land,$water) as [$bearing,$endX,$endZ]) {
+			$yaw=$heading+$bearing; $f=sin($yaw); $g=cos($yaw);
+			foreach([[-112.,$preferred],[-112.,-$preferred],[70.,$preferred],[70.,-$preferred],[-112.,0.],[102.,0.]] as [$along,$side]) {
+				$x=$car['x']+$along*$f+64*$side*$g; $z=$car['z']+$along*$g-64*$side*$f;
+				$floor=self::floor($land,$water,$x,$z);
+				$p=['x'=>$x,'y'=>max($car['y']+22.,$floor+10.),'z'=>$z,'yaw'=>$yaw,'pitch'=>0.,'roll'=>0.];
+				if(self::visible($p,$eye,$aspect) ||
+					!self::clearStrip($land,$water,$car['y']+self::FORMATION_HEIGHT,$x,$z,$endX,$endZ)) continue;
+				$this->phase='arrival'; $this->elapsed=$this->slow=$this->probeIn=0.;
+				$this->side=$side ?: $preferred; $this->circleRemaining=0.;
+				$this->laneBearing=($side==0. || $bearing!=0.) ? $bearing : null;
+				$this->launch($p,min(Jet::FASTEST,$car['speed']+75.));
+				return true;
+			}
 		}
 		return false;
 	}
@@ -119,7 +157,8 @@ final class AirPatrol
 		$across = $dx*$g-$dz*$f;
 		$this->slow = $car['speed']<55.*Car::MPS_PER_MPH ? $this->slow+$dt : 0.;
 		if($this->phase!=='departure') {
-			if($this->probeIn<=$dt) {
+			$survey=$this->probeIn<=$dt;
+			if($survey) {
 				// Look down the aircraft's actual flight path, including the turn its bank is starting.
 				$half=$land->recipe()['worldSize']/2.;
 				$floor=max($water,$land->height(max(-$half,min($half,$car['x'])),max(-$half,min($half,$car['z']))));
@@ -164,6 +203,20 @@ final class AirPatrol
 				// Continue the entry bank toward the opposite side. tan(60°) places the outer marks at 10 and 2.
 				$lane=-$this->side*$station*sqrt(3.)*sin(.60*$this->elapsed);
 			}
+			if($survey) {
+				$x=$car['x']+$station*$f+$lane*$g; $z=$car['z']+$station*$g-$lane*$f;
+				$ceiling=$car['y']+self::FORMATION_HEIGHT;
+				$constrained=$floor>$ceiling || self::floor($land,$water,$x,$z)>$ceiling ||
+					($this->laneBearing!==null && ($joining || !self::clearStrip($land,$water,$ceiling,$car['x'],$car['z'],$x,$z)));
+				$this->laneBearing=null;
+				if($constrained) {
+					foreach(self::corridors($car,$course,$this->side,$land,$water) as [$bearing]) {
+						$this->laneBearing=$bearing;
+						break;
+					}
+				}
+			}
+			if($this->laneBearing!==null) $lane=$station*tan($this->laneBearing);
 			$desired=$course+atan2($lane-$across,$look+max(0.,$station-$along));
 			$speed=$car['speed']+.62*($station-$along);
 			if(!$joining) $speed/=max(.6,cos($headingError));
@@ -184,7 +237,8 @@ final class AirPatrol
 			$climb=max(-.65,min(.95,atan2($heightError,max(45.,$p['speed']*.88))/.78));
 			$throttle=max(-1.,min(1.,($speed-Jet::CRUISE)/($speed<Jet::CRUISE ?
 				Jet::CRUISE-$idleSpeed : Jet::FASTEST-Jet::CRUISE)));
-			if($this->phase==='arrival' && $along>=32. && abs($across)<25.) {
+			$joinAcross=$this->laneBearing===null ? 0. : min($station,$along)*tan($this->laneBearing);
+			if($joining && $along>=32. && abs($across-$joinAcross)<25.) {
 				$this->phase='escort'; $this->elapsed=0.;
 			}
 		}
@@ -320,11 +374,13 @@ final class AirPatrol
 		if($this->phase==='idle' && $this->elapsed===0. && !$this->repelled) return null;
 		return ['phase'=>$this->phase,'flight'=>[$this->elapsed,$this->slow,$this->side,$this->circleRemaining,$this->probeIn,$this->aheadFloor],
 			'direction'=>$this->jet ? array_slice($this->jet->motion(),4,3) : null,'pose'=>$this->jet?->state(),'seeker'=>$this->seeker()]
+			+($this->laneBearing!==null && in_array($this->phase,['arrival','escort'],true) ? ['laneBearing'=>$this->laneBearing] : [])
 			+($this->glance!==self::NEUTRAL_GLANCE ? ['glance'=>$this->glance] : [])+($this->repelled ? ['repelled'=>true] : []);
 	}
 
 	public function resume(?array $s): void
 	{
+		$this->laneBearing=$s['laneBearing'] ?? null;
 		$this->repelled=$s['repelled'] ?? false;
 		$this->previousGlance=$this->glance=$s['glance'] ?? self::NEUTRAL_GLANCE;
 		$this->jet=$this->previous=$this->seeker=null;
