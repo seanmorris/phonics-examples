@@ -50,7 +50,7 @@ $drive->input(['values'=>['airPatrolEnabled'=>true],'keys'=>['KeyW'=>1,'ShiftLef
 $bank=$visible=0.; $minSide=INF; $maxSide=0.; $minSeparation=INF; $first=null; $entryTime=0.; $wingRelease=false;
 $releaseTime=$stationTime=$hitTime=null; $visibleRelease=false;
 $maxLead=0.; $swing=false;
-$glances=[]; $peekTimes=[]; $maxPeek=0.; $firstHull=null;
+$glances=[];
 for($i=0;$i<880;$i++) {
 	$drive->step(1/60); $drive->demo->capture($drive);
 	$pilot=$drive->airPatrol->snapshot();
@@ -58,18 +58,14 @@ for($i=0;$i<880;$i++) {
 	$p=$pilot['pose']; [$eye,$car]=$drive->view(1.);
 	$first ??= abs($car['speed'])/Car::MPS_PER_MPH;
 	$shot=$pilot['seeker']; $time=$drive->demo->duration();
-	if($firstHull===null && Camera::inView($eye->clipPlanes(1600,900),$eye->position,
-		['x'=>$p['x']-9.,'z'=>$p['z']-9.,'size'=>18.],$p['y']-9.,$p['y']+9.)) $firstHull=$time;
-	if(($pilot['arrivalPeek'] ?? 1.)<.5) {
-		$peekTimes[]=$time;
-		[$pan,$tilt]=$pilot['glance'] ?? [0.,0.];
-		$maxPeek=max($maxPeek,hypot($pan,$tilt));
-	} elseif(isset($pilot['arrivalPeek']) && $shot['phase']==='mounted') {
-		expect(!isset($pilot['glance']),'The arrival camera is back on the road at half a second.');
+	if($pilot['phase']==='arrival') {
+		$driving=$drive->carView(1.)[0];
+		expect($eye->yaw===$driving->yaw && $eye->pitch===$driving->pitch,
+			'The arrival plays in the normal driving view all the way into formation.');
 	}
 	if(isset($pilot['glance'])) {
 		[$pan,$tilt]=$pilot['glance'];
-		if(abs($pan)+abs($tilt)>deg2rad(1.)) $glances[$pilot['phase']==='arrival' ? 'arrival' : $shot['phase']]=$time;
+		if(abs($pan)+abs($tilt)>deg2rad(1.)) $glances[$shot['phase']]=$time;
 	}
 	if($shot['phase']==='drop' && $shot['clock']===0.) {
 		$releaseTime=$time;
@@ -101,17 +97,13 @@ for($i=0;$i<880;$i++) {
 		$minSeparation=min($minSeparation,hypot($x,$z));
 	}
 }
-expect($peekTimes && abs(end($peekTimes)-$peekTimes[0]-.47)<.04 && $maxPeek<=deg2rad(30.)+.0001 && $maxPeek>deg2rad(18.),
-	'The first visible pass gets a single half-second peek with a substantial, bounded turn.');
-expect($firstHull!==null && $firstHull-$peekTimes[0]>=2/60-.00001 && $firstHull-$peekTimes[0]<.30,
-	'The driver starts turning while the entire F5 is offscreen and sees it enter during the same glance.');
 expect($wingRelease && $visibleRelease,'The seeker starts at the visible wing mount on the frame it detaches.');
 expect($releaseTime!==null && $stationTime!==null && abs($stationTime-$releaseTime-1.95)<.05 && $maxLead>13. && $swing,'The prop passes ahead of the moving F5, falls back alongside it and arcs down outside the car.');
 expect($stationTime!==null && $hitTime!==null && $hitTime-$stationTime>=3. && $hitTime-$stationTime<=4.,
 	'Driving straight through the rear-quarter warning produces a real bumper hit in three to four seconds.');
 expect($first>60. && $first<62. && $bank>.67,'The F5 visibly banks into the chase camera just after the driver exceeds 60 mph.');
 expect($minSide<2. && $maxSide>11. && $visible>300 && $minSeparation>30.,'The pilot paces overhead and alongside with a clear view of the car.');
-expect(isset($glances['arrival'],$glances['drop'],$glances['chase']),'Both the first fly-by and the approaching seeker draw a visible camera glance.');
+expect(isset($glances['drop'],$glances['chase']),'The approaching seeker still draws a visible camera glance.');
 $drive->input(['actions'=>['demo-stop']],0.,16/9);
 $demo=$drive->demo->export();
 $copy=DemoTape::import($demo);
@@ -126,7 +118,7 @@ expect($drive->car->state()['speed']>60.*Car::MPS_PER_MPH && $drive->airPatrol->
 $drive->close();
 
 // Exercise the normal pad input even when straight ahead is both the manual and resting look angle.
-foreach([$glances['arrival'],$glances['chase']] as $at) {
+foreach([$glances['drop'],$glances['chase']] as $at) {
 	$game=new Session($flat);
 	foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$at],'demo-take-control'] as $action)
 		$game->input(['actions'=>[$action]],0.,16/9);
@@ -184,6 +176,7 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 	for($tick=0;$tick<360;$tick++) {
 		if($tick===0 || $tick===24) $game->input(['keys'=>$tick===0 ? ['KeyW'=>1,$steer=>1,'Space'=>1] : ['KeyW'=>1]],0.,16/9);
 		$beforeShot=$game->airPatrol->seeker();
+		$beforeGlance=$game->airPatrol->snapshot()['glance'] ?? [0.,0.];
 		$beforeCar=$game->car->state();
 		$game->step(1/60); $game->demo->capture($game);
 		$patrol=$game->airPatrol->snapshot(); $shot=$patrol['seeker'] ?? [];
@@ -208,6 +201,16 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 				'The driver sees the loose prop change direction and can follow it on every frame of its return.');
 			expect($inFrame($game->view(.5)[0],$xyz($game->airPatrol->seeker(.5)['pose']),1.),
 				'Interpolated chase frames keep the same moving prop in sight.');
+			// Measure the pan and tilt from the same unassisted eye, independent of the car's yaw this tick.
+			$base=$game->carView(1.)[0]; $end=$game->view(1.)[0];
+			[$x,$y,$z]=array_map(static fn($v,$o)=>$v-$o,$xyz($at),$base->position);
+			$yaw=$base->yaw+$beforeGlance[0]; $pitch=$base->pitch+$beforeGlance[1];
+			$wrap=static fn($a)=>atan2(sin($a),cos($a));
+			$toX=$wrap(atan2($x,-$z)-$yaw); $toY=atan2($y,hypot($x,$z))-$pitch;
+			$pan=$wrap($end->yaw-$yaw); $tilt=$end->pitch-$pitch;
+			expect($pan*$toX+$tilt*$toY>=0. && abs($pan*$toY-$tilt*$toX)<.00004 &&
+				hypot($toX-$pan,$toY-$tilt)<=hypot($toX,$toY)*.99+.00002,
+				'On each return tick both camera axes ease toward the moving seeker.');
 			if($shot['clock']>=.20) {
 				$view=$game->view(1.)[0];
 				expect($inFrame($view,$xyz($at),.75) && $inFrame($view,$xyz($patrol['pose']),.75),
@@ -227,6 +230,8 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 			expect($shot['impact']===[$patrol['pose']['x'],$patrol['pose']['y'],$patrol['pose']['z']] &&
 				$patrol['phase']==='glide' && $patrol['pose']['power']===0. && $game->airPatrol->carImpact===null,'The return bursts on the F5 and cuts its engines.');
 		}
+		if($wonAt!==null && $game->demo->duration()-$lockedAt>=.95)
+			expect(!isset($patrol['glance']), 'The complete camera cue is over within a second of the lock.');
 		if($wonAt!==null && isset($shot['impact']) && $shot['clock']<=.20)
 			expect($inFrame($game->view(1.)[0],$shot['impact'],.22),'The camera holds the world-space flash as the car drives on.');
 	}
@@ -393,6 +398,15 @@ foreach([[28.,M_PI/2],[72.,0.],[106.,M_PI]] as [$speed,$heading]) {
 	for($i=1;$i<count($crossings);$i++) expect(abs(($crossings[$i]-$crossings[$i-1])-5.24)<.4,
 		'Each crossing gives the driver another predictable drift opportunity.');
 }
+
+// A spent wing reloads in ten seconds, then has to earn a new visible launch.
+$reload=new SpeedSeeker;
+$reload->resume(['phase'=>'reload','slot'=>0,'pose'=>null,'clock'=>9.9,'start'=>[],'passSpeed'=>0.]);
+$reload->step(.05,$driver,null,'escort',$land,-10.);
+expect($reload->state()['phase']==='reload','The spent wing stays empty until its cooldown ends.');
+$reload->step(.06,$driver,null,'escort',$land,-10.);
+expect($reload->state()['phase']==='mounted' && $reload->state()['slot']===1 && $reload->state()['clock']===0.,
+	'The opposite wing is ready for a fresh warning beat ten seconds after impact.');
 
 // A sudden move of the formation station can command a turn but cannot relocate the airframe.
 $driver=['x'=>0.,'y'=>0.,'z'=>0.,'yaw'=>0.,'drift'=>0.,'speed'=>72.];
@@ -587,6 +601,44 @@ foreach(['car','ground'] as $object) {
 		'Only a direct hit throws the car, and the normal landing or recovery returns control.');
 	$game->close();
 }
+
+// A raised roadbed gives a reproducible canyon wall with a level approach, a steep face and a flat top.
+$cut=new Landscape(['worldSize'=>512,'spacing'=>2.,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-4.]);
+$cut->queue(['type'=>'road','points'=>[[-200,40,10],[200,40,10]],'width'=>60,'shoulder'=>4,'crown'=>0.]); $cut->commit();
+foreach([30,60,120] as $hz) foreach([[.83,0.],[.83,20.],[18.,0.],[85.,0.]] as [$height,$sideSpeed]) {
+	$wreck=new Jet;
+	$wreck->resumeFlight(array_replace($checkpoint['pose'],['x'=>-60.,'y'=>$height,'z'=>-56.,'vx'=>$sideSpeed,
+		'vz'=>80.,'vy'=>0.,'speed'=>hypot(80.,$sideSpeed),'power'=>0.,'yaw'=>atan2($sideSpeed,80.),'pitch'=>0.,'roll'=>0.]));
+	$grounded=$height===.83; $highest=$height;
+	for($i=0;$i<12*$hz;$i++) {
+		$grounded=$wreck->landUnpowered(1/$hz,$cut,-4.,$grounded);
+		$p=$wreck->state(); $highest=max($highest,$p['y']);
+		if($p['speed']===0.) break;
+	}
+	expect($highest<=$height+.02, "A canyon face cannot lift the wreck at $hz Hz.");
+	if($height===85.) expect($p['z']>70.,'A gliding jet above the rim clears the canyon wall.');
+	else {
+		expect($p['z']<-25. && $p['y']<1. && $p['speed']===0. && $grounded,'A wall strike settles at the foot of the face.');
+		expect($sideSpeed===0. ? abs($p['x']+60.)<.01 : $p['x']>-45., 'Only a glancing strike carries the wreck along the wall.');
+	}
+}
+$cut->close();
+
+// The first-light canyon has a narrow shelf which the nose can overlap while the belly is below it.
+$canyon=new Session;
+$canyon->input(['actions'=>[['type'=>'generate','preset'=>'canyon','seed'=>'first-light']]],1/60,16/9);
+$ground=$canyon->landscape; $startY=$ground->height(-453.,1933.)+4.;
+$wreck=new Jet;
+$wreck->resumeFlight(array_replace($checkpoint['pose'],['x'=>-453.,'y'=>$startY,'z'=>1933.,'vx'=>-53.,
+	'vz'=>53.,'vy'=>-1.,'speed'=>75.,'power'=>0.,'yaw'=>-M_PI/4,'pitch'=>0.,'roll'=>0.]));
+$grounded=false; $peak=$startY;
+for($i=0;$i<1200;$i++) {
+	$grounded=$wreck->landUnpowered(1/60,$ground,$canyon->water->level(),$grounded);
+	$p=$wreck->state(); $peak=max($peak,$p['y']);
+	if($p['speed']===0.) break;
+}
+expect($peak<$startY+1. && $grounded && $p['speed']===0.,'The wreck settles below the canyon shelf without gaining altitude.');
+$canyon->close();
 
 // Drive over a raised hill with high ground across the pilot's approach. The same escort climbs and rejoins.
 $pilot->resume($checkpoint); $car=$driver; $p=$pilot->pose();

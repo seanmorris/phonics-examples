@@ -10,8 +10,8 @@ final class AirPatrol
 {
 	private string $phase = 'idle';
 	private bool $repelled=false;
-	private const WRECK_CLEAR_DISTANCE=500., PEEK_SECONDS=.50, ARRIVAL_LEAD=.32;
-	private ?float $arrivalPeek=null;
+	private const WRECK_CLEAR_DISTANCE=500.;
+	private const FLASH_HOLD=.22, GLANCE_END=.50; // Seconds since impact.
 	private float $elapsed = 0., $slow = 0., $side = 1., $circleRemaining = 0.;
 	private float $probeIn = 0., $aheadFloor = 0.;
 	public ?FlightTrails $smoke=null;
@@ -26,7 +26,6 @@ final class AirPatrol
 
 	private function launch(array $pose, float $speed): void
 	{
-		$this->arrivalPeek=null;
 		$this->jet = new Jet;
 		$this->seeker = new SpeedSeeker;
 		$horizontal = $speed*cos($pose['pitch']);
@@ -94,9 +93,8 @@ final class AirPatrol
 			$moving=$this->phase==='glide' || $p['speed']>0.;
 			if($moving) {
 				$this->elapsed+=$dt;
-				if($this->jet->landUnpowered($dt,$land,$water,$this->phase==='slide') && $this->phase==='glide') {
-					$this->phase='slide'; $this->elapsed=0.;
-				}
+				$phase=$this->jet->landUnpowered($dt,$land,$water,$this->phase==='slide') ? 'slide' : 'glide';
+				if($phase!==$this->phase) { $this->phase=$phase; $this->elapsed=0.; }
 			}
 			$next=$this->jet->state();
 			$fading=$this->smoke?->active() ?? false;
@@ -248,20 +246,9 @@ final class AirPatrol
 	}
 
 	/** Pan the driver's view without moving the boom or changing steering. */
-	public function advanceGlance(callable $getEye,array $car,bool $manual,float $dt,float $aspect): bool
+	public function advanceGlance(callable $getEye,array $car,bool $manual,float $dt): bool
 	{
 		$this->previousGlance=$this->glance;
-		$peek=$this->arrivalPeek;
-		if($peek===null && $this->phase==='arrival') {
-			// Turn toward the approaching sound just before the aircraft would enter the driver's unassisted view.
-			$p=$this->pose();
-			$course=$car['yaw']-$car['drift'];
-			$p['x']+=self::ARRIVAL_LEAD*($p['vx']-$car['speed']*sin($course));
-			$p['z']+=self::ARRIVAL_LEAD*($p['vz']-$car['speed']*cos($course));
-			$p['y']+=self::ARRIVAL_LEAD*$p['vy'];
-			if(self::visible($p,$getEye(),$aspect)) $peek=0.;
-		}
-		if($peek!==null) $this->arrivalPeek=min(self::PEEK_SECONDS,$peek+$dt);
 		if($manual) {
 			$changed=$this->glance!==self::NEUTRAL_GLANCE;
 			$this->previousGlance=$this->glance=self::NEUTRAL_GLANCE;
@@ -270,28 +257,20 @@ final class AirPatrol
 		$shot=$this->seeker();
 		$point=$shot['pose'] ?? null;
 		$goal=self::NEUTRAL_GLANCE;
-		$halfLife=$this->repelled ? .15 : .12;
-		if(($shot['phase'] ?? null)==='return' && ($jet=$this->pose())!==null) {
-			$eye=$getEye();
-			// Lead with the visible prop, then widen the composition to include the plane.
-			$from=self::lookOffset($eye,$point['x'],$point['y'],$point['z']);
-			$to=self::lookOffset($eye,$jet['x'],$jet['y'],$jet['z']);
-			$goal=self::interpolateGlance($from,$to,.5*min(1.,$shot['clock']/.16));
-			$halfLife=.050;
-		} elseif($this->repelled && isset($shot['impact']) && $shot['clock']<.22) {
-			// The flash stays at the contact point as the jet moves on.
-			$goal=self::lookOffset($getEye(),...$shot['impact']);
-			$halfLife=.050;
-		} elseif($peek!==null && $peek<self::PEEK_SECONDS && ($jet=$this->pose())!==null) {
-			// The last part of the half-second peek returns exactly to the driving view.
-			if($this->arrivalPeek>.30) {
-				$t=max(0.,(self::PEEK_SECONDS-$this->arrivalPeek)/(self::PEEK_SECONDS-max(.30,$peek)));
-				$this->glance=array_map(static fn($v)=>$v*$t,$this->glance);
-				return true;
+		$keep=2**(-$dt/.12);
+		if(($shot['phase'] ?? null)==='return') {
+			$goal=self::lookOffset($getEye(),$point['x'],$point['y'],$point['z']);
+			$keep=2**(-$dt/.035);
+		} elseif($this->repelled && isset($shot['impact'])) {
+			if($shot['clock']<self::FLASH_HOLD) {
+				$goal=self::lookOffset($getEye(),...$shot['impact']);
+				$keep=2**(-$dt/.050);
+			} else {
+				// Ease the remaining angle to exactly zero half a second after impact.
+				$left=max(0.,self::GLANCE_END-$shot['clock']);
+				$before=min(self::GLANCE_END-self::FLASH_HOLD,$left+$dt);
+				$keep=$before>0. ? ($left/$before)**2 : 0.;
 			}
-			[$pan,$tilt]=self::lookOffset($getEye(),$jet['x'],$jet['y'],$jet['z']);
-			$scale=min(1.,deg2rad(30.)/max(.00001,hypot($pan,$tilt)));
-			$goal=[$scale*$pan,$scale*$tilt]; $halfLife=.050;
 		} elseif($point!==null && ($shot['phase']!=='missed' || isset($shot['rearPassGap']))) {
 			[$pan,$tilt]=self::lookOffset($getEye(),$point['x'],$point['y'],$point['z']);
 			$weight=max(0.,min(1.,(M_PI/2-abs($pan))/.35));
@@ -303,7 +282,7 @@ final class AirPatrol
 				$weight*max(-deg2rad(3.),min(deg2rad(3.),.18*$tilt))];
 		}
 		if($goal===$this->glance) return false;
-		$this->glance=self::interpolateGlance($this->glance,$goal,1.-2**(-$dt/$halfLife));
+		$this->glance=self::interpolateGlance($this->glance,$goal,1.-$keep);
 		if(abs(self::angle($this->glance[0]-$goal[0]))<.00002 && abs($this->glance[1]-$goal[1])<.00002)
 			$this->glance=$goal;
 		return true;
@@ -322,13 +301,11 @@ final class AirPatrol
 		if($this->phase==='idle' && $this->elapsed===0. && !$this->repelled) return null;
 		return ['phase'=>$this->phase,'flight'=>[$this->elapsed,$this->slow,$this->side,$this->circleRemaining,$this->probeIn,$this->aheadFloor],
 			'direction'=>$this->jet ? array_slice($this->jet->motion(),4,3) : null,'pose'=>$this->jet?->state(),'seeker'=>$this->seeker()]
-			+($this->arrivalPeek!==null ? ['arrivalPeek'=>$this->arrivalPeek] : [])
 			+($this->glance!==self::NEUTRAL_GLANCE ? ['glance'=>$this->glance] : [])+($this->repelled ? ['repelled'=>true] : []);
 	}
 
 	public function resume(?array $s): void
 	{
-		$this->arrivalPeek=$s['arrivalPeek'] ?? null;
 		$this->repelled=$s['repelled'] ?? false;
 		$this->previousGlance=$this->glance=$s['glance'] ?? self::NEUTRAL_GLANCE;
 		$this->jet=$this->previous=$this->seeker=null;

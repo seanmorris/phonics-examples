@@ -902,7 +902,7 @@ final class Session
 		if($this->settings['airPatrolEnabled'] && $this->mode==='car' && $mode==='car' && !$this->network && !isset($this->landscape->recipe()['join'])) {
 			if($this->airPatrol->step($seconds,$after,fn()=>$this->view(1.)[0],$this->aspect,$this->landscape,$this->water->level(),$before))
 				$this->dirty = true;
-			if($this->airPatrol->advanceGlance(fn()=>$this->gateView($this->chase->view($this->camera,$after,1.)[0],$after),$after,$this->manualLook(),$seconds,$this->aspect)) $this->dirty=true;
+			if($this->airPatrol->advanceGlance(fn()=>$this->gateView($this->chase->view($this->camera,$after,1.)[0],$after),$after,$this->manualLook(),$seconds)) $this->dirty=true;
 			if($this->airPatrol->carImpact!==null) {
 				$this->car->kickFrom($this->airPatrol->carImpact);
 				$after=$this->car->state();

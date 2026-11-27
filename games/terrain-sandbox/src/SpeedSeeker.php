@@ -8,7 +8,7 @@ use TerrainPhonics\Landscape;
 /** Arcade chase prop. A wing fly-out and a sweeping return lead into a short, escapable bumper chase. */
 final class SpeedSeeker
 {
-	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 12.;
+	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 10.;
 	private const LOOM_ABOVE_ROOF = 2.12;
 	// Inside this screen margin a loose prop can coast. At the margin, settle its next animation while visible.
 	private const DECISION_EDGE = .72, LAST_VISIBLE = .92, EDGE_LEAD_SECONDS = .35;

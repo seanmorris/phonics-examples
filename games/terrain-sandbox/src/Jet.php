@@ -28,6 +28,10 @@ final class Jet
 	private const CHASE_LAG = .22;
 	/** Fastest the Expert chase camera turns, in radians a second, so it swings round when the nose passes vertical. */
 	private const CHASE_TURN = 4.0;
+	/** Steeper than about 35 degrees, the wreck pushes against the hillside instead of riding up it. */
+	private const LANDING_GRADE = .7;
+	/** Underside contact points in model space: belly, tail, nose and both wingtips. */
+	private const SKIDS = [[0.,-.83,-2.30],[0.,-.49,-6.27],[0.,-.20,8.],[-4.17,-.48,-2.16],[4.17,-.48,-2.16]];
 	/** Smallest and largest square blocks, in lattice cells, whose height bound can replace an exact sample. */
 	private const FINEST = 2, COARSEST = 256;
 	/** Steps to fly on after a block rises too close before asking about a larger one. */
@@ -179,10 +183,21 @@ final class Jet
 	/** Carry the hit aircraft's velocity through a wings-level glide, flare and gear-up rollout. */
 	public function landUnpowered(float $dt,Landscape $land,float $water,bool $sliding): bool
 	{
+		if($sliding && $this->pose['speed']===0.) return true;
+		$this->previous=$this->pose;
+		$recipe=$land->recipe();
+		// A fast slide must meet the face before a contact point can cross it onto the plateau.
+		$run=min(self::FASTEST,hypot($this->pose['vx'],$this->pose['vz']));
+		$steps=max(1,(int)ceil($dt*$run/(.5*$recipe['spacing'])));
+		for($i=0;$i<$steps;$i++)
+			$sliding=$this->landingStep($dt/$steps,$land,$water,$recipe['worldSize']/2.,$sliding);
+		return $sliding;
+	}
+
+	private function landingStep(float $dt,Landscape $land,float $water,float $half,bool $sliding): bool
+	{
 		$p=&$this->pose;
-		if($sliding && $p['speed']===0.) return true;
-		$this->previous=$p;
-		$half=$land->recipe()['worldSize']/2.;
+		$oldY=$p['y'];
 		$run=hypot($p['vx'],$p['vz']);
 		$speed=$sliding ? max(0.,$run-(9.+.18*$run)*$dt) : $run*exp(-.045*$dt);
 		$drag=$run>0. ? $speed/$run : 0.;
@@ -200,6 +215,7 @@ final class Jet
 			$yaw=atan2($p['vx'],$p['vz'])-$p['yaw'];
 			$p['yaw']+=atan2(sin($yaw),cos($yaw))*(1.-exp(-$dt/.50));
 		}
+		if(hypot($dx,$dz)>self::LANDING_GRADE) $dx=$dz=0.;
 		$along=$dx*sin($p['yaw'])+$dz*cos($p['yaw']);
 		$across=$dx*cos($p['yaw'])-$dz*sin($p['yaw']);
 		$clearance=$p['y']-$surface-.83;
@@ -213,19 +229,63 @@ final class Jet
 		$this->deflect($dt,$roll-$p['roll'],$pitch-$p['pitch'],0.);
 		$p['roll']+=($roll-$p['roll'])*$blend;
 		$p['pitch']+=($pitch-$p['pitch'])*$blend;
-		// Support the mesh at its belly, tail, nose and wingtips on the local terrain tangent.
-		$basis=VehicleModel::basis($p);
-		$normal=[];
-		for($i=0;$i<9;$i+=3) $normal[]=$basis[$i+1]-$dx*$basis[$i]-$dz*$basis[$i+2];
-		$contact=$surface+max(.83*$normal[1]+2.30*$normal[2],.49*$normal[1]+6.27*$normal[2],
-			.20*$normal[1]-8.*$normal[2],4.17*abs($normal[0])+.48*$normal[1]+2.16*$normal[2]);
-		$height=$p['y']+$p['vy']*$dt;
-		$sliding=$sliding || $height<=$contact;
-		$p['y']=$sliding ? $contact : $height;
-		if($sliding) $p['vy']=$p['vx']*$dx+$p['vz']*$dz;
+		$height=$oldY+$p['vy']*$dt;
+		// Follow a descending runway through small changes of grade. Over a drop the wreck keeps falling.
+		$reach=$sliding ? .05+$speed*$dt*self::LANDING_GRADE : 0.;
+		$highestFloor=max($oldY,$height)+.05+$speed*$dt*self::LANDING_GRADE;
+		$floor=$this->landingContacts($p,$height,$reach,$highestFloor,$land,$water,$half);
+		$sliding=$floor>=$height-$reach;
+		$p['y']=$sliding ? $floor : $height;
+		if($sliding && $dt>0.) $p['vy']=min(hypot($p['vx'],$p['vz'])*self::LANDING_GRADE,($p['y']-$oldY)/$dt);
+		if($sliding && hypot($p['vx'],$p['vz'])<.001) $p['vx']=$p['vy']=$p['vz']=0.;
 		$p['speed']=hypot(hypot($p['vx'],$p['vz']),$p['vy']);
 		if($p['speed']>.001) $this->flightDirection=[$p['vx']/$p['speed'],$p['vy']/$p['speed'],$p['vz']/$p['speed']];
 		return $sliding;
+	}
+
+	/** Ground or water supports the belly vertically. A steep face removes horizontal motion into the wall. */
+	private function landingContacts(array &$p,float $height,float $reach,float $highestFloor,Landscape $land,float $water,float $half): float
+	{
+		$axes=VehicleModel::basis($p);
+		// Recheck all skids after a sideways correction, including at the corner of two walls.
+		for($pass=0;$pass<4;$pass++) {
+			$floor=-INF; $deepest=0.;
+			foreach(self::SKIDS as [$x,$y,$z]) {
+				$px=$p['x']+$axes[0]*$x+$axes[3]*$y+$axes[6]*$z;
+				$py=$axes[1]*$x+$axes[4]*$y+$axes[7]*$z;
+				$pz=$p['z']+$axes[2]*$x+$axes[5]*$y+$axes[8]*$z;
+				$px=max(-$half,min($half,$px)); $pz=max(-$half,min($half,$pz));
+				$floor=max($floor,$water-$py);
+				$ground=$land->height($px,$pz);
+				if($ground<=$water || $ground-$py<$height-$reach) continue;
+				$g=$land->sample($px,$pz);
+				$grade=hypot($g['dx'],$g['dz']);
+				$support=$ground-$py;
+				if($grade<=self::LANDING_GRADE && $support<=$highestFloor) {
+					$floor=max($floor,$support);
+					continue;
+				}
+				$depth=$support-$height;
+				if($depth<=$deepest) continue;
+				if($grade>self::LANDING_GRADE) {
+					$dx=$g['dx']; $dz=$g['dz'];
+				} else {
+					// The nose or a wing can overlap the flat top of a shelf too high to land on from here.
+					$dx=$px-$p['x']; $dz=$pz-$p['z'];
+				}
+				$length=hypot($dx,$dz);
+				if($length<.0001) continue;
+				$deepest=$depth; $nx=$dx/$length; $nz=$dz/$length;
+				$backoff=min(2.,$depth/($grade>self::LANDING_GRADE ? $grade : 1.));
+			}
+			if($deepest<=.001) break;
+			// Correct penetration along the horizontal gradient. A glancing impact keeps its sideways travel.
+			$p['x']=max(-$half,min($half,$p['x']-$nx*$backoff));
+			$p['z']=max(-$half,min($half,$p['z']-$nz*$backoff));
+			$into=max(0.,$p['vx']*$nx+$p['vz']*$nz);
+			$p['vx']-=$into*$nx; $p['vz']-=$into*$nz;
+		}
+		return $floor;
 	}
 
 	/**
