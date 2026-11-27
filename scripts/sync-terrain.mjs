@@ -45,4 +45,15 @@ for(const name of files)
 	throw Error(`Terrain package integrity mismatch: ${name}`);
 }
 
+// Sign and vehicle shaders also consume the terrain package's reflective sheeting include.
+const reflection = path.join(destination, 'shaders/retroreflection.glsl');
+const signReflection = path.join(root, 'games/terrain-sandbox/assets/roads/retroreflection.glsl');
+
+if(check)
+{
+	if(!(await fs.readFile(signReflection)).equals(await fs.readFile(reflection)))
+		throw Error('Road sign retroreflection differs from the terrain package.');
+}
+else await fs.copyFile(reflection, signReflection);
+
 console.log(`Terrain package ${check ? 'verified' : 'synced'} (${files.length} files).`);

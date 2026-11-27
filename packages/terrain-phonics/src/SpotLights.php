@@ -13,7 +13,7 @@ use Phonics\Render\Program;
  */
 final class SpotLights
 {
-	/** Lights one scene holds. TERRAIN_MAX_SPOT_LIGHTS in spot-lights.glsl matches it. */
+	/** Lights one scene holds. TERRAIN_MAX_SPOT_LIGHTS in retroreflection.glsl matches it. */
 	public const MAX = 2;
 	/** Scene irradiance units in one lux. Atmosphere's default sunIntensity, 20, is sunlight above the atmosphere. */
 	public const LUX = 20 / 128000;
@@ -145,7 +145,9 @@ final class SpotLights
 	 */
 	public static function shaderSource(bool $lit = true): string
 	{
-		$source = file_get_contents(dirname(__DIR__) . '/shaders/spot-lights.glsl');
+		$directory = dirname(__DIR__) . '/shaders/';
+		$source = str_replace('// RETROREFLECTION', file_get_contents($directory . 'retroreflection.glsl'),
+			file_get_contents($directory . 'spot-lights.glsl'));
 
 		return $lit ? $source : "#define TERRAIN_NO_SPOT_LIGHTS\n" . $source;
 	}

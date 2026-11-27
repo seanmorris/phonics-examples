@@ -278,7 +278,12 @@ void main()
 		float edgePaint=edge*marked*(1.-smoothstep(1.,5.,footprint));
 		vec3 ochre=vec3(.72,.47,.09), white=vec3(.88);
 		albedo=mix(mix(albedo,ochre,centerPaint),white,edgePaint);
-		markingGlow=mix(ochre*centerPaint,white,edgePaint)*.006*smoothstep(0.,.17364818,-uSunDirection.y);
+		if(max(centerPaint,edgePaint)>0.) {
+			float glow=.006*smoothstep(0.,.17364818,-uSunDirection.y);
+			if(vWorld.y>uWaterLevel)
+				glow+=retroreflection(vWorld,uEye,n,uSunDirection,clamp((uSunDirection.y+.10)/.22,0.,1.));
+			markingGlow=mix(ochre*centerPaint,white,edgePaint)*glow;
+		}
 	}
 	albedo *= 1.0 + 0.07 * detail * (1.0 - smoothstep(1.0,8.0,footprint));
 	#ifdef TERRAIN_SOLAR_TABLE

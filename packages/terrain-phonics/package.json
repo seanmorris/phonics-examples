@@ -77,6 +77,7 @@
     "shaders/patch-grid.glsl",
     "shaders/precipitation.frag",
     "shaders/precipitation.vert",
+    "shaders/retroreflection.glsl",
     "shaders/shadows.frag",
     "shaders/shadows.vert",
     "shaders/sky.frag",

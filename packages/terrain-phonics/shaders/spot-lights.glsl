@@ -1,7 +1,7 @@
 // Spot lights from Scene::setSpotLights(), such as a vehicle's headlights. Each takes three vec4s: world position in
 // meters and the inverse square of the range; unit axis and cone scale; irradiance on the axis at one meter, in scene
 // units, and cone offset. SpotLights::uniforms() documents the layout.
-#define TERRAIN_MAX_SPOT_LIGHTS 2
+// RETROREFLECTION
 // Summed lamp irradiance, in scene units, above which it grows with its logarithm. SpotLights::KNEE matches it.
 #define TERRAIN_SPOT_KNEE 1.0
 #ifdef TERRAIN_NO_SPOT_LIGHTS
@@ -10,9 +10,6 @@
 vec3 terrainSpotLight(vec3 position, vec3 normal, float waterLevel, float extinction) { return vec3(0.0); }
 vec3 terrainSpotWaterColumn(vec3 eye, vec3 position, float waterLevel) { return vec3(0.0); }
 #else
-uniform int uSpotLightCount;
-uniform vec4 uSpotLights[TERRAIN_MAX_SPOT_LIGHTS * 3];
-
 // Irradiance in scene units on a surface at a world position with a unit normal. Light falls off with the square of
 // distance and the cosine of incidence, and fades out at the range and across the cone's edge. The part of its path
 // below the water level loses the extinction per meter. Nothing casts a shadow.
