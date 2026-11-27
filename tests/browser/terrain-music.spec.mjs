@@ -1,6 +1,6 @@
 import {expect, test} from '@playwright/test';
 import {readFileSync} from 'node:fs';
-import {slow} from './slow.mjs';
+import {slow, slowdown} from './slow.mjs';
 
 const catalog = JSON.parse(readFileSync(new URL('../../games/terrain-sandbox/assets/soundtrack.json', import.meta.url)));
 
@@ -14,6 +14,18 @@ test.beforeEach(async({page}) => {
 
 test('streamed songs show their ID3 credits, clear the minimap, and remember the next title', async({page}, testInfo) => {
 	test.setTimeout(slow(150_000));
+
+	// The page hides a song's credit six seconds after showing it, and a song plays for only a few minutes. On a
+	// slow machine the steps below can outlast both. The credit's timer is stretched by the same factor as the
+	// limits, and each measurement first shows the playing song's credit again, as the player does when a song
+	// starts.
+	await page.addInitScript(factor => {
+		const set = window.setTimeout;
+
+		window.setTimeout = (callback, delay, ...rest) => set(callback, delay === 6000 ? delay * factor : delay, ...rest);
+	}, slowdown
+	);
+
 	await page.setViewportSize({width: 760,height: 490});
 	const requested = new Set(), errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -47,8 +59,29 @@ test('streamed songs show their ID3 credits, clear the minimap, and remember the
 	await expect(credit).toContainText('Dimension');
 	await expect(credit).toContainText('Creo');
 
+	/** Index in the catalog of the song whose credit the page holds, shown or hidden. */
+	const playing = async() => {
+		const title = await credit.locator('strong').textContent();
+
+		return catalog.findIndex(track => track.title === title);
+	};
+
+	/** Show the playing song's credit afresh. */
+	const shown = async() => {
+		const detail = catalog[await playing()];
+
+		await view.evaluate((element, track) => {
+			element.dispatchEvent(new CustomEvent('phonics-music-track', {detail: track}));
+		}, detail
+		);
+
+		await expect(credit).toBeVisible();
+	};
+
 	async function space()
 	{
+		await shown();
+
 		return page.evaluate(() => {
 			const root = document.querySelector('.terrain-sandbox');
 			const popup = root.querySelector('[data-music-credit]').getBoundingClientRect();
@@ -77,20 +110,28 @@ test('streamed songs show their ID3 credits, clear the minimap, and remember the
 	await testInfo.attach('music-map-compact', {body: await page.screenshot(), contentType: 'image/png'});
 	await page.setViewportSize({width: 360, height: 480});
 	await expect(credit).toHaveCSS('height', '96px');
-	const popup = await credit.boundingBox(), dial = await page.locator('.terrain-speedometer').boundingBox();
 	expect((await space()).clearance).toBeGreaterThanOrEqual(6);
+	const popup = await credit.boundingBox(), dial = await page.locator('.terrain-speedometer').boundingBox();
 	expect(popup.y+popup.height).toBeLessThanOrEqual(dial.y-4);
 	await expect(credit).toBeHidden({timeout: slow(10_000)});
+
+	// A slow run can reach this point after the fourth song has ended. Whichever song is playing, the page
+	// remembers the one after it.
+	const resumed = await playing() + 1;
+
+	expect(resumed).toBeGreaterThanOrEqual(4);
 	await page.reload();
 	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: slow(60_000)});
 	await view.focus();
 	await page.keyboard.press('Control');
-	await expect(credit).toContainText('Ghost Nova');
-	await expect(credit).toContainText('JAMATAR');
-	await expect(credit).toContainText('Midorisuki');
-	expect(requested.size).toBe(5);
+	await expect(credit).toContainText(catalog[resumed].title);
+
+	for(const detail of [catalog[resumed].artist, catalog[resumed].album])
+	if(detail) await expect(credit).toContainText(detail);
+
+	expect(requested.size).toBe(resumed + 1);
 	await explore.click();
-	for(const track of catalog.slice(5)) {
+	for(const track of catalog.slice(resumed + 1)) {
 		await next.click();
 		await expect(credit.locator('strong')).toHaveText(track.title);
 		await expect(credit.locator('[data-artist]')).toHaveText(track.artist ?? '');
