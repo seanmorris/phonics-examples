@@ -13,12 +13,15 @@ final class AirPatrol
 	public const ESCORT_LEAD = 36.;
 	private const MANEUVER_RATE = 2.;
 	private const TERRAIN_PROBE_SECONDS=.18, DESCENT_HALF_LIFE=.65, FORMATION_HEIGHT=18.;
+	public const ROAD_MEMORY=1.25;
 	private const WRECK_CLEAR_DISTANCE=500.;
 	private const RETURN_FRAMING=.55, FOLLOW_HALF_LIFE=.08, EASE_IN=.14;
 	private const FLASH_HOLD=.16, GLANCE_END=.50; // Seconds since impact.
 	private float $elapsed = 0., $slow = 0., $side = 1., $circleRemaining = 0.;
 	private float $probeIn = 0., $aheadFloor = 0.;
-	private ?float $laneBearing = null;
+	private ?float $laneBearing = null, $laneYaw = null;
+	private ?float $roadYaw = null;
+	private float $roadLeft=0., $sweepRoom=1.;
 	public ?FlightTrails $smoke=null;
 	public ?array $carImpact=null;
 	private ?Jet $jet = null;
@@ -73,7 +76,7 @@ final class AirPatrol
 	}
 
 	/** Search towards the driver's steering input first, then fan out within the turn the car can make. */
-	private static function corridors(array $car,float $course,float $side,Landscape $land,float $water): \Generator
+	private static function corridors(array $car,float $course,float $side,Landscape $land,float $water,?float $roadBearing,?float $previousYaw=null): \Generator
 	{
 		$speed=abs($car['speed']); $reach=max(72.,min(150.,2.*$speed));
 		$lock=Car::steeringLimit($speed);
@@ -82,14 +85,61 @@ final class AirPatrol
 		$limit=min(.7,.5*$reach*$curvature);
 		$steer=max(-1.,min(1.,($car['steering'] ?? 0.)/$lock));
 		$outer=$limit*($steer==0. ? $side : ($steer <=> 0.));
-		foreach(array_unique([$steer*$limit,0.,.5*$outer,-.5*$outer,$outer,-$outer],SORT_REGULAR) as $bearing) {
+		$bearings=[$steer*$limit,0.,.5*$outer,-.5*$outer,$outer,-$outer];
+		if($previousYaw!==null) {
+			$prior=self::angle($previousYaw-$course);
+			if(abs($prior)<=$limit && abs($prior-$steer*$limit)<.20) array_unshift($bearings,$prior);
+		}
+		if($roadBearing!==null) array_unshift($bearings,max(-$limit,min($limit,$roadBearing)));
+		foreach(array_unique($bearings,SORT_REGULAR) as $bearing) {
 			$x=$car['x']+$reach*sin($course+$bearing); $z=$car['z']+$reach*cos($course+$bearing);
 			if(self::clearStrip($land,$water,$car['y']+self::FORMATION_HEIGHT,$car['x'],$car['z'],$x,$z))
 				yield [$bearing,$x,$z];
 		}
 	}
 
-	private function arrive(array $car, Camera $eye, float $aspect, Landscape $land, float $water): bool
+	/** Read the upcoming spline in the direction the car is travelling, in either driving direction. */
+	private static function roadHeading(array $car,float $course,Landscape $land): ?float
+	{
+		$x=$car['x']; $z=$car['z'];
+		if(($car['motion'] ?? 'driving')!=='driving' || max(abs($x),abs($z))>$land->recipe()['worldSize']/2 ||
+			$land->material($x,$z,$offset,$mark)!=='road') return null;
+		// A plain paint brush has no spline. Remember the direction the driver took across it.
+		if($mark===null) return $offset===null ? self::angle($course) : null;
+		if(abs($mark[0])>$mark[2]) return null;
+		$f=sin($course); $g=cos($course); $best=INF; $selected=null;
+		foreach($land->roads() as $road) {
+			if($road['material']!=='road') continue;
+			$path=$road['_road']; $cell=$path['gridSize'];
+			$key=(int)floor($x/$cell).','.(int)floor($z/$cell);
+			foreach($path['grid'][$key] ?? [] as $i) {
+				if(!isset($path['samples'][$i+1])) continue;
+				[$ax,$ay,$az]=$path['samples'][$i]; [$bx,$by,$bz]=$path['samples'][$i+1];
+				$dx=$bx-$ax; $dz=$bz-$az; $length=hypot($dx,$dz);
+				if($length<1e-6) continue;
+				$t=max(0.,min(1.,(($x-$ax)*$dx+($z-$az)*$dz)/($length*$length)));
+				$px=$ax+$t*$dx; $pz=$az+$t*$dz;
+				$distance=hypot($x-$px,$z-$pz);
+				if($distance>$path['half']) continue;
+				$alignment=($f*$dx+$g*$dz)/$length;
+				// At crossings favor the leg aligned with travel, including through a reversed spline.
+				$score=$distance+abs($car['y']-($ay+$t*($by-$ay)))+6.*(1.-abs($alignment));
+				if($score>=$best) continue;
+				$best=$score; $dir=$alignment>=0. ? 1. : -1.;
+				$station=$path['stations'][$i]+$t*($path['stations'][$i+1]-$path['stations'][$i]);
+				$selected=[$road,$station,$dir,$px,$pz];
+			}
+		}
+		if($selected===null) return null;
+		[$road,$station,$dir,$px,$pz]=$selected;
+		$ahead=JourneySigns::pose($road,$station+$dir*max(24.,min(72.,$car['speed'])));
+		[$ax,,$az]=$ahead['position'];
+		if(hypot($ax-$px,$az-$pz)>2.) return atan2($ax-$px,$az-$pz);
+		[$tx,$tz]=$ahead['heading'];
+		return atan2($dir*$tx,$dir*$tz);
+	}
+
+	private function arrive(array $car, Camera $eye, float $aspect, Landscape $land, float $water,?float $roadBearing): bool
 	{
 		$heading = $car['yaw']-$car['drift'];
 		$f = sin($heading); $g = cos($heading);
@@ -97,7 +147,7 @@ final class AirPatrol
 		$right = self::floor($land,$water,$car['x']+32*$f+21*$g,$car['z']+32*$g-21*$f);
 		$preferred = abs($left-$right)>2. ? ($right<$left ? 1. : -1.)
 			: (cos(.017*$car['x']+.009*$car['z'])>=0. ? 1. : -1.);
-		foreach(self::corridors($car,$heading,$preferred,$land,$water) as [$bearing,$endX,$endZ]) {
+		foreach(self::corridors($car,$heading,$preferred,$land,$water,$roadBearing) as [$bearing,$endX,$endZ]) {
 			$yaw=$heading+$bearing; $f=sin($yaw); $g=cos($yaw);
 			foreach([[-112.,$preferred],[-112.,-$preferred],[70.,$preferred],[70.,-$preferred],[-112.,0.],[102.,0.]] as [$along,$side]) {
 				$x=$car['x']+$along*$f+64*$side*$g; $z=$car['z']+$along*$g-64*$side*$f;
@@ -107,7 +157,9 @@ final class AirPatrol
 					!self::clearStrip($land,$water,$car['y']+self::FORMATION_HEIGHT,$x,$z,$endX,$endZ)) continue;
 				$this->phase='arrival'; $this->elapsed=$this->slow=$this->probeIn=0.;
 				$this->side=$side ?: $preferred; $this->circleRemaining=0.;
-				$this->laneBearing=($side==0. || $bearing!=0.) ? $bearing : null;
+				$this->laneBearing=($side==0. || $bearing!=0.) ? $bearing-($roadBearing ?? 0.) : null;
+				$this->sweepRoom=$this->laneBearing===null ? 1. : 0.;
+				$this->laneYaw=$this->laneBearing===null ? null : self::angle($yaw);
 				$this->launch($p,min(Jet::FASTEST,$car['speed']+75.));
 				return true;
 			}
@@ -119,14 +171,28 @@ final class AirPatrol
 	public function step(float $dt,array $car,callable $eye,float $aspect,Landscape $land,float $water,?array $beforeCar=null): bool
 	{
 		$this->carImpact=null;
+		$travel=$car['yaw']-$car['drift']; $roadBearing=null;
+		$survey=$this->probeIn<=$dt;
+		$this->roadLeft=max(0.,$this->roadLeft-$dt);
+		if($this->roadLeft===0.) $this->roadYaw=null;
+		if(in_array($this->phase,['idle','arrival','escort'],true)) {
+			if($survey && ($yaw=self::roadHeading($car,$travel,$land))!==null) {
+				$this->roadYaw=$yaw; $this->roadLeft=self::ROAD_MEMORY;
+			}
+			if($this->roadYaw!==null) {
+				$bias=self::angle($this->roadYaw-$travel);
+				if(abs($bias)<M_PI/2) $roadBearing=max(-.7,min(.7,$bias))*cos($bias)*min(1.,$this->roadLeft/.65);
+			}
+		}
 		if($this->phase==='idle') {
+			$this->probeIn=$survey ? self::TERRAIN_PROBE_SECONDS : $this->probeIn-$dt;
 			$fading=$this->seeker!==null || $this->smoke!==null;
 			$this->advanceSeeker($dt,$car,null,'departure',$land,$water,$beforeCar,$eye,$aspect);
 			if(!$this->smoke && !isset($this->seeker?->state()['pose'])) $this->seeker=null;
 			$this->elapsed=max(0.,$this->elapsed-$dt);
 			if($this->repelled && $car['speed']<55.*Car::MPS_PER_MPH) $this->repelled=false;
 			if($this->repelled || $this->elapsed>0. || $car['speed']<=60.*Car::MPS_PER_MPH) return $fading;
-			if($this->arrive($car,$eye(),$aspect,$land,$water)) return true;
+			if($this->arrive($car,$eye(),$aspect,$land,$water,$roadBearing)) return true;
 			$this->elapsed=2.; // Recheck an obstructed approach after the car has moved on.
 			return $fading;
 		}
@@ -150,14 +216,13 @@ final class AirPatrol
 		}
 		$this->elapsed += $dt;
 		$p = $this->previous = $this->jet->state();
-		$course = $car['yaw']-$car['drift'];
+		$course = $travel+($roadBearing ?? 0.);
 		$f = sin($course); $g = cos($course);
 		$dx = $p['x']-$car['x']; $dz = $p['z']-$car['z'];
 		$along = $dx*$f+$dz*$g;
 		$across = $dx*$g-$dz*$f;
 		$this->slow = $car['speed']<55.*Car::MPS_PER_MPH ? $this->slow+$dt : 0.;
 		if($this->phase!=='departure') {
-			$survey=$this->probeIn<=$dt;
 			if($survey) {
 				// Look down the aircraft's actual flight path, including the turn its bank is starting.
 				$half=$land->recipe()['worldSize']/2.;
@@ -206,18 +271,38 @@ final class AirPatrol
 			if($survey) {
 				$x=$car['x']+$station*$f+$lane*$g; $z=$car['z']+$station*$g-$lane*$f;
 				$ceiling=$car['y']+self::FORMATION_HEIGHT;
-				$constrained=$floor>$ceiling || self::floor($land,$water,$x,$z)>$ceiling ||
-					($this->laneBearing!==null && ($joining || !self::clearStrip($land,$water,$ceiling,$car['x'],$car['z'],$x,$z)));
-				$this->laneBearing=null;
-				if($constrained) {
-					foreach(self::corridors($car,$course,$this->side,$land,$water) as [$bearing]) {
-						$this->laneBearing=$bearing;
-						break;
+				$constrained=$floor>$ceiling || self::floor($land,$water,$x,$z)>$ceiling;
+				if(!$constrained && $this->laneBearing!==null) {
+					// The nominal station crosses the road twice per weave. A clear center gives no
+					// evidence that there is room to spread the formation back out on both sides.
+					$constrained=$joining;
+					foreach([-1.,1.] as $side) {
+						if($constrained) break;
+						$span=$side*$station*sqrt(3.);
+						$constrained=!self::clearStrip($land,$water,$ceiling,$car['x'],$car['z'],
+							$car['x']+$station*$f+$span*$g,$car['z']+$station*$g-$span*$f);
 					}
 				}
+				if($constrained) {
+					$this->laneBearing=0.;
+					foreach(self::corridors($car,$travel,$this->side,$land,$water,$roadBearing,$this->laneYaw) as [$bearing]) {
+						$this->laneBearing=$bearing-($roadBearing ?? 0.);
+						break;
+					}
+					$this->laneYaw=self::angle($course+$this->laneBearing);
+				} else $this->laneBearing=null;
 			}
-			if($this->laneBearing!==null) $lane=$station*tan($this->laneBearing);
+			// Bank into a narrowing lane and spread back out gradually beyond the walls.
+			$this->sweepRoom=$this->laneBearing===null ? min(1.,$this->sweepRoom+$dt/.9) : max(0.,$this->sweepRoom-$dt/.35);
 			$desired=$course+atan2($lane-$across,$look+max(0.,$station-$along));
+			if($this->sweepRoom<1.) {
+				// Hold the surveyed corridor in world space between probes. Small movements of the
+				// steering wheel should not swing the whole formation around the car.
+				$guide=$this->laneYaw ?? ($course+($this->laneBearing ?? 0.));
+				$gx=sin($guide); $gz=cos($guide);
+				$guideYaw=$guide+atan2($dz*$gx-$dx*$gz,$look+max(0.,$station-($dx*$gx+$dz*$gz)));
+				$desired+=(1.-$this->sweepRoom)*self::angle($guideYaw-$desired);
+			} else $this->laneYaw=null;
 			$speed=$car['speed']+.62*($station-$along);
 			if(!$joining) $speed/=max(.6,cos($headingError));
 			// A slow car cannot be paced at the F5's minimum airspeed. Fly a banked orbit until
@@ -231,13 +316,22 @@ final class AirPatrol
 			}
 			$turn=self::angle($desired-$p['yaw']);
 			$bank=max(-1.,min(1.,-2.8*$turn));
+			if(!$joining && $this->circleRemaining<=0. && ($roadBearing!==null || $this->laneBearing!==null)) {
+				// Allow for the heading the existing bank will carry through while the wings level.
+				// Slow the lateral response on a surveyed path while leaving climb authority intact.
+				$unwind=.45*self::MANEUVER_RATE*Jet::BANKED_TURN_RATE*sin($p['roll']);
+				$command=max(-1.,min(1.,-2.8*($turn-$unwind)));
+				$current=-$p['roll']/Jet::MAX_COMMANDED_BANK;
+				$response=.12+.35*min(1.,max(0.,abs($turn)-.5));
+				$bank=$current+$response*($command-$current);
+			}
 			if($speed>$idleSpeed) $speed=$idleSpeed+min(150.,$speed-$idleSpeed)*max(0.,cos($turn))**2;
 			// Bank across the road at one altitude. Begin leveling before reaching it.
 			$heightError=$this->aheadFloor+self::FORMATION_HEIGHT-($p['y']+.35*$p['vy']);
 			$climb=max(-.65,min(.95,atan2($heightError,max(45.,$p['speed']*.88))/.78));
 			$throttle=max(-1.,min(1.,($speed-Jet::CRUISE)/($speed<Jet::CRUISE ?
 				Jet::CRUISE-$idleSpeed : Jet::FASTEST-Jet::CRUISE)));
-			$joinAcross=$this->laneBearing===null ? 0. : min($station,$along)*tan($this->laneBearing);
+			$joinAcross=min($station,$along)*tan($this->laneBearing ?? 0.);
 			if($joining && $along>=32. && abs($across-$joinAcross)<25.) {
 				$this->phase='escort'; $this->elapsed=0.;
 			}
@@ -371,16 +465,23 @@ final class AirPatrol
 
 	public function snapshot(): ?array
 	{
-		if($this->phase==='idle' && $this->elapsed===0. && !$this->repelled) return null;
+		if($this->phase==='idle' && $this->elapsed===0. && !$this->repelled && $this->roadYaw===null) return null;
+		$following=in_array($this->phase,['arrival','escort'],true);
 		return ['phase'=>$this->phase,'flight'=>[$this->elapsed,$this->slow,$this->side,$this->circleRemaining,$this->probeIn,$this->aheadFloor],
 			'direction'=>$this->jet ? array_slice($this->jet->motion(),4,3) : null,'pose'=>$this->jet?->state(),'seeker'=>$this->seeker()]
-			+($this->laneBearing!==null && in_array($this->phase,['arrival','escort'],true) ? ['laneBearing'=>$this->laneBearing] : [])
+			+($this->laneBearing!==null && $following ? ['laneBearing'=>$this->laneBearing] : [])
+			+($this->sweepRoom!==1. && $following ? ['sweepRoom'=>$this->sweepRoom] : [])
+			+($this->laneYaw!==null && $following ? ['laneYaw'=>$this->laneYaw] : [])
+			+($this->roadYaw!==null && ($following || $this->phase==='idle') ? ['roadGuide'=>[$this->roadYaw,$this->roadLeft]] : [])
 			+($this->glance!==self::NEUTRAL_GLANCE ? ['glance'=>$this->glance] : [])+($this->repelled ? ['repelled'=>true] : []);
 	}
 
 	public function resume(?array $s): void
 	{
 		$this->laneBearing=$s['laneBearing'] ?? null;
+		$this->sweepRoom=$s['sweepRoom'] ?? 1.;
+		$this->laneYaw=$s['laneYaw'] ?? null;
+		[$this->roadYaw,$this->roadLeft]=$s['roadGuide'] ?? [null,0.];
 		$this->repelled=$s['repelled'] ?? false;
 		$this->previousGlance=$this->glance=$s['glance'] ?? self::NEUTRAL_GLANCE;
 		$this->jet=$this->previous=$this->seeker=null;

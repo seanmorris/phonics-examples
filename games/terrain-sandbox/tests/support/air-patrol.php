@@ -1,6 +1,6 @@
 <?php
 use TerrainPhonics\{Camera,Landscape};
-use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,FlightLights,FlightTrails,Jet,Session,SpeedSeeker,SeekerMount,VehicleModel};
+use TerrainSandbox\{AirPatrol,Car,DemoEvents,DemoTape,FlightLights,FlightTrails,Jet,JourneySigns,Session,SpeedSeeker,SeekerMount,VehicleModel};
 
 $flat = ['worldSize'=>4096,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-10.];
 $land = new Landscape($flat);
@@ -84,6 +84,70 @@ foreach([0.,M_PI/2,M_PI,3*M_PI/2] as $eye->yaw) {
 	}
 	$open->close();
 })($flat,$driver,$eye);
+
+// A paved bend predicts the route ahead in both directions, even when the driver countersteers.
+(static function(array $flat): void {
+	$land=new Landscape($flat);
+	$land->queue(['type'=>'road','points'=>[[0.,0.,-220.],[0.,0.,0.],[80.,0.,88.],[240.,0.,100.]],
+		'width'=>16.,'shoulder'=>3.,'crown'=>0.]); $land->commit();
+	$road=$land->roads()[0]; $at=220.;
+	$here=JourneySigns::pose($road,$at); [$x,,$z]=$here['position']; [$tx,$tz]=$here['heading'];
+	$eye=new Camera; $eye->position=[$x,3.,$z-7.];
+	$step=static fn($pilot,$car)=>$pilot->step(1/60,$car,fn()=>$eye,16/9,$land,-10.);
+	foreach([1,-1] as $dir) {
+		$car=['x'=>$x,'y'=>0.,'z'=>$z,'yaw'=>atan2($dir*$tx,$dir*$tz),'drift'=>0.,'speed'=>40.,'motion'=>'driving',
+			'steering'=>-$dir*Car::steeringLimit(40.)];
+		$eye->yaw=M_PI-$car['yaw'];
+		[$aheadX,,$aheadZ]=JourneySigns::pose($road,$at+$dir*40.)['position'];
+		$expected=atan2($aheadX-$x,$aheadZ-$z);
+		$pilot=new AirPatrol; $step($pilot,$car);
+		expect(abs($pilot->snapshot()['roadGuide'][0]-$expected)<.001 && abs($pilot->pose()['yaw']-$expected)<.01,
+			'The patrol anticipates the actual spline ahead in the driving direction, including reverse travel through the bend.');
+	}
+	// Leave the road below the speed limit and cross the limit on dirt. Take over a recorded frame there.
+	$pilot=new AirPatrol; $car['speed']=25.; $step($pilot,$car);
+	$car['x']+=28.; $car['speed']=40.; $step($pilot,$car);
+	expect(isset($pilot->snapshot()['roadGuide']) && $pilot->pose()!==null,'The first arrival after leaving pavement remembers the road.');
+	$car['motion']='airborne'; $car['x']=$x;
+	for($i=0;$i<30;$i++) $step($pilot,$car);
+	$frame=$pilot->snapshot();
+	expect(abs($frame['roadGuide'][1]-(AirPatrol::ROAD_MEMORY-31/60.))<1.e-8,'Passing above the pavement does not refresh a remembered road.');
+	$events=DemoEvents::import([[0,json_encode(['airPatrol'=>$frame],JSON_THROW_ON_ERROR)]],1);
+	$copy=new AirPatrol; $copy->resume($events->at(0,0.,'car')['airPatrol']);
+	for($i=0;$i<52;$i++) { $step($copy,$car); $step($pilot,$car); }
+	expect(!isset($pilot->snapshot()['roadGuide']) && $copy->snapshot()==$pilot->snapshot(),'The remembered road fades out on schedule after a demo takeover.');
+	$car['motion']='driving';
+	for($i=0;$i<12;$i++) $step($pilot,$car);
+	expect(isset($pilot->snapshot()['roadGuide']),'Landing on the road reacquires its current heading.');
+	$land->close();
+})($flat);
+
+// Gaps in scalloped walls expose the nominal lateral station for just one or two surveys.
+(static function(array $flat): void {
+	$land=new Landscape($flat);
+	foreach([-1,1] as $side) {
+		$points=[];
+		for($z=-800;$z<=800;$z+=40) $points[]=[$side*(47.+11.*sin($z/42.+$side)),48.,$z];
+		$land->queue(['type'=>'road','points'=>$points,'width'=>44.,'shoulder'=>3.,'crown'=>0.,'material'=>'rock']);
+	}
+	$land->commit();
+	foreach([false,true] as $paved) {
+		if($paved) {
+			$land->queue(['type'=>'road','points'=>[[0.,0.,-800.],[0.,0.,800.]],'width'=>12.,'shoulder'=>2.,'crown'=>0.]);
+			$land->commit();
+		}
+		$pilot=new AirPatrol; $eye=new Camera; $eye->yaw=M_PI; $eye->pitch=-.14; $eye->fov=1.36;
+		$car=['x'=>0.,'y'=>0.,'z'=>-650.,'yaw'=>0.,'drift'=>0.,'speed'=>42.]; $maxRoll=0.;
+		for($i=0;$i<900;$i++) {
+			$car['z']+=42./60.; $car['steering']=.12*sin(2*M_PI*$i/32.); $car['yaw']=.024*sin(2*M_PI*$i/32.);
+			$eye->position=[0.,3.,$car['z']-7.];
+			$pilot->step(1/60,$car,fn()=>$eye,16/9,$land,-10.);
+			if($i>300) $maxRoll=max($maxRoll,abs($pilot->pose()['roll']));
+		}
+		expect($pilot->snapshot()['phase']==='escort' && $maxRoll<deg2rad(3.),'Narrow openings and small steering corrections do not rock the wings on or off pavement.');
+	}
+	$land->close();
+})($flat);
 
 // Observe a level F5 from each sector and inspect the lights sent to the renderer.
 $level=['x'=>0.,'y'=>10.,'z'=>0.,'yaw'=>0.,'pitch'=>0.,'roll'=>0.,'power'=>0.];

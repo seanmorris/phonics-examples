@@ -22,7 +22,7 @@ final class Jet
 	private const SPOOL_UP = .36, SPOOL_DOWN = .27, SPEED_LAG = .18;
 	/** Seconds for the direction of travel to close about two thirds of a small change in nose direction. */
 	private const FLIGHT_PATH_LAG = .36;
-	public const BANKED_TURN_RATE = .68;
+	public const BANKED_TURN_RATE = .68, MAX_COMMANDED_BANK = 1.10;
 	/** Expert body rates at full deflection in radians a second, and the time constant with which they follow it. */
 	public const ROLL_RATE = 2.8, PITCH_RATE = 1.05, YAW_RATE = .35, RATE_LAG = .12;
 	/** Time constant in seconds with which the Expert chase camera swings in behind the nose. */
@@ -145,7 +145,7 @@ final class Jet
 		else
 		{
 			// Roll and pitch close on their targets at a rate in proportion to the angle still to go.
-			$rollDemand = -$bank * 1.10 - $p['roll'];
+			$rollDemand = -$bank * self::MAX_COMMANDED_BANK - $p['roll'];
 			$pitch = $climb * .78;
 			if($maneuverRate !== 1.) $pitch = atan($maneuverRate * tan($pitch));
 			$pitchDemand = $pitch - $p['pitch'];
@@ -430,10 +430,10 @@ final class Jet
 		$p = &$this->pose;
 		// Full aileron until the roll still to go falls to a quarter of the full bank, and full stabilator likewise
 		// for the climb. The rudder follows the turn rate and reaches its stop in the steepest bank.
-		$p['aileron'] = self::actuate($p['aileron'], self::AILERON * $rollDemand / (.25 * 1.10), self::AILERON, $dt);
+		$p['aileron'] = self::actuate($p['aileron'], self::AILERON * $rollDemand / (.25 * self::MAX_COMMANDED_BANK), self::AILERON, $dt);
 		$p['stabilator'] = self::actuate($p['stabilator'], self::STABILATOR * $pitchDemand / (.25 * .78),
 			self::STABILATOR, $dt);
-		$p['rudder'] = self::actuate($p['rudder'], self::RUDDER * $turn / (.68 * sin(1.10)), self::RUDDER, $dt);
+		$p['rudder'] = self::actuate($p['rudder'], self::RUDDER * $turn / (self::BANKED_TURN_RATE * sin(self::MAX_COMMANDED_BANK)), self::RUDDER, $dt);
 	}
 
 	/**
