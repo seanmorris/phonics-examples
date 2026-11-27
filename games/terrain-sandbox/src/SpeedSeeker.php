@@ -10,6 +10,8 @@ final class SpeedSeeker
 {
 	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 12.;
 	private const LOOM_ABOVE_ROOF = 2.12;
+	// Inside this screen margin a loose prop can coast. At the margin, settle its next animation while visible.
+	private const DECISION_EDGE = .72, LAST_VISIBLE = .92, EDGE_LEAD_SECONDS = .35;
 	private const RETURN_RADIUS = 50., BOOST_RAMP = .24, BOOST_CRUISE = .18;
 	/** An eligible coast tracks this gap; its last value marks the boosted return in recorded takes. */
 	private ?float $rearPassGap=null;
@@ -43,9 +45,7 @@ final class SpeedSeeker
 			if($this->clock<1.5-1e-9) return null;
 			$wing=Jet::projectileMount($plane,$this->slot);
 			if($wing['y']<SeekerContact::floor($wing,$land,$water)+1.25) return null;
-			$sight=[$wing['x']-$camera->position[0],$wing['y']-$camera->position[1],$wing['z']-$camera->position[2]];
-			$range=hypot(hypot($sight[0],$sight[2]),$sight[1]);
-			if($land->raycast($camera->position,$sight,$range)!==null) { $this->clock=0.; return null; }
+			if(!self::clearSight($wing,$camera,$land)) { $this->clock=0.; return null; }
 			$this->carFrames=[];
 			$course=$car['yaw']-$car['drift']; $f=sin($course); $g=cos($course);
 			$x=$wing['x']-$car['x']; $z=$wing['z']-$car['z'];
@@ -75,13 +75,23 @@ final class SpeedSeeker
 			if($this->clock>=6. || $hit!==null) return $this->finish($hit);
 			if($this->rearPassGap!==null && $plane!==null && $patrol==='escort') {
 				$gap=$this->planeGap($plane);
-				if($this->clock>=.10 && $gap<=self::RETURN_RADIUS && $gap<$this->rearPassGap) {
+				$camera=$eye ? $eye() : null;
+				$screen=$camera ? self::screenExtent($this->pose,$camera,$aspect) : 0.;
+				$edge=$screen>=self::DECISION_EDGE;
+				$gain=$this->rearPassGap-$gap;
+				// At the edge, give a converging pass a short lead on the usual proximity cue.
+				$anticipated=$edge && $dt>0. ? $gap-self::EDGE_LEAD_SECONDS*$gain/$dt : $gap;
+				if($screen<self::LAST_VISIBLE && ($edge || $this->clock>=.10) && $gain>0. && $anticipated<=self::RETURN_RADIUS) {
+					if($camera && !self::clearSight($this->pose,$camera,$land)) {
+						$this->rearPassGap=null;
+						return null;
+					}
 					$this->phase='return'; $this->clock=0.;
 					$this->start=[$this->pose['x']-$plane['x'],$this->pose['y']-$plane['y'],$this->pose['z']-$plane['z'],
 						$this->pose['yaw'],$this->pose['pitch'],$this->pose['roll'],
 						$this->velocity[0]-$plane['vx'],$this->velocity[1]-$plane['vy'],$this->velocity[2]-$plane['vz'],self::BOOST_RAMP,self::BOOST_CRUISE];
 				}
-				$this->rearPassGap=$gap;
+				$this->rearPassGap=$edge && $this->phase==='missed' ? null : $gap;
 			}
 			return null;
 		}
@@ -208,19 +218,31 @@ final class SpeedSeeker
 		return $hit;
 	}
 
+	/** Check terrain occlusion only at the two animation handoffs. */
+	private static function clearSight(array $point,Camera $camera,Landscape $land): bool
+	{
+		$sight=[$point['x']-$camera->position[0],$point['y']-$camera->position[1],$point['z']-$camera->position[2]];
+		$range=hypot(hypot($sight[0],$sight[2]),$sight[1]);
+		return $land->raycast($camera->position,$sight,$range)===null;
+	}
+
+	/** Furthest projected edge as a fraction of the viewport half-extent (one at the frame edge). */
+	private static function screenExtent(array $p,Camera $camera,float $aspect,float $padding=0.,float $near=.25): float
+	{
+		[$front,$right,$up]=$camera->basis();
+		$x=$p['x']-$camera->position[0]; $y=$p['y']-$camera->position[1]; $z=$p['z']-$camera->position[2];
+		$depth=$x*$front[0]+$y*$front[1]+$z*$front[2];
+		if($depth<=$near) return INF;
+		$half=$depth*tan($camera->fov/2);
+		return max((abs($x*$right[0]+$y*$right[1]+$z*$right[2])+$padding)/$aspect,
+			abs($x*$up[0]+$y*$up[1]+$z*$up[2])+$padding)/$half;
+	}
+
 	/** Leave space around the fuselage and the releasing wing in the actual chase camera. */
 	private function inShot(array $plane,Camera $camera,float $aspect): bool
 	{
-		[$front,$right,$up]=$camera->basis();
-		$wing=Jet::projectileMount($plane,$this->slot);
-		foreach([$plane,$wing] as $p) {
-			$x=$p['x']-$camera->position[0]; $y=$p['y']-$camera->position[1]; $z=$p['z']-$camera->position[2];
-			$depth=$x*$front[0]+$y*$front[1]+$z*$front[2];
-			$half=$depth*tan($camera->fov/2);
-			if($depth<=8. || abs($x*$right[0]+$y*$right[1]+$z*$right[2])+3.>.90*$half*$aspect ||
-				abs($x*$up[0]+$y*$up[1]+$z*$up[2])+3.>.90*$half) return false;
-		}
-		return true;
+		return self::screenExtent($plane,$camera,$aspect,3.,8.)<=.90
+			&& self::screenExtent(Jet::projectileMount($plane,$this->slot),$camera,$aspect,3.,8.)<=.90;
 	}
 
 	/** Animate the reference car with follow-through. Constant travel stays in time with the driver,

@@ -10,7 +10,7 @@ final class AirPatrol
 {
 	private string $phase = 'idle';
 	private bool $repelled=false;
-	private const WRECK_CLEAR_DISTANCE=500., PEEK_SECONDS=.50;
+	private const WRECK_CLEAR_DISTANCE=500., PEEK_SECONDS=.50, ARRIVAL_LEAD=.32;
 	private ?float $arrivalPeek=null;
 	private float $elapsed = 0., $slow = 0., $side = 1., $circleRemaining = 0.;
 	private float $probeIn = 0., $aheadFloor = 0.;
@@ -251,7 +251,15 @@ final class AirPatrol
 	{
 		$this->previousGlance=$this->glance;
 		$peek=$this->arrivalPeek;
-		if($peek===null && $this->phase==='arrival' && self::visible($this->pose(),$getEye(),$aspect)) $peek=0.;
+		if($peek===null && $this->phase==='arrival') {
+			// Turn toward the approaching sound just before the aircraft would enter the driver's unassisted view.
+			$p=$this->pose();
+			$course=$car['yaw']-$car['drift'];
+			$p['x']+=self::ARRIVAL_LEAD*($p['vx']-$car['speed']*sin($course));
+			$p['z']+=self::ARRIVAL_LEAD*($p['vz']-$car['speed']*cos($course));
+			$p['y']+=self::ARRIVAL_LEAD*$p['vy'];
+			if(self::visible($p,$getEye(),$aspect)) $peek=0.;
+		}
 		if($peek!==null) $this->arrivalPeek=min(self::PEEK_SECONDS,$peek+$dt);
 		if($manual) {
 			$changed=$this->glance!==self::NEUTRAL_GLANCE;
@@ -264,10 +272,10 @@ final class AirPatrol
 		$halfLife=$this->repelled ? .15 : .12;
 		if(($shot['phase'] ?? null)==='return' && ($jet=$this->pose())!==null) {
 			$eye=$getEye();
-			// Split the angle on screen so the near seeker and distant jet both get room.
+			// Lead with the visible prop, then widen the composition to include the plane.
 			$from=self::lookOffset($eye,$point['x'],$point['y'],$point['z']);
 			$to=self::lookOffset($eye,$jet['x'],$jet['y'],$jet['z']);
-			$goal=self::interpolateGlance($from,$to,.5);
+			$goal=self::interpolateGlance($from,$to,.5*min(1.,$shot['clock']/.16));
 			$halfLife=.050;
 		} elseif($this->repelled && isset($shot['impact']) && $shot['clock']<.22) {
 			// The flash stays at the contact point as the jet moves on.
@@ -283,7 +291,7 @@ final class AirPatrol
 			[$pan,$tilt]=self::lookOffset($getEye(),$jet['x'],$jet['y'],$jet['z']);
 			$scale=min(1.,deg2rad(30.)/max(.00001,hypot($pan,$tilt)));
 			$goal=[$scale*$pan,$scale*$tilt]; $halfLife=.050;
-		} elseif($point!==null) {
+		} elseif($point!==null && ($shot['phase']!=='missed' || isset($shot['rearPassGap']))) {
 			[$pan,$tilt]=self::lookOffset($getEye(),$point['x'],$point['y'],$point['z']);
 			$weight=max(0.,min(1.,(M_PI/2-abs($pan))/.35));
 			if(isset($shot['pose'])) {
