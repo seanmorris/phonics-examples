@@ -78,26 +78,29 @@ function writeRecording(string $file, string $wav, bool $check): void
 $check = in_array('--check',$argv,true);
 writeRecording($dir.'flat-twelve.wav',$wav,$check);
 
-// A short pressure front, a low body and a ragged air tail. The same pressure envelope drives each exhaust firing.
+// Stagger the impact, body and rolling tail; let the tail lose brightness as it spreads.
+// A brief upper partial carries the impact on small speakers.
 // Bake the dry sound once. Each landscape supplies its own reflection times and directions during play.
-$rate=32000;
-$pcm='';
-$low=$mid=$slow=0.;
-$phase=0.;
-for($i=0; $i<$rate; $i++) {
-	$t=$i/$rate;
-	$n=2.*$random()-1.;
-	$low+=.018*($n-$low);
-	$mid+=.19*($n-$mid);
-	$slow+=.0022*($n-$slow);
-	$phase+=2*M_PI*(43.+42.*exp(-$t/.046))/$rate;
-	$front=pressurePulse($t,.0008,.022);
-	$body=pressurePulse($t,.005,.12);
-	$tail=pressurePulse($t,.017,.17);
-	$value=$front*(.49*$n+.34*$mid) + $body*(.45*sin($phase)+2.6*($low-$slow))
-		+ $tail*(1.3*($mid-$low)+2.2*$slow);
-	$fade=min(1.,(1.-$t)/.04);
-	$pcm.=pack('v',(int)round(30000*tanh($value)*$fade));
+$rate = 32000;
+$pcm = '';
+$air = $bass = $rumble = $drift = $phase = 0.;
+for($i = 0; $i < $rate; $i++) {
+	$t = $i / $rate;
+	// Smooth the turbulence twice, then remove its subsonic drift. Only the first instant gets the wider air band.
+	$air += .095 * (2.*$random() - 1. - $air);
+	$bandwidth = .012 + .027*exp(-$t/.09);
+	$bass += $bandwidth * ($air - $bass);
+	$rumble += $bandwidth * ($bass - $rumble);
+	$drift += .0055 * ($rumble - $drift);
+
+	$phase += 2.*M_PI*(47. + 17.*exp(-$t/.035))/$rate;
+	$body = pressurePulse(max(0.,$t-.014),.004,.09);
+	$thump = $body * (.81*sin($phase) + .23*sin(2.2*$phase));
+	$edge = pressurePulse($t,.001,.030) * (.32*sin(3.5*$phase) + .23*$air);
+	$roll = pressurePulse(max(0.,$t-.046),.009,.13) + .58*pressurePulse(max(0.,$t-.109),.017,.17);
+	$tail = (2.2*pressurePulse($t,.003,.06) + 7.4*$roll) * ($rumble - $drift);
+	$fade = min(1., (1.-$t)/.04);
+	$pcm .= pack('v',(int)round(30000*tanh($thump + $edge + $tail)*$fade));
 }
 $format=pack('vvVVvv',1,1,$rate,$rate*2,2,16);
 $chunks='fmt '.pack('V',strlen($format)).$format.'data'.pack('V',strlen($pcm)).$pcm;
