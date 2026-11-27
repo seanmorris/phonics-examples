@@ -74,8 +74,11 @@ final class DemoEvents
 			if($view['airPatrol']['phase']==='glide' && ($next['phase'] ?? null)==='glide')
 				$view['airPatrol']['flight'][0]+=$fraction*($next['flight'][0]-$view['airPatrol']['flight'][0]);
 			if(isset($view['airPatrol']['pose'],$next['pose'])) $view['airPatrol']['pose']=AirPatrol::interpolate($view['airPatrol']['pose'],$next['pose'],$fraction);
-			if(isset($view['airPatrol']['seeker']['pose'],$next['seeker']['pose']))
+			if(isset($view['airPatrol']['seeker']['pose'],$next['seeker']['pose'])) {
 				$view['airPatrol']['seeker']['pose']=AirPatrol::interpolate($view['airPatrol']['seeker']['pose'],$next['seeker']['pose'],$fraction);
+				if(isset($view['airPatrol']['seeker']['airtime'],$next['seeker']['airtime']))
+					$view['airPatrol']['seeker']['airtime']+=$fraction*($next['seeker']['airtime']-$view['airPatrol']['seeker']['airtime']);
+			}
 		}
 		if(($view['race']['state'] ?? null) === 'running') $view['race']['time'] += $clock;
 		if($mode === 'jet' && isset($view['range'])) $view['range']['elapsed'] += $clock;
@@ -141,6 +144,7 @@ final class DemoEvents
 				$s=$v['seeker'];
 				if($legacy || !is_array($s) || !self::vector([$s['clock'] ?? null,$s['passSpeed'] ?? null],2)
 					|| (array_key_exists('slot',$s) && !in_array($s['slot'],[0,1],true))
+					|| (isset($s['airtime']) && (!isset($s['pose']) || !self::vector([$s['airtime']],1) || $s['airtime']<0.))
 					|| (isset($s['rearPassGap']) && (!in_array($s['phase'] ?? null,['missed','return'],true) || !self::vector([$s['rearPassGap']],1) || $s['rearPassGap']<0))
 					|| (isset($s['driftPass']) && ($s['driftPass']!==true || !in_array($s['phase'] ?? null,['missed','return'],true)
 						|| ($s['phase']==='return' && !isset($s['rearPassGap']))))

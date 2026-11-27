@@ -373,10 +373,10 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 			foreach(SpeedSeeker::mountedSlots($seeker) as $slot) $projectiles[]=Jet::projectileMount($patrol,$slot);
 		}
 		if(isset($seeker['mount']) && $session->airPatrol->smoke?->showsLodgedSeeker()) $projectiles[]=SeekerMount::model($seeker['mount'],$vehiclePose);
-		elseif(isset($seeker['pose'])) {
-			$projectiles[]=$seeker['pose'];
-			$lightSources[]=[$seeker['pose'],false];
-			$traffic[]=['missile',$seeker['pose']['x'],$seeker['pose']['z']];
+		elseif(($flyingSeeker=SpeedSeeker::modelPose($seeker))!==null) {
+			$projectiles[]=$flyingSeeker;
+			$lightSources[]=[$flyingSeeker,false];
+			$traffic[]=['missile',$flyingSeeker['x'],$flyingSeeker['z']];
 		}
 	}
 	if($session->mode === 'jet' && $session->jetView === 'chase')

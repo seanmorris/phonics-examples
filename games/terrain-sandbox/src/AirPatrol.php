@@ -233,7 +233,7 @@ final class AirPatrol
 		$impact=$to['impact'] ?? null;
 		if($impact===($from['impact'] ?? null)) $impact=null;
 		if($plane===null && !isset($to['pose']) && $impact===null && !$this->smoke) return;
-		($this->smoke ??= new FlightTrails)->seeker($dt,$from['pose'] ?? null,$to['pose'] ?? null,$impact,$to['mount'] ?? null,$car,$to['clock'] ?? 0.,$previousCar,$previousPlane,$plane);
+		($this->smoke ??= new FlightTrails)->seeker($dt,SpeedSeeker::modelPose($from),SpeedSeeker::modelPose($to),$impact,$to['mount'] ?? null,$car,$to['clock'] ?? 0.,$previousCar,$previousPlane,$plane);
 		if($glideAge!==null && $previousPlane!==null && $plane!==null && $dt>0.)
 			$this->smoke->damagedExhaust($previousPlane,$plane,$glideAge,$dt);
 		if($plane===null && !$this->smoke->active()) $this->smoke=null;

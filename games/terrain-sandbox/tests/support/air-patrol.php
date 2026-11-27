@@ -70,6 +70,7 @@ for($i=0;$i<880;$i++) {
 	if($shot['phase']==='drop' && $shot['clock']===0.) {
 		$releaseTime=$time;
 		$wing=Jet::projectileMount($p,0); $released=$pilot['seeker']['pose'];
+		expect(SpeedSeeker::modelPose($pilot['seeker'])===$released,'The sway starts at zero on the releasing wing.');
 		$wingRelease=abs($released['x']-$wing['x'])+abs($released['y']-$wing['y'])+abs($released['z']-$wing['z'])<1e-6;
 	}
 	if($shot['phase']==='drop') {
@@ -107,6 +108,40 @@ expect(isset($glances['drop'],$glances['chase']),'The approaching seeker still d
 $drive->input(['actions'=>['demo-stop']],0.,16/9);
 $demo=$drive->demo->export();
 $copy=DemoTape::import($demo);
+// Scrub the bumper chase at sub-frame times. The forward balance point stays on course as the tail swings.
+$minSwing=INF; $maxSwing=-INF; $maxPivotError=$maxTailTravel=$maxNoseTravel=0.;
+$onAxis=static function(array $p,float $offset): array {
+	$nose=array_slice(VehicleModel::basis($p),6);
+	return [$p['x']+$offset*$nose[0],$p['y']+$offset*$nose[1],$p['z']+$offset*$nose[2]];
+};
+$displacement=static function(array $base,array $shown,float $offset) use ($onAxis): float {
+	$a=$onAxis($base,$offset); $b=$onAxis($shown,$offset);
+	return hypot(hypot($a[0]-$b[0],$a[2]-$b[2]),$a[1]-$b[1]);
+};
+for($i=0;$i<120;$i++) {
+	$t=$stationTime+.05+$i/120.;
+	$sample=$copy->frame($t)['events']['airPatrol']['seeker'];
+	$base=$sample['pose']; $shown=SpeedSeeker::modelPose($sample);
+	$swing=rad2deg($shown['yaw']-$base['yaw']);
+	$minSwing=min($minSwing,$swing); $maxSwing=max($maxSwing,$swing);
+	$maxPivotError=max($maxPivotError,$displacement($base,$shown,1.4));
+	$maxNoseTravel=max($maxNoseTravel,$displacement($base,$shown,2.));
+	$maxTailTravel=max($maxTailTravel,$displacement($base,$shown,-2.));
+	if($i>0) expect(abs($sample['airtime']-$lastAirtime-1/120.)<.00001,'Replay interpolates the fishtail between recorded samples.');
+	$lastAirtime=$sample['airtime'];
+}
+expect($minSwing< -4. && $maxSwing>4. && max(-$minSwing,$maxSwing)<=8.01,'The airborne mesh fishtails gently to both sides.');
+expect($maxPivotError<1.e-8 && $maxNoseTravel<.09 && $maxTailTravel>.30,'The tail sweeps around a balance point 60 cm behind the nose.');
+$effects=new AirPatrol;
+$effects->stepSmoke(1./60.,$sample,$sample,[],null,null,null);
+$exhaust=array_values(unpack('g*',$effects->smoke->instances()));
+$nozzle=$onAxis($shown,-2.);
+foreach($nozzle as $i=>$axis) expect(abs($exhaust[4+$i]-$axis)<.0001,'The smoke follows the nozzle of the fishtailing mesh.');
+$branched=new SpeedSeeker; $branched->resume($sample);
+expect(SpeedSeeker::modelPose($branched->state())===$shown,'Branching a demo preserves the swing at the cut.');
+unset($sample['airtime']);
+expect(SpeedSeeker::modelPose($sample)===$base,'Earlier recordings keep their recorded projectile pose.');
+
 expect($copy->frame($entryTime)['events']['airPatrol']['phase']==='arrival','A recorded pass survives export and import.');
 foreach([['type'=>'demo-open','json'=>$demo],['type'=>'demo-seek','seconds'=>$entryTime],'demo-take-control'] as $action)
 	$drive->input(['actions'=>[$action]],0.,16/9);

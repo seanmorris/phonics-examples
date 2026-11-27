@@ -10,6 +10,8 @@ final class SpeedSeeker
 {
 	private const SLIP = .18, FLY_AHEAD = .42, DROP_SECONDS = 1.95, CLOSE_SECONDS = 3.8, RELOAD_SECONDS = 10.;
 	private const LOOM_ABOVE_ROOF = 2.12;
+	/** Meters forward of mesh center on the four-meter prop (60 cm behind the nose). */
+	private const CENTER_OF_GRAVITY = 1.40;
 	// The loose pass crosses the driving view in one beat, then bursts at the escort's usual lead.
 	private const PASS_SECONDS = .78, BURST_MARGIN = .82, HANDOFF_SECONDS = .10, AIM_ANGLE = 22.;
 	private const BOOST_RAMP = .24;
@@ -18,6 +20,9 @@ final class SpeedSeeker
 	private string $phase = 'mounted';
 	private int $slot = 0;
 	private float $clock = 0., $passSpeed = 0.;
+	/** Animation time since wing release, continuous across the changes in flight phase. */
+	private ?float $airtime=null;
+	private float $previousAirtime=0.;
 	private ?array $velocity = null, $impact = null;
 	/** Drop poses end with the loom clearance above the roof. Older recorded drops used 1.32 m. */
 	private array $start = [];
@@ -28,6 +33,8 @@ final class SpeedSeeker
 	public function step(float $dt,array $car,?array $plane,string $patrol,Landscape $land,float $water,?array $beforeCar=null,?callable $eye=null,float $aspect=1.): ?array
 	{
 		$this->previous=$this->pose;
+		$this->previousAirtime=$this->airtime ?? 0.;
+		if($this->airtime!==null) $this->airtime+=$dt;
 		$this->clock+=$dt;
 		$drifting=abs($car['drift'])>=self::SLIP && ($car['motion'] ?? 'driving')==='driving';
 		if($this->phase==='reload') {
@@ -52,7 +59,7 @@ final class SpeedSeeker
 			$this->start=[$x*$g-$z*$f,$x*$f+$z*$g,$wing['y']-$car['y'],
 				atan2(sin($wing['yaw']-$course),cos($wing['yaw']-$course)),$wing['pitch'],$wing['roll'],self::LOOM_ABOVE_ROOF];
 			$this->velocity=[$plane['vx'],$plane['vy'],$plane['vz']];
-			$this->phase='drop'; $this->clock=0.;
+			$this->phase='drop'; $this->clock=0.; $this->airtime=0.;
 		}
 		if($this->phase==='return' && $plane!==null && $patrol==='escort') {
 			if($this->driftPass) return $this->boostedReturn($dt,$plane,$beforeCar ?? $car,$car,$land,$water);
@@ -279,7 +286,7 @@ final class SpeedSeeker
 		$this->driftPass=false;
 		$this->impact=$hit['point'] ?? null; $this->mount=$hit['mount'] ?? null;
 		$this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[];
-		$this->pose=$this->velocity=$this->rearPassGap=null;
+		$this->pose=$this->velocity=$this->rearPassGap=$this->airtime=null;
 		return $hit;
 	}
 
@@ -345,6 +352,23 @@ final class SpeedSeeker
 		return [sin($p['yaw'])*$run,sin($p['pitch'])*$speed,cos($p['yaw'])*$run];
 	}
 
+	/** Swing the visible tail around the forward center of gravity on the flight path. */
+	public static function modelPose(?array $shot): ?array
+	{
+		$p=$shot['pose'] ?? null;
+		$t=$shot['airtime'] ?? 0.;
+		if($p===null || $t<=0.) return $p;
+		$side=($shot['slot'] ?? 0)===0 ? 1. : -1.;
+		// Two overlapping beats break up the rhythm. Ease into them as the prop clears the wing.
+		$wave=.78*sin(2.*M_PI*1.35*$t)+.22*sin(2.*M_PI*2.15*$t);
+		$yaw=$p['yaw'];
+		$p['yaw']+=$side*deg2rad(8.)*self::smooth($t/.24)*$wave;
+		$pivot=self::CENTER_OF_GRAVITY*cos($p['pitch']);
+		$p['x']+=$pivot*(sin($yaw)-sin($p['yaw']));
+		$p['z']+=$pivot*(cos($yaw)-cos($p['yaw']));
+		return $p;
+	}
+
 	/** A patrol carries one prop per wing. The other wing stays loaded throughout a pass. */
 	public static function mountedSlots(?array $seeker): array
 	{
@@ -355,11 +379,14 @@ final class SpeedSeeker
 	{
 		$p=$this->pose;
 		if($alpha<1. && $this->previous!==null && $p!==null) $p=AirPatrol::interpolate($this->previous,$p,$alpha);
-		return ['phase'=>$this->phase,'slot'=>$this->slot,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+($this->rearPassGap!==null ? ['rearPassGap'=>$this->rearPassGap] : [])+($this->driftPass ? ['driftPass'=>true] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
+		$airtime=$this->airtime!==null ? ['airtime'=>$this->previousAirtime+$alpha*($this->airtime-$this->previousAirtime)] : [];
+		return ['phase'=>$this->phase,'slot'=>$this->slot,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+$airtime+($this->rearPassGap!==null ? ['rearPassGap'=>$this->rearPassGap] : [])+($this->driftPass ? ['driftPass'=>true] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
 	}
 
 	public function resume(array $s): void
 	{
+		$this->airtime=$s['airtime'] ?? null;
+		$this->previousAirtime=$this->airtime ?? 0.;
 		$this->driftPass=$s['driftPass'] ?? false;
 		$this->slot=$s['slot'] ?? 0;
 		$this->rearPassGap=$s['rearPassGap'] ?? null;
