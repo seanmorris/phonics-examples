@@ -18,6 +18,8 @@ final class SpeedSeeker
 	private const MISS_LEAD = 2.*AirPatrol::ESCORT_LEAD, MISS_PAST_JET = 32.;
 	private const BOOST_RAMP = .24;
 	private bool $driftPass=false;
+	/** Direction of the ongoing flick during its brief follow-through, zero once decided. */
+	private int $flickSide=0;
 	private float $tumbleClose=0.;
 	private ?float $rearPassGap=null;
 	private string $phase = 'mounted';
@@ -78,13 +80,18 @@ final class SpeedSeeker
 			$this->velocity ??= self::motionAlongPose($this->pose,$car['speed']);
 			if($rearDrift) {
 				$this->driftPass=true;
-				$this->loosePass($car,$patrol==='escort' ? $plane : null);
+				$this->flickSide=$car['drift'] <=> 0.;
 				$this->clock=$dt;
-			}
-			$this->passSpeed=hypot(hypot($this->velocity[0],$this->velocity[2]),$this->velocity[1]);
+			} else $this->passSpeed=hypot(hypot($this->velocity[0],$this->velocity[2]),$this->velocity[1]);
 		}
 		if($this->phase==='missed') {
 			$camera=$this->driftPass && $eye ? $eye() : null;
+			if($this->flickSide!==0) {
+				$continuing=$drifting && ($car['drift'] <=> 0.)===$this->flickSide && $plane!==null && $patrol==='escort'
+					&& $this->clock<=self::HANDOFF_SECONDS+1e-9;
+				if($rearDrift || $continuing) $this->loosePass($car,$patrol==='escort' ? $plane : null,$rearDrift);
+				if(!$continuing || $this->rearPassGap!==null || $this->clock>=self::HANDOFF_SECONDS-1e-9) $this->flickSide=0;
+			}
 			$remaining=max(0.,self::MISS_SECONDS-$this->clock+$dt);
 			$step=$this->driftPass ? min($dt,$remaining) : $dt;
 			$velocity=$this->velocity;
@@ -99,6 +106,7 @@ final class SpeedSeeker
 			if($hit!==null) return $this->finish($hit);
 			if($burst) return $this->finish(['kind'=>'air','point'=>[$this->pose['x'],$this->pose['y'],$this->pose['z']]]);
 			if(!$this->driftPass && $this->clock>=6.) return $this->finish(null);
+			if($this->flickSide!==0 && $camera && self::screenExtent($this->pose,$camera,$aspect)>=.92) $this->flickSide=0;
 			if($this->rearPassGap!==null) {
 				if(!$this->driftPass || $plane===null || $patrol!=='escort' ||
 					($camera && self::screenExtent($this->pose,$camera,$aspect)>=.92)) {
@@ -179,8 +187,8 @@ final class SpeedSeeker
 		return null;
 	}
 
-	/** The driver's flick aims the prop once. It cannot earn a new lock by coasting past the jet later. */
-	private function loosePass(array $car,?array $plane): void
+	/** Carry the driver's flick through the visible handoff, then let the pass coast. */
+	private function loosePass(array $car,?array $plane,bool $release): void
 	{
 		$course=$car['yaw']-$car['drift'];
 		$yaw=$course+max(-.95,min(.95,$car['drift']));
@@ -191,9 +199,13 @@ final class SpeedSeeker
 		$travel=max(0.,$car['speed'])*cos($car['pitch'] ?? 0.);
 		$vx=$travel*sin($course)+$extra*sin($yaw); $vz=$travel*cos($course)+$extra*cos($yaw);
 		$this->velocity=[$vx,max(0.,$car['speed'])*sin($car['pitch'] ?? 0.)+$extra*tan($pitch),$vz];
+		$this->passSpeed=hypot(hypot($vx,$vz),$this->velocity[1]);
+		$oldYaw=$this->pose['yaw']; $oldPitch=$this->pose['pitch'];
 		$this->pose['yaw']=atan2($vx,$vz);
 		$this->pose['pitch']=atan2($this->velocity[1],hypot($vx,$vz));
-		if($plane!==null) {
+		// The follow-through must turn the prop. A jet crossing a stationary aim cannot earn a return.
+		$turn=$this->pose['yaw']-$oldYaw;
+		if($plane!==null && ($release || abs(atan2(sin($turn),cos($turn)))+abs($this->pose['pitch']-$oldPitch)>1e-6)) {
 			$dx=$plane['x']-$this->pose['x']; $dy=$plane['y']-$this->pose['y']; $dz=$plane['z']-$this->pose['z'];
 			$gap=hypot(hypot($dx,$dz),$dy);
 			[$nx,$ny,$nz]=array_slice(VehicleModel::basis($this->pose),6);
@@ -349,6 +361,7 @@ final class SpeedSeeker
 	private function finish(?array $hit): ?array
 	{
 		$this->driftPass=false;
+		$this->flickSide=0;
 		$this->tumbleClose=0.;
 		$this->impact=$hit['point'] ?? null; $this->mount=$hit['mount'] ?? null;
 		$this->phase='reload'; $this->clock=0.; $this->start=$this->carFrames=[];
@@ -454,6 +467,7 @@ final class SpeedSeeker
 		if($alpha<1. && $this->previous!==null && $p!==null) $p=AirPatrol::interpolate($this->previous,$p,$alpha);
 		$airtime=$this->airtime!==null ? ['airtime'=>$this->previousAirtime+$alpha*($this->airtime-$this->previousAirtime)] : [];
 		return ['phase'=>$this->phase,'slot'=>$this->slot,'clock'=>$this->clock,'start'=>$this->start,'passSpeed'=>$this->passSpeed,'velocity'=>$this->velocity,'impact'=>$this->impact,'pose'=>$p]+$airtime
+			+($this->flickSide!==0 ? ['flickSide'=>$this->flickSide] : [])
 			+($this->tumbleClose>0. ? ['tumbleClose'=>$this->tumbleClose] : [])+($this->rearPassGap!==null ? ['rearPassGap'=>$this->rearPassGap] : [])+($this->driftPass ? ['driftPass'=>true] : [])+($this->mount ? ['mount'=>$this->mount] : [])+($this->carFrames ? ['carFrames'=>$this->carFrames] : []);
 	}
 
@@ -462,6 +476,7 @@ final class SpeedSeeker
 		$this->airtime=$s['airtime'] ?? null;
 		$this->previousAirtime=$this->airtime ?? 0.;
 		$this->driftPass=$s['driftPass'] ?? false;
+		$this->flickSide=$s['flickSide'] ?? 0;
 		$this->tumbleClose=$s['tumbleClose'] ?? 0.;
 		$this->slot=$s['slot'] ?? 0;
 		$this->rearPassGap=$s['rearPassGap'] ?? null;

@@ -418,7 +418,7 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 	}
 	if($delay<1.95) expect($driftedOnApproach && $followed,'An early handbrake slide still leads into the bumper chase.');
 	expect($missed===$shakes,'A slide that ends before the bumper chase cannot shake the lock later.');
-	if($shakes) expect(($releaseAngle<=22.)===$wins,'Only a flick pointed toward the jet at release can win.');
+	if($shakes && $releaseAngle<=22.) expect($wins,'An on-target release still earns the original visible handoff.');
 	if($shakes && !$wins) expect(abs($missLead-2.*AirPatrol::ESCORT_LEAD)<6.,'The miss flashes about two escort lengths ahead of the driver.');
 	expect(($lockedAt!==null)===$wins && ($wonAt!==null)===$wins,'The aimed flick returns to the jet and the other flicks miss.');
 	if($wins) {
@@ -519,6 +519,43 @@ expect(!isset($prop->state()['rearPassGap']),'A nearby jet across the drift dire
 $hit=null;
 for($i=0;$i<120 && !$hit;$i++) $hit=$prop->step(1/60,$car,$plane,'escort',$land,-10.);
 expect($hit['kind']==='air','A jet crossing the released path later still leaves an ordinary airburst.');
+
+// A borderline flick can finish pointing at the escort during the existing 100 ms handoff.
+(static function(Landscape $land): void {
+	foreach([30,60,120] as $hz) foreach([-1.,1.] as $side) foreach(['during','boundary','late','let-go','reverse','look-away'] as $gesture) {
+		$car=['x'=>0.,'y'=>0.,'z'=>0.,'pitch'=>0.,'roll'=>0.,'yaw'=>$side*.2,'drift'=>$side*.2,'speed'=>50.];
+		$pose=['x'=>0.,'y'=>4.,'z'=>-4.,'yaw'=>0.,'pitch'=>0.,'roll'=>0.];
+		$plane=array_replace($pose,['x'=>$side*32.,'y'=>11.]);
+		$shot=new SpeedSeeker;
+		$shot->resume(['phase'=>'chase','clock'=>0.,'start'=>array_fill(0,6,0.),'pose'=>$pose,'velocity'=>[0.,0.,50.],'passSpeed'=>50.]);
+		$watch=new Camera; $watch->fov=1.4; $watch->pitch=0.;
+		$turnAt=match($gesture) {'during'=>.065,'late'=>.11,default=>.10};
+		$returned=null;
+		for($tick=1;$tick<=$hz*.22;$tick++) {
+			$time=$tick/$hz; $old=$car; $car['z']+=50./$hz; $plane['z']=$car['z']+48.;
+			$watch->position=[0.,4.,$car['z']-14.]; $watch->yaw=M_PI;
+			if($tick===2) {
+				if($gesture==='let-go') $car['drift']=0.;
+				if($gesture==='reverse') $car['drift']*=-1.;
+				if($gesture==='look-away') $watch->yaw=0.;
+			}
+			if($time+1e-9>=$turnAt) $car['yaw']=$car['drift']=$side*.66;
+			$shot->step(1./$hz,$car,$plane,'escort',$land,-10.,$old,fn()=>$watch,16/9);
+			$s=$shot->state();
+			if($tick===1) {
+				expect(!isset($s['rearPassGap']) && $s['flickSide']===(int)$side,'The first sample misses, leaving this drift open for follow-through.');
+				$frame=['phase'=>'idle','flight'=>array_fill(0,6,0.),'pose'=>null,'seeker'=>$s];
+				$events=DemoEvents::import([[0,json_encode(['airPatrol'=>$frame],JSON_THROW_ON_ERROR)]],1);
+				$shot=new SpeedSeeker; $shot->resume($events->at(0,0.,'car')['airPatrol']['seeker']);
+			}
+			if($s['phase']==='return') { $returned=$time; break; }
+		}
+		if(in_array($gesture,['during','boundary'],true)) expect($returned!==null && abs($returned-.10)<1e-8,
+			'A continuing flick can enter the cone right up to the ordinary handoff, in either direction and after a demo takeover.');
+		else expect($returned===null && !isset($shot->state()['flickSide']),
+			'A late correction, interrupted drift, or offscreen pass cannot reopen the flick window.');
+	}
+})($land);
 
 // Looking away during the loose pass closes the handoff, including after branching a recording.
 $watch=new Camera; $watch->position=[0.,4.,-14.]; $watch->yaw=0.;

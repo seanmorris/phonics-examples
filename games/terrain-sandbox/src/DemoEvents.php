@@ -154,6 +154,8 @@ final class DemoEvents
 				if($legacy || !is_array($s) || !self::vector([$s['clock'] ?? null,$s['passSpeed'] ?? null],2)
 					|| (array_key_exists('slot',$s) && !in_array($s['slot'],[0,1],true))
 					|| (isset($s['airtime']) && (!isset($s['pose']) || !self::vector([$s['airtime']],1) || $s['airtime']<0.))
+					|| (isset($s['flickSide']) && (!in_array($s['flickSide'],[-1,1],true) || ($s['phase'] ?? null)!=='missed'
+						|| ($s['driftPass'] ?? false)!==true || isset($s['rearPassGap'])))
 					|| (isset($s['tumbleClose']) && (!in_array($s['phase'] ?? null,['drop','chase'],true)
 						|| !self::vector([$s['tumbleClose']],1) || $s['tumbleClose']<=0. || $s['tumbleClose']>1.))
 					|| (isset($s['rearPassGap']) && (!in_array($s['phase'] ?? null,['missed','return'],true) || !self::vector([$s['rearPassGap']],1) || $s['rearPassGap']<0))
