@@ -1865,6 +1865,11 @@ final class Session
 				$controls = $action['controls'] ?? [];
 				if(isset($action['preset'])) $controls = Weather::PRESETS[$action['preset']] ?? throw new \InvalidArgumentException('Unknown weather preset.');
 				$this->weather->edit($controls,$this->time,($action['resetGround'] ?? false) === true);
+				if(isset($action['cover']))
+				{
+					if(!is_int($action['cover']) && !is_float($action['cover'])) throw new \InvalidArgumentException('Expected a snow cover percentage.');
+					$this->weather->cover($action['cover'] / 100,$this->time);
+				}
 				$this->dirty = true;
 				break;
 			case 'atmosphere-layers':

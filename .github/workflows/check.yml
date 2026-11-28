@@ -8,6 +8,7 @@ jobs:
   check:
     # Generated meshes depend on the platform math library; use the validated build image.
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,11 +26,71 @@ jobs:
       - run: npm test
       - run: npm run test:poker:exhaustive
       - run: npm run build
-      - run: npm run test:browser
+
+  browser:
+    # Every browser spec except the Landscape Sandbox's. Those draw 3D terrain in software and have jobs of their own.
+    name: browser (games)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - run: npm ci
+      - name: Install soundtrack metadata and artwork tools
+        run: command -v ffmpeg && command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npx playwright test $(ls tests/browser/*.spec.mjs | grep -v /terrain-)
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-test-results
+          name: browser-test-results-games
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  browser-terrain:
+    # Software WebGL draws the terrain several times slower here than on a workstation, and the game advances at
+    # most a tenth of a second for each frame it draws. One test runs at a time so it has the whole runner,
+    # PHONICS_TEST_SLOW scales every time limit the specs set, and the tests are divided between jobs one by one,
+    # not file by file, because one file holds most of them.
+    name: browser (terrain ${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - run: npm ci
+      - name: Install soundtrack metadata and artwork tools
+        run: command -v ffmpeg && command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: >-
+          npx playwright test tests/browser/terrain-
+          --fully-parallel --workers=1
+          --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        env:
+          PHONICS_TEST_SLOW: 16
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results-terrain-${{ matrix.shard }}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7

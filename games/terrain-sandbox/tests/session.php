@@ -2610,6 +2610,22 @@ expect($pauseMenu->finish($paused) && !$paused->menu && $paused->paused && end($
 	'Online racing opens the room and parks the local session');
 $paused->close();
 
+$covered = new Session(['worldSize' => 256]);
+input($covered, ['actions' => [['type' => 'weather', 'controls' => ['hold' => 1], 'cover' => 40]]]);
+expect($covered->status()['weather']['ground'] === [0., .4], 'The lab sets the snow on the ground outright');
+for($i = 0; $i < 60; $i++) $covered->step(1 / 60);
+expect($covered->status()['weather']['ground'] === [0., .4], 'A held ground keeps its snow as time passes');
+input($covered, ['actions' => [['type' => 'weather', 'cover' => 'deep']]]);
+expect($covered->message === 'Expected a snow cover percentage.' && $covered->status()['weather']['ground'] === [0., .4],
+	'Snow cover that is not a number is refused');
+input($covered, ['actions' => [['type' => 'weather', 'cover' => 140]]]);
+expect($covered->message === 'Invalid snow cover.' && $covered->status()['weather']['ground'] === [0., .4],
+	'Snow cover past 100 percent is refused');
+input($covered, ['actions' => [['type' => 'weather', 'controls' => ['hold' => 0]]]]);
+for($i = 0; $i < 60; $i++) $covered->step(1 / 60);
+expect($covered->status()['weather']['ground'][1] < .4, 'Released ground melts in clear weather');
+$covered->close();
+
 require __DIR__.'/support/air-patrol.php';
 require __DIR__.'/support/burst-acoustics.php';
 

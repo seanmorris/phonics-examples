@@ -117,7 +117,7 @@ In **Sky → Stars**, **Star brightness** also sets when the first stars appear.
 
 Open **Landscape Lab → Weather** and choose **Cloudy**, **Rain**, or **Snow**. Cloud cover controls how much sky the deck occupies. Altitude sets its height above sea level. Wind heading is the direction the clouds and precipitation travel, with 0° pointing north. Cloud shadow sets how much direct sunlight the deck blocks.
 
-Full rain wets dry ground in 20 seconds. Full snow covers level ground in one minute and leaves exposed rock on steep faces. Choose **Clear** to stop precipitation and watch existing snow melt and the ground dry. **Reset ground** removes both immediately. Pausing freezes the weather. Landscape saves and demo recordings retain it.
+Full rain wets dry ground in 20 seconds. Full snow covers level ground in one minute and leaves exposed rock on steep faces. Choose **Clear** to stop precipitation and watch existing snow melt and the ground dry. **Reset ground** removes both immediately. **Snow on the ground** sets the cover outright, without waiting for it to fall, and the weather carries on from there. Check **Hold the ground as it is** to keep the wetness and snow where they are whatever the weather. **Most snow on roads** caps how white the pavement gets: at 100% roads fill in with the ground, and at 0% they stay clear while snow builds up beside them. Pausing freezes the weather. Landscape saves and demo recordings retain it.
 
 ## Adjust the water
 
