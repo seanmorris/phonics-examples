@@ -366,6 +366,21 @@ export function activate({module, canvas, session, services})
 
 	const groundReadout = frame.querySelector('[data-weather-ground]');
 
+	// Snow cover can be set outright, without waiting for it to fall.
+	const snowCover = frame.querySelector('[data-weather-cover]');
+
+	snowCover.addEventListener('input', () => {
+		snowCover.nextElementSibling.value = snowCover.valueAsNumber;
+		push({type: 'weather', cover: snowCover.valueAsNumber});
+	}, {signal});
+
+	// Holding the ground keeps its wetness and snow whatever the weather, so a cover set here stays.
+	const holdGround = frame.querySelector('[data-weather-hold]');
+
+	holdGround.addEventListener('change', () => {
+		push({type: 'weather', controls: {hold: holdGround.checked ? 1 : 0}});
+	}, {signal});
+
 	const focus = () => canvas.focus({preventScroll: true});
 
 	const focusedField = target => target instanceof HTMLElement && Boolean(target.closest('input,select,textarea'));
@@ -1361,6 +1376,15 @@ export function activate({module, canvas, session, services})
 
 				const [wet,snow] = state.weather.ground.map(v => Math.round(v*100));
 				groundReadout.value = `Wetness ${wet}% · Snow cover ${snow}%`;
+
+				if(!snowCover.matches(':active'))
+				{
+					if(snowCover.value !== String(snow)) snowCover.value = snow;
+
+					snowCover.nextElementSibling.value = snow;
+				}
+
+				holdGround.checked = state.weather.controls.hold >= 1;
 			}
 
 			// The pause menu draws in the canvas, so screen readers hear its selected row from here.
@@ -2837,6 +2861,7 @@ function markup(journeyMarkup)
 	].join('');
 
 	const precipitationControl = weatherRange('Intensity · %', 'intensity', 0, 100, 1, 0);
+	const roadSnowControl = weatherRange('Most snow on roads · %', 'roadSnow', 0, 100, 1, 100);
 
 	const lapSelector = '<select data-value="gateLaps">' + Array.from({length: 20}, (_, i) =>
 		`<option value="${i+1}">${i+1}</option>`
@@ -3352,7 +3377,11 @@ function markup(journeyMarkup)
 	${precipitationControl}
 	</fieldset>
 	<fieldset><legend>Ground</legend><div class="terrain-row"><output data-weather-ground>Wetness 0% · Snow cover 0%</output>
-	<button type="button" data-weather-reset>Reset ground</button></div></fieldset></section>
+	<button type="button" data-weather-reset>Reset ground</button></div>
+	<label class="terrain-control"><span>Snow on the ground · %</span><input type="range" data-weather-cover min="0" max="100" step="1" value="0"><output>0</output></label>
+	<label class="terrain-check"><input type="checkbox" data-weather-hold>Hold the ground as it is</label>
+	${roadSnowControl}
+	</fieldset></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
 	<fieldset><legend>Demos</legend><div class="terrain-row"><button data-action="demo-record">Record run</button><button data-action="demo-stop" hidden>Stop recording</button><button data-action="demo-play" disabled>Play last demo</button><button data-action="demo-save" disabled>Save demo</button><button data-action="demo-file">Open demo</button><button data-action="demo-swap" hidden>Switch takes</button><input type="file" data-demo-file accept=".json,application/json" hidden></div>
 	<div data-demo-transport hidden><label class="terrain-field">Timeline<input data-demo-timeline type="range" min="0" max="0" step="any"></label>
