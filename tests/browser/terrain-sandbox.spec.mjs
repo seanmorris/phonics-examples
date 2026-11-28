@@ -2218,6 +2218,9 @@ test.describe('on a touchscreen', () => {
 });
 
 test('the default canyon lets all four wheels leave the ground and touch down again', async({page}) => {
+	// The drive to the jump takes the same game time on any machine, and the game advances a tenth of a second for
+	// each frame it draws. In software on two cores that came to between nine and more than sixteen minutes.
+	test.setTimeout(slow(180_000));
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width: 672,height: 420});

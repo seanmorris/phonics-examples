@@ -257,6 +257,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 });
 
 test('the canyon remains legible at full extent in the Roads editor', async({page}) => {
+	test.setTimeout(slow(180_000));
 	await page.setViewportSize({width: 1150,height: 760});
 	await page.goto('/games/terrain-sandbox/');
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
@@ -290,7 +291,10 @@ test('the canyon remains legible at full extent in the Roads editor', async({pag
 		}
 		return edges/samples;
 	});
-	await expect.poll(edgeFraction).toBeGreaterThan(.03);
+
+	// Drawing the whole world keeps the page busy, and the first measurement waits for it. In software on two
+	// cores that one call took 214 to 235 seconds, and the map measured 16% the first time it answered.
+	await expect.poll(edgeFraction, {timeout: slow(60_000)}).toBeGreaterThan(.03);
 	if(process.env.TERRAIN_ROAD_CAPTURES) {
 		await fs.mkdir(process.env.TERRAIN_ROAD_CAPTURES, {recursive: true});
 		await map.screenshot({path: path.join(process.env.TERRAIN_ROAD_CAPTURES, 'canyon-whole-map.png')});
