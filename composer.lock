@@ -94,7 +94,8 @@
                     "php packages/terrain-phonics/tests/render.php",
                     "php packages/terrain-phonics/tests/atmosphere-renderer.php",
                     "php packages/terrain-phonics/tests/shadows.php",
-                    "php packages/terrain-phonics/tests/grass-shells.php"
+                    "php packages/terrain-phonics/tests/grass-shells.php",
+                    "php packages/terrain-phonics/tests/lightning.php"
                 ],
                 "bench:ecs": "php benchmarks/ecs.php",
                 "lint": [

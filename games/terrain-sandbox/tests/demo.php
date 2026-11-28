@@ -143,14 +143,18 @@ $snowSample=$s->demo->duration();
 $send(['type'=>'weather','preset'=>'rain']);
 $s->input(['values'=>['starTwinkle'=>0,'shootingStars'=>0]],0.,1.);
 for($i=0;$i<12;$i++) { $s->step(1/60); $s->demo->capture($s); }
+$send(['type'=>'weather','strike'=>true]);
+$struck=$s->weather->called();
+for($i=0;$i<6;$i++) { $s->step(1/60); $s->demo->capture($s); }
 $send('demo-stop');
 $file=json_decode($s->demo->export(),true);
 $count=0;
 foreach($file['cues'] as [, $cue]) if(isset(json_decode($cue,true)['weather'])) $count++;
-check($count===3,'Only the initial weather and two edits need demo events');
+check($count===4,'Only the initial weather, two edits and a called strike need demo events');
 $loaded=DemoTape::import($s->demo->export());
 check($loaded->frame($loaded->duration())['world']===0,'Changing weather keeps the terrain chapter');
 check($loaded->frame($loaded->duration())['events']['weather']['controls']['kind']==='rain','A later seek restores rain');
+check(count($struck)===4 && ($loaded->frame($loaded->duration())['events']['weather']['strike'] ?? null)==$struck,'A demo keeps a called lightning strike');
 $send('demo-play');
 $send(['type'=>'demo-seek','seconds'=>$snowSample]);
 $send('demo-take-control');
