@@ -1,0 +1,11 @@
+Model Information:
+* title:	Jetski
+* source:	https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b
+* author:	Futurealiti (https://sketchfab.com/futurealiti)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Jetski" (https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b) by Futurealiti (https://sketchfab.com/futurealiti) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

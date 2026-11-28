@@ -15,7 +15,7 @@ use DoomPhonics\Component\Transform;
  */
 final class AutoAim
 {
-	/** The reference window spans 100 of the 160 pixels above or below the view centre. */
+	/** The reference window spans 100 of the 160 pixels above or below the view center. */
 	public const HALF_WINDOW = 100 / 160;
 	/** `P_BulletSlope` retries 1 << 26 binary-angle units, 5.625 degrees, to either side. */
 	public const SIDE_SEARCH = M_PI / 32;
@@ -25,7 +25,7 @@ final class AutoAim
 	public function __construct(private Level $level) {}
 
 	/**
-	 * @param float $pitch Freelook pitch the window is centred on; 0 reproduces the reference window exactly.
+	 * @param float $pitch Freelook pitch the window is centered on; 0 reproduces the reference window exactly.
 	 * @param array<int,array{0:Transform,1:Body}> $targets Shootable bodies by entity, without the shooter.
 	 * @return array{target:int,slope:float}|null
 	 */
@@ -53,7 +53,7 @@ final class AutoAim
 			$offsetY = $pose->y - $y;
 			$along = $offsetX * $dx + $offsetY * $dy;
 
-			// The reference intercepts a thing on its cross-section through the centre.
+			// The reference intercepts a thing on its cross-section through the center.
 			if($along <= 0 || $along > $range || abs($offsetX * $dy - $offsetY * $dx) > $body->radius) continue;
 
 			$crossings[] = [$along, 1, $entity];

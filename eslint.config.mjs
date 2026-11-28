@@ -6,6 +6,11 @@ import smNoSaccadeStyle from 'sm-no-saccade-style';
  */
 const linted = [
 	'eslint.config.mjs'
+	, 'games/terrain-sandbox/**'
+	, 'scripts/sync-terrain.mjs'
+	, 'scripts/generate-terrain-gates.mjs'
+	, 'tests/terrain-*.test.mjs'
+	, 'tests/browser/terrain-sandbox.spec.mjs'
 	, 'games/rpsc/**'
 	, 'scripts/generate-rpsc-assets.mjs'
 	, 'tests/rpsc-*.test.mjs'
@@ -19,6 +24,8 @@ const ignores = [
 	, 'games/*/browser/mental-poker.mjs'
 	, 'games/*/dist/**'
 	, 'site/dist/**'
+	// The site build unpacks the external PHP runtime and its type declarations here.
+	, '.cache/**'
 	, '.worktrees/**'
 ];
 

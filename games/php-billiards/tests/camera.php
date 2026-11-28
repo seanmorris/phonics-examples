@@ -149,20 +149,20 @@ $test('manual wheel composition eases at every frame rate and returns to idle', 
 		$expect(!$camera->settling() && $camera->target === $before[0] && $camera->viewPose()[1] === $before[1], 'Second wheel event retained an old destination');
 		foreach(['reset','patch','opening','follow'] as $boundary)
 		{
-			$cancelled = clone $camera;
-			$cancelled->zoom(-120);
-			if($boundary === 'patch') $cancelled->patch(['target' => [.4,.1,-.2]]);
-			elseif($boundary === 'opening') { $cancelled->beginGameplayView(); $cancelled->animate(2); }
-			elseif($boundary === 'follow') { $cancelled->resumeFollow(); $cancelled->follow($x, $z, .4, 10); }
-			else $cancelled->reset();
-			$pose = $cancelled->viewPose();
-			$cancelled->animate(1);
-			$expect(!$cancelled->settling() && $cancelled->viewPose() === $pose, "$boundary retained manual zoom motion");
+			$canceled = clone $camera;
+			$canceled->zoom(-120);
+			if($boundary === 'patch') $canceled->patch(['target' => [.4,.1,-.2]]);
+			elseif($boundary === 'opening') { $canceled->beginGameplayView(); $canceled->animate(2); }
+			elseif($boundary === 'follow') { $canceled->resumeFollow(); $canceled->follow($x, $z, .4, 10); }
+			else $canceled->reset();
+			$pose = $canceled->viewPose();
+			$canceled->animate(1);
+			$expect(!$canceled->settling() && $canceled->viewPose() === $pose, "$boundary retained manual zoom motion");
 		}
 	}
 });
 
-$test('zoom and both orbit inputs modify the opening destination without cancelling it', static function() use ($expect): void {
+$test('zoom and both orbit inputs modify the opening destination without canceling it', static function() use ($expect): void {
 	$camera = new Camera;
 	$camera->beginGameplayView();
 	$camera->animate(.4);
@@ -170,7 +170,7 @@ $test('zoom and both orbit inputs modify the opening destination without cancell
 	$camera->zoom(-500);
 	$camera->orbit(20, 20, .6);
 	$camera->orbitStick(.5, -.2, .1);
-	$expect($camera->transitioning() && $camera->settling() && $before === $camera->state(), 'Input cancelled or jumped the opening pose');
+	$expect($camera->transitioning() && $camera->settling() && $before === $camera->state(), 'Input canceled or jumped the opening pose');
 	$camera->animate(.95);
 	$expect(!$camera->transitioning() && !$camera->settling());
 	$expect(abs($camera->distance - 3.35 * exp(-.5)) < 1e-12);
@@ -230,11 +230,11 @@ $test('canonical and far camera composition retain their established orbit and d
 		$camera->behind(-1.1, .5, $aim);
 		$camera->patch(['pitch' => $pitch,'distance' => $distance]);
 		$camera->follow(-1.1, .5, $aim, 10);
-		// The far view frames the table at a point on the line from the cue ball to the table centre.
+		// The far view frames the table at a point on the line from the cue ball to the table center.
 		$pivot = $camera->target;
 		$blend = 1 - $pivot[0] / -1.1;
 		$expect($camera->viewPose()[1] === $pivot && $pivot[1] === 0.0 && abs($pivot[2] - .5 * (1 - $blend)) < 1e-12
-			&& $blend >= -1e-12 && $blend <= 1 + 1e-12, 'Far framing left the line from the cue ball to the table centre');
+			&& $blend >= -1e-12 && $blend <= 1 + 1e-12, 'Far framing left the line from the cue ball to the table center');
 		$expected = [$pivot[0] + cos($camera->yaw) * cos($pitch) * $distance,sin($pitch) * $distance,
 			$pivot[2] + sin($camera->yaw) * cos($pitch) * $distance];
 		$expect($expected === $camera->eye(), 'Far orbit changed');
@@ -267,7 +267,7 @@ $test('projection sweep keeps close cue balls inside the safe frame and approach
 			$expect(is_finite($ndcX) && is_finite($ndcY) && $ndcZ > -1 && $ndcZ < 1 && $w > 0, $case);
 			if($distance <= 1.2)
 			{
-				// Include the ball's silhouette, not just its centre, inside a 5% inset on every edge.
+				// Include the ball's silhouette, not just its center, inside a 5% inset on every edge.
 				foreach([[0,0,0],[Ball::RADIUS,0,0],[-Ball::RADIUS,0,0],[0,Ball::RADIUS,0],[0,-Ball::RADIUS,0],
 					[0,0,Ball::RADIUS],[0,0,-Ball::RADIUS]] as $offset)
 				{
@@ -327,7 +327,7 @@ $test('close framing joins the far view smoothly and survives zoom during the op
 	$far = $camera->viewPose();
 	$camera->patch(['distance' => 2.0 - 1e-6]); $camera->follow($cue->x, $cue->y, .4, 10);
 	// The table framing is solved numerically, so continuity holds to well under a micron rather than exactly.
-	foreach($far[1] as $index => $value) $expect(abs($camera->viewPose()[1][$index] - $value) < 1e-6, 'Framing popped at two metres');
+	foreach($far[1] as $index => $value) $expect(abs($camera->viewPose()[1][$index] - $value) < 1e-6, 'Framing popped at two meters');
 	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$cameraFrame($game, ['actions' => ['start']]);
 	$cameraFrame($game, [], [['type' => 'wheel','y' => 100]]);
@@ -340,7 +340,7 @@ $test('close framing joins the far view smoothly and survives zoom during the op
 });
 
 $test('the table view stays fitted around a corner ball through a full orbit', static function() use ($expect, $cameraGame, $cameraFrame, $project): void {
-	// A fixed blend between the ball and the table centre framed the corner: facing out over the rails left most of
+	// A fixed blend between the ball and the table center framed the corner: facing out over the rails left most of
 	// the cloth off screen. The framing is now fitted to each heading, and orbiting refits it as the view turns.
 	$game = $cameraGame();
 	$cue = $game->simulation->cue();
@@ -374,7 +374,7 @@ $test('the table view stays fitted around a corner ball through a full orbit', s
 	}
 	$cameraFrame($game, [], [['type' => 'pointer','button' => 3,'action' => 'up','x' => 400,'y' => 500]]);
 	$expect($inBand, 'The cue ball left its band on screen during the turn');
-	$expect($onLine, 'The framing left the line from the cue ball to the table centre');
+	$expect($onLine, 'The framing left the line from the cue ball to the table center');
 	$expect($worstCloth >= .9, 'Only ' . round($worstCloth * 100) . '% of the cloth stayed in view during the turn');
 	$expect($largestStep < .2, 'The framing jumped ' . round($largestStep, 3) . ' m in one 5 degree step');
 	// With the cue ball off the table there is nothing to fit around, and the view keeps its own pivot.

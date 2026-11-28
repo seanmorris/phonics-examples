@@ -12,7 +12,7 @@ use PhpBilliards\Physics\Ball;
  */
 final class MeshBuilder
 {
-	/** Longest outline edge in metres; long straight runs are split so caps and fillet bands never become needles. */
+	/** Longest outline edge in meters; long straight runs are split so caps and fillet bands never become needles. */
 	private const LONGEST_EDGE = .05;
 
 	/**
@@ -29,7 +29,7 @@ final class MeshBuilder
 
 		return [
 			'apron' => self::extrude($profiles['apron'], $profiles['bounds'], 112, 64, -.25, TableGeometry::APRON_TOP)
-			// Sampled as finely as the rail: the shelf around each side cut ends in crescent tips a few millimetres wide.
+			// Sampled as finely as the rail: the shelf around each side cut ends in crescent tips a few millimeters wide.
 			, 'bed' => self::extrude(
 				$profiles['bed'], $profiles['bounds'], TableGeometry::COLUMNS, TableGeometry::ROWS, -.047, TableGeometry::TABLETOP_TOP
 			)
@@ -153,7 +153,7 @@ final class MeshBuilder
 		$stepZ = ($maxZ - $minZ) / $rows;
 		$epsilon = min($stepX, $stepZ) * .7;
 		$segments = [];
-		// Round before formatting and add zero so points on the table's centre axes never key as "-0.000000000".
+		// Round before formatting and add zero so points on the table's center axes never key as "-0.000000000".
 		$key = static fn(array $point): string => sprintf('%.9f:%.9f', round($point['x'], 9) + 0.0, round($point['z'], 9) + 0.0);
 
 		for($row = 0; $row < $rows; $row++) for($column = 0; $column < $columns; $column++)
@@ -184,7 +184,7 @@ final class MeshBuilder
 		}
 		$used = [];
 		$loops = [];
-		// Follow unused neighbours from one end of a chain; segments arrive in grid order, so a chain must grow in
+		// Follow unused neighbors from one end of a chain; segments arrive in grid order, so a chain must grow in
 		// both directions or every contour running against that order splinters into per-cell fragments.
 		$extend = static function(string $endKey, string $stopKey, array &$used) use ($segments,$adjacent,$key): array {
 			$points = [];
@@ -296,7 +296,7 @@ final class MeshBuilder
 	/**
 	 * Restore sharp outline corners, such as pocket jaws, that marching cuts off inside a sampling cell.
 	 *
-	 * Where the exact contour normals of two neighbouring vertices turn by more than 25 degrees, their tangent lines
+	 * Where the exact contour normals of two neighboring vertices turn by more than 25 degrees, their tangent lines
 	 * meet at the corner. The intersection is kept only when it lies on the contour itself and within one cell of both
 	 * vertices, so tessellated curves never sprout spikes.
 	 *
@@ -339,9 +339,9 @@ final class MeshBuilder
 
 		// Drop the chamfer vertices beside each restored corner unless they already lie on the contour.
 		$drop = [];
-		foreach($corners as $index => $corner) foreach([$index,($index + 1) % $count] as $neighbour)
-		if(abs($field($points[$neighbour]['x'], $points[$neighbour]['z'])) > $reach * .01)
-		$drop[$neighbour] = true;
+		foreach($corners as $index => $corner) foreach([$index,($index + 1) % $count] as $neighbor)
+		if(abs($field($points[$neighbor]['x'], $points[$neighbor]['z'])) > $reach * .01)
+		$drop[$neighbor] = true;
 		$result = [];
 		for($index = 0; $index < $count; $index++)
 		{
@@ -524,7 +524,7 @@ final class MeshBuilder
 	/**
 	 * Flip interior edges of a triangulation until every one is locally Delaunay.
 	 *
-	 * Ear clipping fans a straight rail edge out from one vertex into slivers metres long and microns wide; their
+	 * Ear clipping fans a straight rail edge out from one vertex into slivers meters long and microns wide; their
 	 * depth interpolates so unstably that the cushion under the rail wins the depth test along a dashed line. Flipping
 	 * keeps exactly the same covered area and boundary edges while replacing the fans with well-shaped triangles.
 	 *
@@ -944,7 +944,7 @@ final class MeshBuilder
 		return $forward >= 0 ? [$ax,$az] : [$bx,$bz];
 	}
 
-	/** The contour in `$candidates` closest to `$loop`, which is its neighbour one fillet step inward or outward. */
+	/** The contour in `$candidates` closest to `$loop`, which is its neighbor one fillet step inward or outward. */
 	private static function nearestLoop(array $loop, array $candidates): array
 	{
 		$best = null;
@@ -960,7 +960,7 @@ final class MeshBuilder
 	}
 
 	/**
-	 * Stitch two neighbouring contours into one band, always taking the shorter diagonal.
+	 * Stitch two neighboring contours into one band, always taking the shorter diagonal.
 	 *
 	 * Both loops run the same way around their shared boundary. Triangles wind like the quad (a, a+1, b+1, b).
 	 *
@@ -1298,7 +1298,7 @@ final class MeshBuilder
 	 */
 	public static function cue(int $segments = 32): MeshData
 	{
-		// [distance from the tip, radius] in metres; the ferrule is turned flush with the shaft, and repeated distances
+		// [distance from the tip, radius] in meters; the ferrule is turned flush with the shaft, and repeated distances
 		// make the steps at the collar and the bumper.
 		$profile = [
 			[0,0],[0,.0045],[.0012,.006],[.007,.0063],[.032,.0063],[.3,.0066],[.655,.0105]
@@ -1325,7 +1325,7 @@ final class MeshBuilder
 				$turn = $segment / $segments;
 				$c = cos($turn * M_PI * 2);
 				$s = sin($turn * M_PI * 2);
-				// A surface of revolution r(d) with x = -d has the outward normal (dr/dd, cos, sin), before normalising.
+				// A surface of revolution r(d) with x = -d has the outward normal (dr/dd, cos, sin), before normalizing.
 				$normal = [$rise / $length,$c * $along / $length,$s * $along / $length];
 				$normalLength = sqrt($normal[0] ** 2 + $normal[1] ** 2 + $normal[2] ** 2) ?: 1;
 				$ring[] = $mesh->vertex([

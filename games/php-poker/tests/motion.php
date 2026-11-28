@@ -351,7 +351,7 @@ foreach([['holdem', 4, 2, 5], ['stud5', 3, 5, 0], ['stud7', 7, 7, 0]] as [$game,
 	if($boardSize) $expect($streetFrame['hiddenBoard'] === [0, 1, 2] && $streetFrame['hiddenCards'] === [], 'holdem: the flop hides three board cards and no seat cards');
 	else $expect((static function(array $hidden): array { ksort($hidden); return $hidden; })($streetFrame['hiddenCards']) === array_fill_keys(range(0, $seats - 1), [count($before['players'][0]['cards'])]), "$game: each seat waits for one new card");
 	$street->advance(10);
-	$targets = $boardSize ? $layout->centre()['board'] : array_merge(...array_map(static fn(int $seat): array => $layout->seat($seat, $seats)['cards'], range(0, $seats - 1)));
+	$targets = $boardSize ? $layout->center()['board'] : array_merge(...array_map(static fn(int $seat): array => $layout->seat($seat, $seats)['cards'], range(0, $seats - 1)));
 	foreach($street->frame($layout)['cards'] as $card) $expect($within($card['rect'], $targets), "$game: second-street cards land in place");
 	if($boardSize) $expect(array_column($street->frame($layout)['cards'], 'id') === array_slice($next['board'], 0, 3), 'holdem: the flop lands face up');
 }

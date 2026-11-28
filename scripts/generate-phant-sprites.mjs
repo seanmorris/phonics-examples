@@ -1,10 +1,10 @@
-// Generates games/phlappy-phant's pixel art and sounds: the elePHPant frames copied from the hand-pixelled sheet
+// Generates games/phlappy-phant's pixel art and sounds: the elePHPant frames copied from the hand-pixeled sheet
 // art/elephpant.png (see art/ELEPHPANT-LICENSE.md); the backdrop, pillar, ground and scenery tilesets cut from
 // GrafxKid's CC0 terrain sheet (art/terrain.png, with the parallax band mask and touched-up scenery in
 // art/terrain-parallax.png, and hand-graded dusk/dawn and night copies; see art/TERRAIN-LICENSE.md); the tileset
-// descriptions; three synthesised PCM sounds, the catalog poster and the two figures in docs/. Every byte is
+// descriptions; three synthesized PCM sounds, the catalog poster and the two figures in docs/. Every byte is
 // deterministic so `--check` can verify the committed output; `--preview DIR` also
-// writes nearest-neighbour enlargements.
+// writes nearest-neighbor enlargements.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {PNG} from 'pngjs';
@@ -30,7 +30,7 @@ const PHANT_W = 64, PHANT_H = 52, PHANT_FRAMES = 2, PHANT_ROWS = 2;
 // the two rows under it are animation frames for the backdrop's fourth row (the river). The right two columns hold
 // the foreground: a tree, a shrub and a fence, then the pillar (cap row, then walls repeating every 16 rows), the row
 // where a pillar meets the ground, and the ground with its grass top beside plain dirt. The parallax copy paints each
-// backdrop band in a flat colour and carries the latest scenery, whose bottoms sit on the 8-pixel grid.
+// backdrop band in a flat color and carries the latest scenery, whose bottoms sit on the 8-pixel grid.
 const SHEET = 224, BACKDROP = 160, OVERLAY_ROW = 96, OVERLAY_H = 32, FG_X = 160, FG_W = 64;
 const PILLAR_SLICES = {cap: 120, body0: 128, body1: 136, base: 160}, SLICE_H = 8;
 const GROUND = {grass: [160, 192], dirt: [192, 192]}, GROUND_TILE = 32;
@@ -45,7 +45,7 @@ const RIVER_FRAME_MS = 400;
 // foreground from the parallax copy; the other two are whole sheets. Between each pair the generator grades
 // STEPS - 1 in-between palettes, so each terrain tileset stacks 2 * STEPS + 1 palettes top to bottom.
 const KEYFRAMES = ['day', 'duskdawn', 'night'], CARDINAL_KEYFRAMES = ['day', 'sunrise-sunset', 'night'], STEPS = 3;
-// A pixel whose hue swings further than WIDE_SWING between keyframes, with one end a warm colour (within WARM_SPREAD of
+// A pixel whose hue swings further than WIDE_SWING between keyframes, with one end a warm color (within WARM_SPREAD of
 // WARM_HUE, the reds through golds), travels through the warm side of the wheel instead of the shorter way through
 // cyan and green, so the sky blushes on its way to dusk and night. Other swings, such as foliage turning from green to
 // night navy, take the short way through teal.
@@ -113,7 +113,7 @@ class Raster
 	}
 }
 
-/** Copy the elephant frames from the hand-pixelled sheet, checking its layout: row-major, right-facing row first. */
+/** Copy the elephant frames from the hand-pixeled sheet, checking its layout: row-major, right-facing row first. */
 async function phantFrames()
 {
 	const image = PNG.sync.read(await fs.readFile(new URL('art/elephpant.png', root)));
@@ -199,7 +199,7 @@ function srgb([lightness, chroma, hue])
 
 const graded = new Map;
 
-/** Grade one colour part of the way to another in OKLCH, taking wide hue swings through the warm side. */
+/** Grade one color part of the way to another in OKLCH, taking wide hue swings through the warm side. */
 function grade(from, to, t)
 {
 	const key = `${from}|${to}|${t}`;
@@ -207,7 +207,7 @@ function grade(from, to, t)
 	if(graded.has(key)) return graded.get(key);
 
 	const [l1, c1, h1] = oklch(from), [l2, c2, h2] = oklch(to);
-	// A nearly grey end has no meaningful hue; borrow the other end's so only lightness and chroma move.
+	// A nearly gray end has no meaningful hue; borrow the other end's so only lightness and chroma move.
 	const start = c1 < .02 ? h2 : h1, end = c2 < .02 ? h1 : h2;
 	const rising = (end - start + 360) % 360;
 	let swing = rising <= 180 ? rising : rising - 360;
@@ -217,20 +217,20 @@ function grade(from, to, t)
 	if(Math.abs(swing) > WIDE_SWING && (warm(start) || warm(end)))
 		swing = (WARM_HUE - start + 360) % 360 <= rising ? rising : rising - 360;
 
-	const colour = srgb([l1 + (l2 - l1) * t, c1 + (c2 - c1) * t, start + swing * t]);
-	graded.set(key, colour);
+	const color = srgb([l1 + (l2 - l1) * t, c1 + (c2 - c1) * t, start + swing * t]);
+	graded.set(key, color);
 
-	return colour;
+	return color;
 }
 
-/** Read the band edges from the mask: each band is a run of rows painted one flat colour. */
+/** Read the band edges from the mask: each band is a run of rows painted one flat color. */
 function bands(mask)
 {
 	const key = y => {
 		const first = mask.get(0, y).join();
 
 		for(let x = 1; x < BACKDROP; x++) if(mask.get(x, y).join() !== first)
-			throw Error(`art/terrain-parallax.png backdrop row ${y} is not one flat colour`);
+			throw Error(`art/terrain-parallax.png backdrop row ${y} is not one flat color`);
 
 		return first;
 	};
@@ -297,7 +297,7 @@ const bonkSound = () => wav(.22, (t, random) => {
 });
 
 /** Blit a string from the engine's bitmap font in ink at a pixel scale; a null target only measures. */
-async function title(target, text, x, y, scale, colour = palette.ink)
+async function title(target, text, x, y, scale, color = palette.ink)
 {
 	const font = JSON.parse(await fs.readFile(new URL('font.tsj', engine), 'utf8'));
 	const image = PNG.sync.read(await fs.readFile(new URL('font.png', engine)));
@@ -321,7 +321,7 @@ async function title(target, text, x, y, scale, colour = palette.ink)
 
 		const column = glyph.id % font.columns, row = Math.floor(glyph.id / font.columns);
 
-		if(target) target.blit(glyphs, cursor, y, scale, colour, [
+		if(target) target.blit(glyphs, cursor, y, scale, color, [
 			column * font.tilewidth, row * font.tileheight, glyph['glyph.width'], glyph['glyph.height']
 		]);
 

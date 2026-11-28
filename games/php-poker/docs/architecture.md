@@ -8,7 +8,7 @@ Each game is data. `variants.json` lists, for five-card draw, Texas Hold'em and 
 
 `Session` owns menu state, the game, independent per-seat bot streams, adaptation and cosmetic thinking delays. It calls `Bot` with that seat's authorized view only. Actual stock and opponent hands never enter the policy input. `Adaptation` observes only public completed-hand results, uses integer state and changes opponent pressure by at most 40 per adjustment on its 0–600 scale, with a one-hand cooldown. It cannot modify deck randomness. Saved states retain every policy counter.
 
-`Layout` composes every seat for a five-card fan and places the game's hand inside it, so opponents' plates and chips and the action column stay where they are when the game changes: two Hold'em cards are spread and centred, and seven stud cards share the fan's width. The human's plate alone is cut to their full hand, and the YOU disc and bank follow it. The board stands between the pot and bet plates, sized to the room the opponents leave. `Motion` deals each street card by card from the stock. `GameText` holds every word that depends on the game. `HelpPage` sets a game's How to Play copy in rows for the canvas and answers what a view starting on any row shows, where paging lands and where the scrollbar's thumb stands; the presenter scrolls through that result and the painter draws it, so both agree on what is in view. `PhpInfo` reads PHP's `phpinfo()` report, as HTML in the browser or as text on the command line, into sections that `HelpPage` sets in the same window.
+`Layout` composes every seat for a five-card fan and places the game's hand inside it, so opponents' plates and chips and the action column stay where they are when the game changes: two Hold'em cards are spread and centered, and seven stud cards share the fan's width. The human's plate alone is cut to their full hand, and the YOU disc and bank follow it. The board stands between the pot and bet plates, sized to the room the opponents leave. `Motion` deals each street card by card from the stock. `GameText` holds every word that depends on the game. `HelpPage` sets a game's How to Play copy in rows for the canvas and answers what a view starting on any row shows, where paging lands and where the scrollbar's thumb stands; the presenter scrolls through that result and the painter draws it, so both agree on what is in view. `PhpInfo` reads PHP's `phpinfo()` report, as HTML in the browser or as text on the command line, into sections that `HelpPage` sets in the same window.
 
 `Presenter` owns the 2D scene, selection/focus and input locking. The PHP application gives it `Session::view()` and receives intents carrying generation and revision. Presentation never owns card identity, betting legality or outcome selection. The browser sees only the local seat view; private offline state goes to the separate persistence module, not public history or debug status.
 
@@ -20,7 +20,7 @@ with a transcript-bound 64-round cut-and-choose proof. Chaum-Pedersen proofs bin
 verified shuffle key. Each shuffle packs its proof into four bounded Matrix actions, pairing 16-round commitments
 with their responses. The ten initial removals travel as two five-card layer batches. The room batches each complete
 shuffle and the complete private deal into three settlement handshakes, so packet fragments do not each emit two
-Matrix acknowledgements. Both clients still execute and hash every proof record before the batch boundary can settle.
+Matrix acknowledgments. Both clients still execute and hash every proof record before the batch boundary can settle.
 The current hand's private scalar and unfinished local proof plan stay in local storage, with the player's own card
 ids for every finished hand as hand history; the scalar is erased once its hand finishes. The newest 20 tables keep
 their records, and a record written by an earlier build to session storage moves on first load. Only one tab plays a
@@ -68,7 +68,7 @@ Reload replays confirmed room actions and resumes a partially published proof fr
 Incomplete durable batches are replayed after the last confirmed boundary. Shuffle packets settle once per complete
 shuffle, the initial ten-card allocation settles once, and a replacement draw settles after all requested cards are
 privately readable. The room protocol's history checkpoint mode avoids copying a large snapshot into each action
-acknowledgement.
+acknowledgment.
 
 The persistence bridge atomically replaces one browser-local document after an accepted action. It retains the old document on a storage failure. Restore checks schema, profile version, the complete profile-specific card inventory, the cards each seat and the board should hold on the current street, turn queue and chip/loan conservation. Saves made before the other games existed load as five-card draw. Corrupt or unsupported saves produce a visible recovery message instead of rerolling a replacement hand. Menus and background tabs stop bot progression.
 

@@ -76,8 +76,8 @@ check(array_map(Board::name(...), Board::goal(D)) === ['a1', 'c1', 'e1', 'g1'], 
 
 foreach([B, D] as $side)
 {
-	foreach(Board::home($side) as $square) check(Board::owner($square) === $side, 'home square colour');
-	foreach(Board::goal($side) as $square) check(Board::owner($square) === $side, 'goal square colour');
+	foreach(Board::home($side) as $square) check(Board::owner($square) === $side, 'home square color');
+	foreach(Board::goal($side) as $square) check(Board::owner($square) === $side, 'goal square color');
 
 	check(array_intersect(Board::goal($side), Board::home(Board::other($side))) === [], 'goal squares are never the opponent\'s');
 }
@@ -86,9 +86,9 @@ for($square = 0; $square < Board::SQUARES; $square++)
 {
 	$side = Board::owner($square);
 
-	// Diagonal steps stay on the mover's colour; edge neighbours are always the other side's squares.
-	foreach(Board::steps($square, $side, true) as $target) check(Board::owner($target) === $side, 'a step keeps its colour');
-	foreach(Board::neighbours($square) as $target) check(Board::owner($target) !== $side, 'an edge neighbour is the other colour');
+	// Diagonal steps stay on the mover's color; edge neighbors are always the other side's squares.
+	foreach(Board::steps($square, $side, true) as $target) check(Board::owner($target) === $side, 'a step keeps its color');
+	foreach(Board::neighbors($square) as $target) check(Board::owner($target) !== $side, 'an edge neighbor is the other color');
 
 	check(Board::square(Board::x($square), Board::y($square)) === $square, 'square round trip');
 }
@@ -98,7 +98,7 @@ check(Board::steps(sq('a2'), B, false) === [sq('b3')], 'the edge leaves one step
 check(Board::steps(sq('d6'), D, false) === [sq('c5'), sq('e5')], 'Red men step down the board');
 check(count(Board::steps(sq('d4'), D, true)) === 4, 'a king steps four ways');
 check(Board::steps(sq('a8'), B, false) === [], 'a man on the far rank has no step');
-check(count(Board::neighbours(sq('a1'))) === 2 && count(Board::neighbours(sq('d4'))) === 4, 'edge neighbours');
+check(count(Board::neighbors(sq('a1'))) === 2 && count(Board::neighbors(sq('d4'))) === 4, 'edge neighbors');
 check(Board::advance(B, sq('c3')) === 2 && Board::advance(D, sq('c3')) === 5, 'advance counts from each side\'s back rank');
 
 // Rock-paper-scissors: each kind beats exactly one other and never itself.
@@ -343,7 +343,7 @@ for($seed = 1; $seed <= 300; $seed++)
 
 		foreach($view['pieces'] as $piece)
 		{
-			check(Board::owner($piece['square']) === $piece['side'], 'a piece stays on its side\'s colour');
+			check(Board::owner($piece['square']) === $piece['side'], 'a piece stays on its side\'s color');
 			check($piece['king'] || Board::advance($piece['side'], $piece['square']) < 7, 'a man on the far rank is a king');
 
 			$kinds[$piece['side']][$game->piece($piece['square'])['kind']]++;

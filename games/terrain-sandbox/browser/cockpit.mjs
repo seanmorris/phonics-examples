@@ -1,0 +1,406 @@
+/** Synchronized aircraft instruments. PHP supplies the same interpolated eye used to draw this frame. */
+export function activate({module, canvas})
+{
+	const {FOOT, KNOT, rangeYards} = module.terrainUnits;
+	const screen = document.createElement('canvas');
+	screen.className = 'terrain-instruments';
+	screen.setAttribute('aria-hidden', 'true');
+	screen.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';
+	screen.hidden = true;
+	canvas.parentElement.append(screen);
+
+	const ctx = screen.getContext('2d');
+	const green = '#59ff86', red = '#ff5148';
+	let acquiringId = null, contactFrame = null;
+
+	/**
+	 * Locate the collapsed Landscape Lab button in the top corner, in layout units from the center.
+	 * @return {?{left: number, bottom: number}} Its left edge less 10 CSS pixels, and its bottom edge plus 10;
+	 * null when no collapsed button shares the top of the frame.
+	 */
+	function labButton()
+	{
+		const sandbox = screen.closest('.terrain-sandbox') ?? screen.parentElement;
+		const button = sandbox?.querySelector('.terrain-panel:not([open])');
+
+		if(!button) return null;
+
+		const box = screen.getBoundingClientRect(), place = button.getBoundingClientRect();
+
+		if(!box.width || place.top - box.top > box.height/4) return null;
+
+		const unit = Math.min(screen.width/800, screen.height/720);
+		const sx = screen.width/box.width, sy = screen.height/box.height;
+
+		return {
+			left: ((place.left - box.left - 10)*sx - screen.width/2)/unit
+			, bottom: ((place.bottom - box.top + 10)*sy - screen.height/2)/unit
+		};
+	}
+
+	function draw(frame)
+	{
+		if(!frame)
+		{
+			screen.hidden = true;
+			acquiringId = contactFrame = null;
+
+			return;
+		}
+
+		const {width, height, eye, basis, jet, targets, range, cockpit} = frame;
+		// Compass bearing of the horizontal nose, including the far side of an Expert loop.
+		const bearing = Math.PI-jet.yaw+(Math.cos(jet.pitch)<0 ? Math.PI : 0);
+		screen.hidden = false;
+
+		if(screen.width !== width || screen.height !== height)
+		{
+			screen.width = width;
+			screen.height = height;
+		}
+
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
+		ctx.clearRect(0, 0, width, height);
+		// A uniform layout unit keeps the ring circular on tall and ultrawide viewports.
+		const unit = Math.min(width/800, height/720), w = width/unit, h = height/unit;
+		ctx.setTransform(unit, 0, 0, unit, width/2, height/2);
+		ctx.lineJoin = 'round';
+		ctx.shadowColor = '#0a2219';
+		ctx.shadowBlur = 2*unit;
+		const focal = h/(2*Math.tan(frame.fov/2)), ring = h*frame.ring;
+
+		const dot = (a, b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+		const [nose,right,up] = basis;
+
+		const project = (v, near) => {
+			const z = dot(v, nose);
+
+			return z > near ? [focal*dot(v, right)/z, -focal*dot(v, up)/z] : null;
+		};
+
+		function line(x, y, x2, y2, color = green)
+		{
+			ctx.strokeStyle = color;
+			ctx.beginPath();
+			ctx.moveTo(x, y);
+			ctx.lineTo(x2, y2);
+			ctx.stroke();
+		}
+
+		function diamond(x, y, rx, ry, color = green)
+		{
+			ctx.save();
+			ctx.translate(x, y);
+
+			ctx.strokeStyle = color;
+			ctx.beginPath();
+			ctx.moveTo(-rx, 0);
+			ctx.lineTo(0, -ry);
+			ctx.lineTo(rx, 0);
+			ctx.lineTo(0, ry);
+			ctx.closePath();
+			ctx.stroke();
+			ctx.restore();
+		}
+
+		function circle(x, y, r, color = green)
+		{
+			ctx.strokeStyle = color;
+			ctx.beginPath();
+			ctx.arc(x, y, r, 0, 2*Math.PI);
+			ctx.stroke();
+		}
+
+		function text(value, x, y, size = 16, color = green, align = 'center')
+		{
+			ctx.textAlign = align;
+			ctx.textBaseline = 'middle';
+			ctx.font = 'bold ' + size + 'px monospace';
+			ctx.fillStyle = color;
+			ctx.fillText(String(value), x, y);
+		}
+
+		function label(value, x, y, width, fill = '#17c652', ink = '#071d0d')
+		{
+			ctx.fillStyle = fill;
+			ctx.fillRect(x-width/2, y-10, width, 20);
+			text(value, x, y, 16, ink);
+		}
+
+		const target = targets[range.selected];
+		const targetPoint = target && range.visible ? project(target.map((n, i) => n-eye[i]), .25) : null;
+		const acquiring = cockpit && targetPoint && range.lockProgress > 0 && !range.locked;
+
+		// Draw contact at the target on the first locked frame, including redraws of that frame while paused.
+		if(!cockpit || !targetPoint || !range.locked) contactFrame = null;
+		else if(acquiringId === range.selected) contactFrame = range.elapsed;
+
+		acquiringId = acquiring ? range.selected : null;
+		const dx = target ? target[0]-jet.x : 0, dz = target ? target[2]-jet.z : 0;
+		const distance = target ? Math.hypot(dx, target[1]-jet.y, dz) : 0;
+		ctx.lineWidth = 1.8;
+		const bottom = h/2-37, end = w/2-22;
+
+		if(cockpit)
+		{
+			const deg = Math.PI/180;
+			const pitch = Math.asin(Math.max(-1, Math.min(1, nose[1])))/deg;
+			const roll = Math.atan2(right[1], up[1]);
+			const heading = (bearing/deg%360+360)%360;
+			const top = -h/2+36, left = -w/2+22;
+
+			circle(0, 0, ring);
+			ctx.save();
+			ctx.beginPath();
+			ctx.arc(0, 0, ring-2, 0, 2*Math.PI);
+			ctx.clip();
+			ctx.rotate(roll);
+
+			for(let level = -90; level<=90; level += 5)
+			{
+				if(Math.abs(level-pitch)>32) continue;
+
+				const y = focal*Math.tan((pitch-level)*deg);
+				const length = level === 0 ? ring*.91 : ring*.49;
+				ctx.setLineDash(level < 0 ? [9,6] : []);
+
+				for(const side of [-1,1])
+				{
+					line(side*26, y, side*length, y);
+					line(side*length, y, side*length, y+(level>0 ? 5 : -5));
+					text(level, side*(length+15), y, 13);
+				}
+			}
+
+			ctx.restore();
+			const path = project([jet.vx, jet.vy, jet.vz], 1e-6);
+			const pathVisible = path && Math.abs(path[0]) <= w/2+25 && Math.abs(path[1]) <= h/2+5;
+
+			if(acquiring || targetPoint && contactFrame === range.elapsed)
+			{
+				const t = range.lockProgress, blend = t*t*(3-2*t);
+				const fromX = Math.max(-w/2, Math.min(w/2, path?.[0] ?? 0));
+				const fromY = Math.max(-h/2, Math.min(h/2, path?.[1] ?? 0));
+				const x = fromX+(targetPoint[0]-fromX)*blend, y = fromY+(targetPoint[1]-fromY)*blend;
+				diamond(x, y, 6+3*blend, 5+4*blend, range.locked ? red : green);
+			}
+
+			if(pathVisible)
+			{
+				const [x,y] = path;
+				line(x-25, y, x-6, y);
+				line(x+6, y, x+25, y);
+				diamond(x, y, 6, 5);
+			}
+
+			const headings = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+
+			for(let tick = Math.ceil((heading-31)/4.5); tick*4.5<=heading+31; tick++)
+			{
+				const x = (tick*4.5-heading)*5;
+				line(x, top+28, x, top+(tick%5===0 ? 15 : 23));
+
+				if(tick%5===0) text(headings[((tick/5)%16+16)%16], x, top, 18);
+			}
+
+			function tape(value, step, side, title, caption)
+			{
+				const readout = side*Math.min(ring+190, w*.43), x = readout-side*51;
+
+				for(let n = Math.floor(value/step)-4; n<=Math.floor(value/step)+4; n++)
+				{
+					if(n<0) continue;
+
+					const y = (value/step-n)*33;
+					line(x, y, x+side*(n%2===0 ? 20 : 10), y);
+
+					if(n%2===0 && (y < -18 || y > 35)) text(n*step, readout, y, 14);
+				}
+
+				text(title, x, -161, 13);
+				text(Math.round(value), readout, 0, 24);
+				text(caption, readout, 21, 13);
+				line(x-side*12, 0, x, 0);
+			}
+
+			tape(jet.speed/KNOT, 20, -1, 'KTS', 'SPD');
+			tape(Math.max(0, jet.y-range.ground)/FOOT, 100, 1, 'FT AGL', 'ALT');
+
+			const percent = frame.thrust, hot = Math.max(0, (percent-100)/40);
+			const hue = Math.round(141*(1-hot));
+			const rim = 'hsl(' + hue + ' 88% 55%)';
+			const cx = left+38, cy = top+23, dialRadius = 31, start = Math.PI/2;
+			const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, dialRadius);
+			gradient.addColorStop(0, 'hsl(' + (95-39*hot) + ' 100% 63%)');
+			gradient.addColorStop(.54, 'hsl(' + (127-101*hot) + ' 94% 53%)');
+			gradient.addColorStop(1, rim);
+
+			// The scale sweeps clockwise from six o'clock to three. Its free quadrant holds the readout.
+			ctx.beginPath();
+			ctx.moveTo(cx, cy);
+			ctx.arc(cx, cy, dialRadius, start, start+1.5*Math.PI*percent/140);
+			ctx.closePath();
+
+			ctx.fillStyle = gradient;
+			ctx.fill();
+
+			ctx.strokeStyle = rim;
+			ctx.beginPath();
+			ctx.arc(cx, cy, dialRadius, start, 2*Math.PI);
+			ctx.stroke();
+			line(cx-dialRadius-4, cy, cx-dialRadius+4, cy, rim);
+			line(cx, cy-dialRadius-4, cx, cy-dialRadius+4, rim);
+			line(cx, cy+dialRadius-3, cx, cy+dialRadius+3, rim);
+
+			label('ENG', cx+23, cy+5, 44, rim, '#171c14');
+			text(percent + '%', cx+3, cy+27, 19, rim, 'left');
+
+			const seconds = Math.floor(range.elapsed);
+
+			// The collapsed Landscape Lab button keeps its corner. The clock ends just left of it when it clears the
+			// compass tape, which reaches 180 units from the center, and otherwise drops below the button.
+			const lab = labButton();
+			const beside = lab !== null && Math.min(end, lab.left) - 125 > 180;
+			const clock = beside ? Math.min(end, lab.left) : end;
+			const clockTop = lab === null || beside ? top : Math.max(top, lab.bottom + 14);
+
+			text(
+				String(Math.floor(seconds/60)).padStart(2, '0') + "' " + String(seconds%60).padStart(2, '0') + '"'
+				, clock
+				, clockTop
+				, 27
+				, green
+				, 'right'
+			);
+
+			text('FLIGHT TIME', clock, clockTop+22, 12, green, 'right');
+
+			for(let i = 0; i<2; i++)
+			{
+				ctx.fillStyle = i<range.ready ? green : '#28573b';
+				ctx.fillRect(end-177+i*23, bottom-39, 11, 24);
+			}
+
+			text(range.ready, end-160, bottom-5, 27);
+			label('MISSILE', end-160, bottom+18, 86);
+		}
+
+		const radius = 57, rx = end-radius, ry = bottom-radius+12;
+		ctx.fillStyle = 'rgba(8,27,22,.48)';
+		ctx.beginPath();
+		ctx.arc(rx, ry, radius, 0, 2*Math.PI);
+		ctx.fill();
+		circle(rx, ry, radius);
+		line(rx-radius, ry, rx+radius, ry);
+		line(rx, ry-radius, rx, ry+radius);
+		line(rx, ry, rx-35, ry-44);
+		line(rx, ry, rx+35, ry-44);
+
+		const scale = distance>2500 ? 5000 : distance>1000 ? 2500 : 1000;
+		text(scale===1000 ? 'S' : scale===2500 ? 'M' : 'L', rx-radius-12, ry, 15);
+
+		const c = Math.cos(bearing), s = Math.sin(bearing);
+		let nearest = null, closestSq = frame.contactRange**2;
+
+		for(const [id,pos] of Object.entries(targets))
+		{
+			const x = pos[0]-jet.x,z = pos[2]-jet.z;
+			const factor = radius/Math.max(scale, Math.hypot(x, z)*1.09);
+			const bx = rx+(c*x+s*z)*factor;
+			const by = ry+(-s*x+c*z)*factor;
+			ctx.fillStyle = Number(id)===range.selected ? red : '#ffca51';
+			const dy = pos[1]-jet.y, altitude = Math.sign(dy);
+			const distanceSq = x*x+dy*dy+z*z;
+
+			if(cockpit && distanceSq <= closestSq)
+			{
+				nearest = pos;
+				closestSq = distanceSq;
+			}
+
+			if(altitude === 0) ctx.fillRect(bx-3, by-3, 6, 6);
+			else
+			{
+				ctx.beginPath();
+				ctx.moveTo(bx, by-6*altitude);
+				ctx.lineTo(bx+5.5, by+4*altitude);
+				ctx.lineTo(bx-5.5, by+4*altitude);
+				ctx.closePath();
+
+				ctx.fill();
+			}
+		}
+
+		for(const [kind, x, z] of frame.traffic ?? [])
+		{
+			if(kind !== 'missile') continue;
+
+			const dx = x-jet.x, dz = z-jet.z;
+			const factor = radius/Math.max(scale, Math.hypot(dx, dz)*1.09);
+			ctx.beginPath();
+			ctx.arc(rx+(c*dx+s*dz)*factor, ry+(-s*dx+c*dz)*factor, 3, 0, 2*Math.PI);
+			ctx.fillStyle = '#ff9354';
+			ctx.fill();
+		}
+
+		if(nearest)
+		{
+			const direction = nearest.map((n, i) => n-eye[i]);
+			const across = dot(direction, right), down = -dot(direction, up);
+			const forward = dot(direction, nose), radial = Math.hypot(across, down);
+
+			// In front, the projected distance from the center is focal * radial / forward.
+			if(forward <= 0 || focal*radial > ring*forward)
+			{
+				const angle = radial < .001 ? Math.PI : Math.atan2(across, -down);
+				ctx.save();
+				ctx.rotate(angle);
+				ctx.translate(0, -ring-4);
+
+				ctx.beginPath();
+				ctx.moveTo(0, -12);
+				ctx.lineTo(6, 0);
+				ctx.lineTo(-6, 0);
+				ctx.closePath();
+				ctx.fillStyle = green;
+				ctx.fill();
+				ctx.restore();
+			}
+		}
+
+		if(targetPoint)
+		{
+			const [x,y] = targetPoint, c = range.locked ? red : green;
+			ctx.strokeStyle = c;
+			ctx.setLineDash(distance>1200 ? [5,4] : []);
+			ctx.strokeRect(x-13, y-13, 26, 26);
+			ctx.setLineDash([]);
+
+			if(range.locked)
+			for(const side of [-1,1])
+			{
+				line(x+side*10, y, x+side*19, y, c);
+				line(x, y+side*10, x, y+side*19, c);
+			}
+
+			text(range.beachBall ? 'BALL' : 'BAL', x+21, y-8, 14, c, 'left');
+			text(rangeYards(distance), x+21, y+9, 14, c, 'left');
+		}
+
+		if(range.locked && Math.floor(range.elapsed*4)%2===0) text('LOCK ON', 0, h*.42, 20);
+
+		if(range.hit) label('HIT', 0, h*.34+8, 52);
+	}
+
+	module.terrainVehicleFrame = json => {
+		const frame = json ? JSON.parse(json) : null;
+		module.drawTerrainMap(frame);
+		module.drawTerrainSpeedometer(frame);
+		draw(frame?.jet ? frame : null);
+	};
+
+	return () => {
+		delete module.terrainVehicleFrame;
+		screen.remove();
+	};
+}

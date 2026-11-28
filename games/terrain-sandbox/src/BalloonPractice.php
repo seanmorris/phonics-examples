@@ -1,0 +1,384 @@
+<?php
+declare(strict_types=1);
+namespace TerrainSandbox;
+
+use TerrainPhonics\Landscape;
+use TerrainPhonics\RayQuery;
+
+/** Authored balloon placements and the transient fixed-step arcade practice session. */
+final class BalloonPractice
+{
+	private const MAX_BALLOONS = 32;
+	private const LOCK_SECONDS = .3;
+	public const CONTACT_RANGE = 4000.0;
+	/** Ring radius as a fraction of viewport height. The HUD draws this same circle. */
+	public const RING = .285;
+	private array $placements = [], $positions = [], $popped = [];
+	private int $nextId = 1, $practiceId = 0;
+	private int $lastPracticeSide = 0;
+	private ?array $practicePoint = null;
+	private bool $practice = false, $visible = false;
+	private float $respawn = 0, $dwell = 0, $checkAt = 0, $floorAt = 0, $gunAt = 0;
+	private ?int $selected = null;
+	private ?RayQuery $sight = null;
+	private array $readyAt = [0.0,0.0];
+	private int $nextSlot = 0;
+	public array $shots = [];
+	public float $elapsed = 0, $ground = 0, $hitUntil = 0;
+	public int $hits = 0;
+
+	public readonly BeachBalls $beachBalls;
+	public function __construct() { $this->beachBalls=new BeachBalls; }
+	public function contacts(): array { return $this->targets()+BeachBalls::positions($this->beachBalls->states()); }
+
+	public function export(): array { return array_values($this->placements); }
+
+	public static function load(mixed $items, Landscape $land, float $water): self
+	{
+		if(!is_array($items) || !array_is_list($items) || count($items) > self::MAX_BALLOONS)
+			throw new \InvalidArgumentException('Invalid balloon list.');
+		$range = new self;
+		foreach($items as $row)
+		{
+			if(!is_array($row) || !array_is_list($row) || count($row) !== 3)
+				throw new \InvalidArgumentException('Invalid balloon placement.');
+			foreach($row as $v) if((!is_int($v) && !is_float($v)) || !is_finite((float)$v))
+				throw new \InvalidArgumentException('Invalid balloon coordinate.');
+			$range->place($row[0],$row[1],$row[2],$land,$water);
+		}
+		return $range;
+	}
+
+	public function place(float $x, float $z, float $height, Landscape $land, float $water): void
+	{
+		if(count($this->placements) >= self::MAX_BALLOONS) throw new \InvalidArgumentException('The landscape holds 32 balloons.');
+		$half = $land->recipe()['worldSize']/2;
+		if(abs($x) > $half || abs($z) > $half || $height < 12 || $height > 1200)
+			throw new \InvalidArgumentException('Balloon outside the placement area.');
+		if($this->nextId===BeachBalls::FIRST) $this->nextId+=BeachBalls::LIMIT;
+		$id = $this->nextId++;
+		$this->placements[$id] = [$x,$z,$height];
+		$this->positions[$id] = [$x,max($water,$land->height($x,$z))+$height,$z];
+	}
+
+	public function remove(array $origin, array $direction, float $limit): bool
+	{
+		$id = null;
+		foreach($this->positions as $key => $p)
+		{
+			$d = self::intersection($origin,$direction,$p);
+			if($d !== null && $d <= $limit) { $limit = $d; $id = $key; }
+		}
+		if($id === null) return false;
+		unset($this->placements[$id],$this->positions[$id],$this->popped[$id]);
+		return true;
+	}
+
+	public function refit(Landscape $land, float $water): void
+	{
+		$this->beachBalls->wake();
+		foreach($this->placements as $id => [$x,$z,$height])
+			$this->positions[$id][1] = max($water,$land->height($x,$z))+$height;
+		if($this->practicePoint !== null)
+		{
+			[$x,$y,$z] = $this->practicePoint;
+			$this->practicePoint[1] = max($y,max($water,$land->height($x,$z))+16);
+		}
+		$this->select($this->selected);
+		$this->floorAt = 0;
+	}
+
+	public function reset(bool $restartClock = true): void
+	{
+		$this->practice = false; $this->practicePoint = null;
+		$this->shots = $this->popped = [];
+		$this->select(null);
+		if($restartClock) $this->elapsed = 0;
+		$this->gunAt = $this->dwell = $this->floorAt = $this->checkAt = $this->hitUntil = 0;
+		$this->hits = 0; $this->readyAt = [0.0,0.0]; $this->nextSlot = 0;
+	}
+
+	public function targets(): array
+	{
+		$points = array_diff_key($this->positions,$this->popped);
+		if($this->practicePoint !== null) $points[$this->practiceId] = $this->practicePoint;
+		return $points;
+	}
+
+	public function start(array $p, Landscape $land, float $water): bool
+	{
+		$this->reset(false);
+		return $this->practice = $this->spawn($p,$land,$water);
+	}
+
+	private function spawn(array $p, Landscape $land, float $water): bool
+	{
+		$width = $land->recipe()['worldSize'];
+		$limit = $width/2 - max(7.0,min(160.0,$width*.04));
+		$scale = min(1.0,$width/8000);
+		$distance = mt_rand(1800,3200)*$scale;
+		$side = $this->lastPracticeSide === 0 ? (mt_rand(0,1) ? 1 : -1) : -$this->lastPracticeSide;
+		$offset = mt_rand(30,75);
+		$heading = $p['yaw'] + (cos($p['pitch']) < 0 ? M_PI : 0);
+
+		// Turn back into the landscape at its edges, keeping the same approach distance.
+		foreach([$offset,-$offset,100,-100,145,-145,180] as $degrees)
+		{
+			$bearing = $heading + deg2rad($side*$degrees);
+			$x = $p['x'] + $distance*sin($bearing);
+			$z = $p['z'] + $distance*cos($bearing);
+			if(max(abs($x),abs($z)) > $limit) continue;
+
+			$floor = max($water,$land->height($x,$z));
+			$clearance = max(16.0,mt_rand(80,200)*$scale);
+			$this->practicePoint = [$x,max($floor+$clearance,$p['y']-.04*$distance),$z];
+			$this->lastPracticeSide = $degrees < 0 ? -$side : $side;
+			$this->select(--$this->practiceId);
+			return true;
+		}
+		return false;
+	}
+
+	private function select(?int $id): void
+	{
+		$this->sight = null;
+		$this->selected = $id;
+		$this->visible = false; $this->dwell = $this->checkAt = 0;
+	}
+
+	public function cycle(): void
+	{
+		$ids = array_keys($this->contacts());
+		if(!$ids) return;
+		$i = array_search($this->selected,$ids,true);
+		$this->select($ids[$i === false ? 0 : ($i+1)%count($ids)]);
+	}
+
+	/** Distance along a unit segment direction to the scaled balloon envelope. */
+	private static function intersection(array $a, array $d, array $p,bool $beachBall=false): ?float
+	{
+		$aa = $bb = 0.0; $cc = -1.0;
+		$radii=$beachBall ? array_fill(0,3,BeachBalls::RADIUS) : [6.7,10.0,6.7];
+		foreach($radii as $i => $radius)
+		{
+			$v = $d[$i]/$radius; $r = ($a[$i]-$p[$i])/$radius;
+			$aa += $v*$v; $bb += $r*$v; $cc += $r*$r;
+		}
+		if($cc <= 0) return 0.0;
+		$disc = $bb*$bb - $aa*$cc;
+		return $disc < 0 || $bb >= 0 ? null : (-$bb-sqrt($disc))/$aa;
+	}
+
+	/** First terrain or water contact on the part of this step before the nearest balloon. */
+	private static function surfaceDistance(array $from, array $dir, float $travel, Landscape $land, float $water): ?float
+	{
+		if($from[1] <= $water) return 0.0;
+		$endY = $from[1]+$travel*$dir[1];
+		$surface = null;
+		if($endY <= $water)
+		{
+			$t = ($water-$from[1])/$dir[1];
+			$half = $land->recipe()['worldSize']/2;
+			if(max(abs($from[0]+$t*$dir[0]),abs($from[2]+$t*$dir[2])) <= $half) $surface = $t;
+		}
+		$limit = $surface ?? $travel;
+		if($limit > 0 && min($from[1],$endY) <= $land->bounds()['maxY'])
+			return $land->raycast($from,$dir,$limit)['distance'] ?? $surface;
+		return $surface;
+	}
+
+	private function track(array $p, Landscape $land, float $water, float $dt): void
+	{
+		$targets = $this->contacts();
+		if(!$targets) { $this->select(null); return; }
+		$eye = Jet::cockpit($p);
+		[$nose] = $eye->basis();
+		if(!isset($targets[$this->selected]))
+		{
+			$best = -INF;
+			// On acquiring a new target, prefer the balloon closest to the center of the pilot's view.
+			foreach($targets as $id => $point)
+			{
+				$x = $point[0]-$eye->position[0]; $y = $point[1]-$eye->position[1]; $z = $point[2]-$eye->position[2];
+				$alignment = ($x*$nose[0]+$y*$nose[1]+$z*$nose[2])/max(.001,sqrt($x*$x+$y*$y+$z*$z));
+				if($alignment > $best) { $best = $alignment; $candidate = $id; }
+			}
+			$this->select($candidate);
+		}
+		$id = $this->selected;
+		$point = $targets[$id];
+		$x = $point[0]-$eye->position[0]; $y = $point[1]-$eye->position[1]; $z = $point[2]-$eye->position[2];
+		$range = sqrt($x*$x+$y*$y+$z*$z);
+		$angle = ($x*$nose[0]+$y*$nose[1]+$z*$nose[2])/max(.001,$range);
+		if($angle <= 0 || $range > self::CONTACT_RANGE || min($eye->position[1],$targets[$id][1]) <= $water)
+		{
+			$this->select($id);
+			return;
+		}
+		if($this->sight === null && $this->elapsed >= $this->checkAt)
+		{
+			if($range < .001 || min($eye->position[1],$targets[$id][1]) > $land->bounds()['maxY'])
+			{
+				$this->visible = true;
+				$this->checkAt = $this->elapsed+.10;
+			}
+			else $this->sight = $land->rayQuery($eye->position,[$x,$y,$z],$range);
+		}
+		if($this->sight !== null && $this->sight->advance(.35,16))
+		{
+			$this->visible = $this->sight->result() === null;
+			$this->sight = null;
+			$this->checkAt = $this->elapsed+.10;
+		}
+		$inside = $angle >= 1/sqrt(1+(2*self::RING*tan($eye->fov/2))**2);
+		$this->dwell = $this->visible && $inside && $range <= 1200 ? min(self::LOCK_SECONDS,$this->dwell+$dt) : 0;
+	}
+
+	public function step(float $dt, array $p, bool $launch, bool $gun, Landscape $land, float $water, bool $inCockpit,
+		?FlightTrails $trails = null, ?array $previousPose = null): void
+	{
+		$this->elapsed += $dt;
+		if($this->practice && !$this->practicePoint && $this->elapsed >= $this->respawn)
+		{
+			$this->spawn($p,$land,$water);
+			$this->respawn = $this->elapsed+1;
+		}
+		$this->track($p,$land,$water,$dt);
+		if($inCockpit && $this->elapsed >= $this->floorAt)
+		{
+			$this->ground = max($water,$land->height($p['x'],$p['z']));
+			$this->floorAt = $this->elapsed+.20;
+		}
+		if($launch)
+		{
+			foreach([$this->nextSlot, 1-$this->nextSlot] as $slot)
+			{
+				if($this->readyAt[$slot] > $this->elapsed) continue;
+				// The projectile advances during this step, starting where the wing was at its beginning.
+				$this->emit($previousPose ?? $p,$slot);
+				$this->readyAt[$slot] = $this->elapsed+3;
+				$this->nextSlot = 1-$slot;
+				break;
+			}
+		}
+		if($gun && $this->elapsed >= $this->gunAt)
+		{
+			$this->emit($p,null);
+			$this->gunAt = $this->elapsed+.09;
+		}
+		$points = $this->contacts();
+		foreach($this->shots as $i => &$shot)
+		{
+			$a = $shot['position']; $d = $shot['direction'];
+			$target = $shot['target'];
+			if($target !== null && isset($points[$target]))
+			{
+				$offset = array_map(static fn($v,$w)=>$v-$w,$points[$target],$a);
+				$length = sqrt(array_sum(array_map(static fn($v)=>$v*$v,$offset)));
+				$blend = min(1,$dt*8);
+				foreach($d as $j=>$v) $d[$j] = $v*(1-$blend) + $blend*$offset[$j]/max(.001,$length);
+				$length = sqrt(array_sum(array_map(static fn($v)=>$v*$v,$d)));
+				$d = array_map(static fn($v)=>$v/max(.001,$length),$d);
+			}
+			$travel = $shot['speed']*max(0.0,min($dt,$shot['expires']-($this->elapsed-$dt))); $hit = null;
+			foreach($points as $id => $point)
+			{
+				$t = self::intersection($a,$d,$point,$this->beachBalls->has($id));
+				if($t !== null && $t <= $travel) { $hit = $id; $travel = $t; }
+			}
+			$surface = self::surfaceDistance($a,$d,$travel,$land,$water);
+			if($surface !== null) { $travel = $surface; $hit = null; }
+			$b = array_map(static fn($v,$dir)=>$v+$dir*$travel,$a,$d);
+			$outside = max(abs($b[0]),abs($b[2])) > $land->recipe()['worldSize']/2;
+			if(!$shot['tracer'] && !$outside && $trails !== null)
+			{
+				$duration = $travel/$shot['speed'];
+				$trails->exhaust($a,$b,$shot['direction'],$d,$duration);
+				if($hit !== null || $surface !== null) $trails->burst($b,$duration);
+			}
+			if($hit !== null && !$outside)
+			{
+				$this->hitUntil = $this->elapsed+.65;
+				if($this->beachBalls->has($hit)) {
+					$this->beachBalls->kick($hit,$d,$shot['tracer']);
+					unset($this->shots[$i]);
+					continue;
+				}
+				unset($points[$hit]);
+				if($hit === $this->practiceId) { $this->practicePoint = null; $this->respawn = $this->elapsed+.85; }
+				else $this->popped[$hit] = true;
+				if($this->selected === $hit) $this->select(null);
+				$this->hits++;
+			}
+			if($outside || $surface !== null || $hit !== null || $this->elapsed >= $shot['expires']) unset($this->shots[$i]);
+			else { $shot['previous'] = $a; $shot['position'] = $b; $shot['direction'] = $d; }
+		}
+		unset($shot);
+	}
+
+	private function emit(array $p, ?int $slot): void
+	{
+		$tracer = $slot === null;
+		if($tracer)
+		{
+			$eye = Jet::cockpit($p);
+			[$nose,,$up] = $eye->basis();
+			$a = $eye->position;
+			foreach($a as $i=>$v) $a[$i] += 5*$nose[$i] - 1.1*$up[$i];
+		}
+		else
+		{
+			$mount = Jet::projectileMount($p,$slot);
+			$a = [$mount['x'],$mount['y'],$mount['z']];
+			$nose = array_slice(VehicleModel::basis($p),6);
+		}
+		$this->shots[] = ['previous'=>$a,'position'=>$a,'direction'=>$nose,'tracer'=>$tracer,
+			'roll'=>$p['roll'] + (cos($p['pitch']) < 0 ? M_PI : 0),
+			'speed'=>$p['speed']+($tracer ? 760 : 490),'expires'=>$this->elapsed+($tracer ? 1.4 : 3.5),
+			'target'=>!$tracer && $this->dwell >= self::LOCK_SECONDS ? $this->selected : null];
+	}
+
+	/** Loaded wings use the same flight clock as launch and the cockpit's charge count. */
+	public function readySlots(): array
+	{
+		return array_keys(array_filter($this->readyAt,fn($time)=>$time <= $this->elapsed));
+	}
+
+	public function timers(): array
+	{
+		return [...$this->readyAt,$this->nextSlot,$this->gunAt,$this->hitUntil,$this->respawn,$this->practiceId];
+	}
+
+	public function resume(array $events): void
+	{
+		$this->beachBalls->restore($events['beachBalls'] ?? []);
+		$r=$events['range'] ?? null;
+		if(!$r) return;
+		$this->elapsed=$r['elapsed']; $this->ground=$r['ground']; $this->hits=(int)($r['hits'] ?? 0);
+		$this->practice=(bool)($r['practice'] ?? false); $this->selected=$r['selected'] ?? null;
+		$this->visible=(bool)($r['visible'] ?? false); $this->dwell=$r['lockProgress']*self::LOCK_SECONDS;
+		[$a,$b,$slot,$this->gunAt,$this->hitUntil,$this->respawn,$id]=$events['rangeTimers'] ?? [0,0,0,0,0,0,0];
+		$this->nextSlot=(int)$slot & 1; $this->readyAt=[$a,$b]; $this->practiceId=(int)$id;
+		$points=$events['balloons'] ?? []; $this->practicePoint=null;
+		if($this->practice && isset($points[$this->practiceId])) {
+			$this->practicePoint=$points[$this->practiceId]; unset($points[$this->practiceId]);
+		}
+		$this->popped=array_diff_key($this->positions,$points);
+		$this->positions=$points+$this->positions;
+		$this->shots=[];
+		foreach($events['shots'] ?? [] as $shot) {
+			$point=array_slice($shot,1,3);
+			$this->shots[]=['previous'=>$point,'position'=>$point,'direction'=>array_slice($shot,4,3),'tracer'=>(bool)$shot[0],
+				'roll'=>$shot[7],'speed'=>$shot[8] ?? 600.,'expires'=>$shot[9] ?? $this->elapsed+.3,'target'=>($shot[10] ?? -1)<0 ? null : (int)$shot[10]];
+		}
+	}
+
+	public function status(): array
+	{
+		return ['selected'=>$this->selected,'beachBall'=>$this->selected!==null && $this->beachBalls->has($this->selected),'visible'=>$this->visible,'locked'=>$this->dwell >= self::LOCK_SECONDS,
+			'lockProgress'=>$this->dwell/self::LOCK_SECONDS,'hits'=>$this->hits,
+			'hit'=>$this->elapsed < $this->hitUntil,'elapsed'=>$this->elapsed,'practice'=>$this->practice,
+			'ready'=>count($this->readySlots()),
+			'placements'=>count($this->placements),'shots'=>count($this->shots),'ground'=>$this->ground];
+	}
+}

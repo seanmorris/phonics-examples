@@ -5,7 +5,7 @@ namespace PhpPoker\Render;
 /**
  * Palette, type scale and radii for the two visual modes.
  *
- * Colours are straight RGBA floats. `classic` is the flat DOS field: square corners, no shadows or gradients.
+ * Colors are straight RGBA floats. `classic` is the flat DOS field: square corners, no shadows or gradients.
  * `modern` keeps the same layout and type and adds rounded corners, a gentle vignette and light shadows.
  */
 final class Theme
@@ -40,7 +40,7 @@ final class Theme
 	public const DISPLAY = 54.0;
 
 	/**
-	 * Felt colour of a mode.
+	 * Felt color of a mode.
 	 *
 	 * @param string $mode `classic` or `modern`.
 	 * @return array{float,float,float,float}
@@ -51,12 +51,12 @@ final class Theme
 	}
 
 	/**
-	 * Lighter felt at the centre of the modern vignette; classic has no gradient.
+	 * Lighter felt at the center of the modern vignette; classic has no gradient.
 	 *
 	 * @param string $mode `classic` or `modern`.
 	 * @return array{float,float,float,float}
 	 */
-	public static function feltCentre(string $mode): array
+	public static function feltCenter(string $mode): array
 	{
 		return $mode === self::MODERN ? [.145,.533,.31,1] : self::felt($mode);
 	}
@@ -84,9 +84,9 @@ final class Theme
 	}
 
 	/**
-	 * Multiply a colour's alpha.
+	 * Multiply a color's alpha.
 	 *
-	 * @param array{float,float,float,float} $color Straight RGBA colour.
+	 * @param array{float,float,float,float} $color Straight RGBA color.
 	 * @param float $alpha Opacity multiplier, clamped to [0,1].
 	 * @return array{float,float,float,float}
 	 */
@@ -97,10 +97,10 @@ final class Theme
 	}
 
 	/**
-	 * Linear blend between two colours.
+	 * Linear blend between two colors.
 	 *
-	 * @param array{float,float,float,float} $from Colour at zero.
-	 * @param array{float,float,float,float} $to Colour at one.
+	 * @param array{float,float,float,float} $from Color at zero.
+	 * @param array{float,float,float,float} $to Color at one.
 	 * @param float $amount Blend fraction, clamped to [0,1].
 	 * @return array{float,float,float,float}
 	 */

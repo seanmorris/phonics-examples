@@ -76,7 +76,7 @@ final class Simulation
 	/**
 	 * Restore a standard fifteen-ball rack and cue ball.
 	 *
-	 * Regulation spacing receives seeded micrometre perturbations and independent ball orientations. The complete
+	 * Regulation spacing receives seeded micrometer perturbations and independent ball orientations. The complete
 	 * candidate is checked before placement; every perturbation shrinks together if it would create an overlap.
 	 *
 	 * @param string|null $rackSeed Recorded rack seed, or null for the fixed reference rack.
@@ -262,10 +262,10 @@ final class Simulation
 	}
 
 	/**
-	 * Predict the visible cue-ball centre path for an aimed shot.
+	 * Predict the visible cue-ball center path for an aimed shot.
 	 *
 	 * A private snapshot clone runs the same contact, cushion, jaw, and pocket solver as a real shot, then clips and
-	 * simplifies its travelled path. The source simulation is never mutated.
+	 * simplifies its traveled path. The source simulation is never mutated.
 	 *
 	 * @param float $angle Cue direction in cloth-plane radians.
 	 * @param float $power Normalized cue-power setting.
@@ -296,8 +296,8 @@ final class Simulation
 	 * @param float $power Normalized cue power.
 	 * @param float $top Normalized draw or follow offset.
 	 * @param float $side Normalized left or right English offset.
-	 * @param float $length Longest guide length in metres.
-	 * @param float $startOffset Guide length hidden under the cue ball, in metres.
+	 * @param float $length Longest guide length in meters.
+	 * @param float $startOffset Guide length hidden under the cue ball, in meters.
 	 * @return self|null The preview table, or null when no shot can be previewed.
 	 */
 	public function beginProjection(
@@ -370,7 +370,7 @@ final class Simulation
 	/**
 	 * Predict the cue-ball path together with its first object-ball contact.
 	 *
-	 * The contact carries the ghost-ball centre and the object ball's departure direction along the line of centres,
+	 * The contact carries the ghost-ball center and the object ball's departure direction along the line of centers,
 	 * which is exact for the instant of contact before throw and spin transfer act.
 	 *
 	 * @return array{path:list<array{float,float}>,contact:array{ball:int,x:float,y:float,objectX:float,objectY:float,direction:array{float,float}}|null}
@@ -646,7 +646,7 @@ final class Simulation
 			$balls[] = $ball;
 			// applyCloth() stops balls with exact zeros; every velocity-dependent test below rejects such a ball.
 			$resting[] = $ball->vx == 0.0 && $ball->vy == 0.0 && $ball->pocket === null;
-			// Farthest this ball can travel before the limit, plus a micrometre of slack far beyond rounding error.
+			// Farthest this ball can travel before the limit, plus a micrometer of slack far beyond rounding error.
 			// A target outside that reach cannot produce an event, so box tests below skip only certain misses.
 			$reaches[] = sqrt($ball->vx ** 2 + $ball->vy ** 2 + $ball->vDrop ** 2) * $limit
 				+ ($ball->pocket !== null ? .5 * self::GRAVITY * $limit ** 2 : 0) + 1e-6;
@@ -669,7 +669,7 @@ final class Simulation
 				// Two resting balls have zero relative velocity and can never meet.
 				if($restingA && $resting[$j]) continue;
 				$b = $balls[$j];
-				// Contact needs the centres within two radii plus both travel reaches.
+				// Contact needs the centers within two radii plus both travel reaches.
 				$gap = Ball::RADIUS * 2 + $reach + $reaches[$j];
 				if(abs($b->x - $a->x) > $gap || abs($b->y - $a->y) > $gap) continue;
 
@@ -715,7 +715,7 @@ final class Simulation
 				continue; // Pocket liners own boundaries below the cloth.
 			}
 			// Every cushion, jaw, facing and slate cut lies outside the inner rail rectangle. During a rack
-			// compression almost all centres are far inside it; none can reach a boundary in this interval.
+			// compression almost all centers are far inside it; none can reach a boundary in this interval.
 			if(abs($a->x) + $reach < $halfX && abs($a->y) + $reach < $halfY) continue;
 
 			// Pocket entry is a swept event, just like a rail or ball impact. Checking
@@ -883,7 +883,7 @@ final class Simulation
 	/**
 	 * Per-pocket and per-facing constants for the swept search, derived once with the same arithmetic it used inline.
 	 *
-	 * @return array{list<array{float,float,float,float,float}>,list<list<float>>} Pockets as centre, clearance, and
+	 * @return array{list<array{float,float,float,float,float}>,list<list<float>>} Pockets as center, clearance, and
 	 * outward normal; facings as start, length, tangent, normal, and bounding box.
 	 */
 	public static function sweptGeometry(): array
@@ -895,7 +895,7 @@ final class Simulation
 		foreach(Table::pockets() as $index => [$pocketX,$pocketY])
 		{
 			[$outwardX,$outwardY] = Table::pocketOutward($index);
-			// A ball drops once its centre crosses the cloth edge, so the swept drop circle is the slate cut itself.
+			// A ball drops once its center crosses the cloth edge, so the swept drop circle is the slate cut itself.
 			$pockets[$index] = [$pocketX,$pocketY,Table::THROAT_RADIUS,$outwardX,$outwardY];
 		}
 
@@ -1141,7 +1141,7 @@ final class Simulation
 
 		if($slip > .012)
 		{
-			// Each unit of velocity change moves the slip by 3.5: once for the centre and 2.5 for a solid ball's spin.
+			// Each unit of velocity change moves the slip by 3.5: once for the center and 2.5 for a solid ball's spin.
 			// Kinetic friction stops at pure rolling; overshooting it flipped a small slip back and forth for good, and
 			// a ball caught in that never slowed or ended the shot.
 			$change = min($slip / 3.5, self::CLOTH_FRICTION * self::GRAVITY * $seconds);
@@ -1218,7 +1218,7 @@ final class Simulation
 		return null;
 	}
 
-	/** @return array{float,float} Largest legal absolute cue-ball X and Y offsets from the table centre. */
+	/** @return array{float,float} Largest legal absolute cue-ball X and Y offsets from the table center. */
 	public static function placementLimits(): array
 	{
 		return [Table::WIDTH / 2 - Ball::RADIUS * 1.2, Table::HEIGHT / 2 - Ball::RADIUS * 1.2];

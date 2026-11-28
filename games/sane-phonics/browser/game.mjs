@@ -55,7 +55,7 @@ export class DemoControls
 	}
 
 	/**
-	 * Keep the 16:9 view letterboxed inside the frame: the largest 16:9 box that fits, which the frame centres.
+	 * Keep the 16:9 view letterboxed inside the frame: the largest 16:9 box that fits, which the frame centers.
 	 * @returns {void} Sizes the canvas's CSS box; the drawing buffer keeps the game's logical size.
 	 */
 	fit()

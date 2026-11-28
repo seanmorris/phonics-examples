@@ -42,8 +42,8 @@ void main()
 
 	if(styleMode == 3)
 	{
-		// Shaded: the picture's own brightness, unlit, is the alpha; the stencil colour, lit as the sector lights it,
-		// is the colour. A greyscale smoke puff reads as a soft cloud instead of a grey square.
+		// Shaded: the picture's own brightness, unlit, is the alpha; the stencil color, lit as the sector lights it,
+		// is the color. A grayscale smoke puff reads as a soft cloud instead of a gray square.
 		vec4 unlit = texelFetch(paletteMap, ivec2(sourceIndex, palettePage * paletteRows), 0);
 		float luminance = dot(unlit.rgb, vec3(.299, .587, .114));
 		float lit = float(lightRows - colorMap) / float(lightRows);

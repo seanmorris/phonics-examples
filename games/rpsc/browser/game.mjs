@@ -244,7 +244,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	canvas.addEventListener('focus', () => {
 		if(document.fullscreenElement === ui) return;
 
-		// Centering honours the page's scroll padding, so a sticky header never covers the top of the board.
+		// Centering honors the page's scroll padding, so a sticky header never covers the top of the board.
 		screen.scrollIntoView({block: 'center', inline: 'nearest', behavior: 'auto'});
 	}, {signal});
 

@@ -5,11 +5,11 @@ export function activate({module, session, fileCancelDelay = 1000})
 	let error='',writes=0,closed=false,pendingLoad='';
 	let file={busy:false,operation:'',notice:'',error:'',revision:0};
 	const publish=patch=>{file={...file,...patch,revision:file.revision+1};};
-	const cancelled=value=>value?.name==='AbortError';
+	const canceled=value=>value?.name==='AbortError';
 	const valid=value=>typeof value==='string'&&value.length<=limit;
 	const finish=notice=>publish({busy:false,operation:'',notice,error:''});
 	const fail=(operation,value)=>{
-		if(cancelled(value)){publish({busy:false,operation:'',notice:'',error:''});return;}
+		if(canceled(value)){publish({busy:false,operation:'',notice:'',error:''});return;}
 		const action=operation==='save'?'saved':'opened';
 		publish({busy:false,operation:'',notice:'',error:`The game could not be ${action}.`});
 	};

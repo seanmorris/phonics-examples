@@ -501,7 +501,7 @@ final class Hud
 	}
 
 	/**
-	 * Draw a labelled button with an optional keycap legend.
+	 * Draw a labeled button with an optional keycap legend.
 	 *
 	 * @param string $style primary or secondary.
 	 */
@@ -751,7 +751,7 @@ final class Hud
 	}
 
 	/**
-	 * Show which balls are off the table: pocketed balls in their own colours, balls still in play as faint outlines.
+	 * Show which balls are off the table: pocketed balls in their own colors, balls still in play as faint outlines.
 	 *
 	 * @return float Bottom edge of the board, for toast placement.
 	 */

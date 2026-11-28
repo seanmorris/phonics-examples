@@ -6,7 +6,7 @@ use Phonics\Input\Controls;
 use SanePhonics\Physics\Body;
 use SanePhonics\Physics\Terrain;
 
-/** Fuelled two-dimensional aircraft with MB2-compatible takeoff, thrust, gear, pitch, and stall controls. */
+/** Fueled two-dimensional aircraft with MB2-compatible takeoff, thrust, gear, pitch, and stall controls. */
 final class Tornado implements VehicleBehavior, VehicleDiagnostics, VehicleTerrainAware
 {
 	private const REFERENCE_RATE = 60;
@@ -31,7 +31,7 @@ final class Tornado implements VehicleBehavior, VehicleDiagnostics, VehicleTerra
 	 *
 	 * @param array<string,int> $gids Tile GIDs keyed by tornado, tornado-flight, tornado-gear,
 	 * tornado-thrust, and tornado-crashed class names.
-	 * @return void Creates a fully fuelled aircraft with its landing gear extended.
+	 * @return void Creates a fully fueled aircraft with its landing gear extended.
 	 */
 	public function __construct(private array $gids = []) {}
 

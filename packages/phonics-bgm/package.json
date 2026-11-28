@@ -1,0 +1,8 @@
+{
+  "name": "@seanmorris/phonics-bgm",
+  "version": "0.1.0",
+  "description": "Streaming playlists and stacked music cues for Phonics",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {".": "./browser/BackgroundMusic.mjs", "./phonics.json": "./phonics.json"}
+}

@@ -243,7 +243,7 @@ final class ActorStateSystem
 
 	/**
 	 * Take up a state changed from outside in the tic a walk over every actor would: later in this update when the walk
-	 * has not reached the actor yet, otherwise in the next one. Stepping the actor itself reschedules it afterwards.
+	 * has not reached the actor yet, otherwise in the next one. Stepping the actor itself reschedules it afterward.
 	 */
 	private function wake(int $entity): void
 	{

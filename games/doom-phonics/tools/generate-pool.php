@@ -41,14 +41,14 @@ return static function(): array {
 	));
 	$cells = RectangularCells::merge($cells);
 	// Each gallery uses five rectangles around an opening matching the pool.
-	// Separate map-space rooms become three physical storeys through portals.
+	// Separate map-space rooms become three physical stories through portals.
 	$upperOffset = 1536;
 	$galleryStarts = [];
-	foreach([1 => 150,2 => 160] as $storey => $portalTag)
+	foreach([1 => 150,2 => 160] as $story => $portalTag)
 	{
-		$galleryStarts[$storey] = count($cells);
-		$offset = $upperOffset * $storey;
-		$floor = 320 + ($storey - 1) * 256;
+		$galleryStarts[$story] = count($cells);
+		$offset = $upperOffset * $story;
+		$floor = 320 + ($story - 1) * 256;
 		foreach([[0,0,1152,128,0],[0,128,128,1024,0],[128,128,1024,1024,$portalTag],
 			[1024,128,1152,1024,0],[0,1024,1152,1152,0]] as [$x0,$y0,$x1,$y1,$tag])
 		$cells[] = ['x0' => $x0,'y0' => $y0 + $offset,'x1' => $x1,'y1' => $y1 + $offset,
@@ -302,10 +302,10 @@ return static function(): array {
 	$thing(0, 704, 704, 272, 0, 2035); // Barrel on the floating platform.
 	$thing(0, 192, 1088, 0, 0, 2003); // Rockets for testing slab collisions.
 	$thing(0, 192, 960, 0, 0, 2046);
-	foreach(array_keys($galleryStarts) as $storey)
+	foreach(array_keys($galleryStarts) as $story)
 	{
-		$thing(0, 256, 64 + $storey * $upperOffset, 0, 0, 2028); // Lamps on each gallery rim.
-		$thing(0, 896, 64 + $storey * $upperOffset, 0, 0, 2028);
+		$thing(0, 256, 64 + $story * $upperOffset, 0, 0, 2028); // Lamps on each gallery rim.
+		$thing(0, 896, 64 + $story * $upperOffset, 0, 0, 2028);
 	}
 
 	// Recursively partition whole rectangular cells. Every leaf points at the

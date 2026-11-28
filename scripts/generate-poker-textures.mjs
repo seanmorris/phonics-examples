@@ -1,5 +1,5 @@
 // Generates games/php-poker/assets/generated: the signed-distance UI font atlas, its manifest and the catalog
-// poster. Card faces and backs are not baked here: the browser rasterises art/cards/*.svg at the device's pixel
+// poster. Card faces and backs are not baked here: the browser rasterizes art/cards/*.svg at the device's pixel
 // ratio when the game boots, so the package ships the small SVGs instead of a raw atlas. `--check` verifies the
 // committed output.
 import fs from 'node:fs/promises';
@@ -51,7 +51,7 @@ generated.set('ui-font.rgba', font.rgba);
 generated.set('ui-font.json', fontMetrics);
 generated.set('ui-font-OFL.txt', await fs.readFile(new URL('OFL.txt', typography)));
 
-// Card art manifest for the runtime rasteriser: the sheet is 9x6 cells of 750x1050 in the order spades, hearts,
+// Card art manifest for the runtime rasterizer: the sheet is 9x6 cells of 750x1050 in the order spades, hearts,
 // clubs, diamonds, then two jokers; the game's suit ids are clubs, diamonds, hearts, spades.
 const cardArt = {
 	sheet: {file: 'art/cards/deck.svg', columns: 9, rows: 6, sha256: hash(await fs.readFile(new URL('art/cards/deck.svg', root)))}

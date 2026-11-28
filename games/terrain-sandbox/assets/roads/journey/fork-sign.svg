@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.1"
+   viewBox="0 0 90 90"
+   id="svg2"
+   sodipodi:docname="fork-sign.svg"
+   width="90"
+   height="90"
+   inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2" />
+  <sodipodi:namedview
+     id="namedview2"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="6.9761905"
+     inkscape:cx="14.334471"
+     inkscape:cy="64.505119"
+     inkscape:window-width="2560"
+     inkscape:window-height="1374"
+     inkscape:window-x="1050"
+     inkscape:window-y="43"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg2" />
+  <g
+     transform="matrix(1.5568746,1.5568746,-1.5568746,1.5568746,45.000001,-20.388732)"
+     fill="#fcd116"
+     id="g2">
+    <rect
+       x="6"
+       y="6"
+       width="30"
+       height="30"
+       ry="1.875"
+       id="rect1" />
+    <rect
+       x="6.875"
+       y="6.875"
+       width="28.25"
+       height="28.25"
+       ry="1"
+       stroke="#000000"
+       stroke-width="0.75"
+       id="rect2" />
+  </g>
+  <path
+     d="M 45.000001,75.274106 V 51.60526 M 22.156813,28.762071 45.000001,51.60526 67.84319,28.762071"
+     fill="none"
+     stroke="#000000"
+     stroke-width="11.0088"
+     id="path2" />
+</svg>

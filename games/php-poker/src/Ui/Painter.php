@@ -33,7 +33,7 @@ final class Painter
 	 * @param Layout $layout Field placement for this canvas.
 	 * @param array<string,mixed> $view Session view.
 	 * @param array<string,mixed> $state Presenter state from `Presenter::state()`.
-	 * @param array<string,mixed>|null $atlas Rasterised card atlas descriptor, or null while it is loading.
+	 * @param array<string,mixed>|null $atlas Rasterized card atlas descriptor, or null while it is loading.
 	 */
 	public function __construct(
 		private UiCanvas $canvas, private Layout $layout, private array $view, private array $state, private ?array $atlas
@@ -66,11 +66,11 @@ final class Painter
 		$felt = Theme::felt($this->mode);
 		$this->canvas->box(0, 0, $width, $height, 0, $felt);
 		if($this->mode !== Theme::MODERN) return;
-		// Vignette: lighter centre band, darker edges, built from vertical and horizontal ramps.
-		$centre = Theme::feltCentre($this->mode);
+		// Vignette: lighter center band, darker edges, built from vertical and horizontal ramps.
+		$center = Theme::feltCenter($this->mode);
 		$edge = Theme::feltEdge($this->mode);
-		$this->canvas->gradient(0, 0, $width, $height / 2, 0, $edge, $centre);
-		$this->canvas->gradient(0, $height / 2, $width, $height / 2, 0, $centre, $edge);
+		$this->canvas->gradient(0, 0, $width, $height / 2, 0, $edge, $center);
+		$this->canvas->gradient(0, $height / 2, $width, $height / 2, 0, $center, $edge);
 		$side = Theme::alpha([0,0,0,1], .18);
 		$clear = [0,0,0,0];
 		$this->canvas->gradient(0, 0, $width * .3, $height, 0, $side, $clear, true);
@@ -80,7 +80,7 @@ final class Painter
 	private function menuBar(): void
 	{
 		// The bar belongs to the page, not the field: it sits on the canvas's top edge and spans its full width
-		// even when the field is centred inside a canvas of another shape.
+		// even when the field is centered inside a canvas of another shape.
 		[, , $fieldWidth, $height] = $this->layout->rect(0, 0, $this->layout->width(), $this->layout->menuHeight());
 		$top = 0;
 		$left = 0;
@@ -372,7 +372,7 @@ final class Painter
 				$this->canvas->label('D', $dx, $dy, Theme::CAPTION, Theme::INK, $this->face, 'center');
 			}
 		}
-		$this->centre();
+		$this->center();
 		$this->messages();
 		if(!empty($this->view['legalActions']['draw']) && !$this->state['locked']) $this->discardDialog();
 		foreach($this->state['motion']['cards'] ?? [] as $card) $this->card($card['rect'], $card['id'], 1.0);
@@ -388,7 +388,7 @@ final class Painter
 	{
 		if($player['folded']) return 'Fold';
 		// While the browsers shuffle, deal or reveal between themselves, only the working seat has a plate, saying
-		// what it is doing; the centre status explains the step.
+		// what it is doing; the center status explains the step.
 		$activity = $this->view['activity'] ?? null;
 		if(is_array($activity))
 		return ($activity['seat'] ?? -1) !== $seat ? ''
@@ -406,29 +406,29 @@ final class Painter
 		return (string)($player['lastAction'] ?: '');
 	}
 
-	private function centre(): void
+	private function center(): void
 	{
 		if(($this->view['phase'] ?? 'ready') === 'ready') return;
-		$centre = $this->layout->centre();
+		$center = $this->layout->center();
 		$pot = ($this->state['motion']['banks'] ?? $this->state['chips'])['pot'] ?? [];
-		$this->plate($centre['pot'], 'Total pot (' . Chips::value($pot) . ')', 'info', false);
+		$this->plate($center['pot'], 'Total pot (' . Chips::value($pot) . ')', 'info', false);
 		// Beside a board the stock could pass for one more card, so it is drawn as a squared-up pile.
-		if(!empty($centre['board'])) foreach([3, 1.5] as $offset)
-			$this->card([$centre['deck'][0] + $offset * $this->layout->stretch(), $centre['deck'][1] + $offset, $centre['deck'][2], $centre['deck'][3]], null, .7);
-		$this->card($centre['deck'], null, 1.0);
+		if(!empty($center['board'])) foreach([3, 1.5] as $offset)
+			$this->card([$center['deck'][0] + $offset * $this->layout->stretch(), $center['deck'][1] + $offset, $center['deck'][2], $center['deck'][3]], null, .7);
+		$this->card($center['deck'], null, 1.0);
 		$hiddenBoard = $this->state['motion']['hiddenBoard'] ?? [];
 		foreach($this->view['board'] ?? [] as $index => $card)
-			if(isset($centre['board'][$index]) && !in_array($index, $hiddenBoard, true)) $this->card($centre['board'][$index], $card, 1.0);
+			if(isset($center['board'][$index]) && !in_array($index, $hiddenBoard, true)) $this->card($center['board'][$index], $card, 1.0);
 		if(($this->state['motion']['discardCount'] ?? $this->view['discardCount'] ?? 0) > 0)
 		{
-			$this->card($centre['discard'], null, .8);
-			// On a phone the loose pot sits right above the piles, so the discards go unlabelled there.
-			if($this->layout->profile !== 'tall') $this->text('Discards', $centre['discard'][0] + $centre['discard'][2] / 2, $centre['discard'][1] - 9, $this->layout->captionText(), Theme::PLATE, 'center');
+			$this->card($center['discard'], null, .8);
+			// On a phone the loose pot sits right above the piles, so the discards go unlabeled there.
+			if($this->layout->profile !== 'tall') $this->text('Discards', $center['discard'][0] + $center['discard'][2] / 2, $center['discard'][1] - 9, $this->layout->captionText(), Theme::PLATE, 'center');
 		}
 		$this->chipStacks('pot', $pot);
 		$highest = 0;
 		foreach($this->view['players'] ?? [] as $player) $highest = max($highest, (int)($player['bet'] ?? 0));
-		if(!$this->underDialog($centre['bet'])) $this->plate($centre['bet'], 'Current bet (' . $highest . ')', 'info', false);
+		if(!$this->underDialog($center['bet'])) $this->plate($center['bet'], 'Current bet (' . $highest . ')', 'info', false);
 	}
 
 	/** Whether the open discard dialog covers any part of a design-space rectangle. */
@@ -485,7 +485,7 @@ final class Painter
 		$line = $error !== '' ? $error : ($drumming ? rtrim(rtrim($message), '.') . '...' : $message);
 		if($line === '') return;
 		// The layout names where the message stands: under the bet plate, or under the board where that plate has moved.
-		[$messageX, $top, $anchorWidth] = $this->layout->centre()['message'];
+		[$messageX, $top, $anchorWidth] = $this->layout->center()['message'];
 		$width = $this->layout->profile === 'wide'
 			? min($this->layout->statusLane()['width'], max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->horizontalUnit + 40)) : min(180, $anchorWidth);
 		// The lane between the columns is narrow, so the message may run to three lines there. Classic's face is
@@ -895,7 +895,7 @@ final class Painter
 		if($uv !== null) $this->canvas->image($x, $y, $w, $h, $radius, $uv, [$dim, $dim, $dim, 1]);
 		else
 		{
-			// Card art is still rasterising: a plain face with its index, or a flat back.
+			// Card art is still rasterizing: a plain face with its index, or a flat back.
 			$this->canvas->box($x, $y, $w, $h, $radius, $id === null ? [.725,.141,.176,1] : [1,1,1,$dim]);
 			if($id !== null)
 			{
@@ -995,7 +995,7 @@ final class Painter
 				, [$ix / $this->atlas['width'], $iy / $this->atlas['height'], ($ix + $iw) / $this->atlas['width'], ($iy + $ih) / $this->atlas['height']]);
 			return;
 		}
-		// Before the atlas arrives, a coloured disc with the player's initial stands in for the emblem.
+		// Before the atlas arrives, a colored disc with the player's initial stands in for the emblem.
 		$this->canvas->circle($dx, $dy, $r, self::EMBLEM_COLORS[$seat % 8], [0,0,0,.4], 1 * $this->unit);
 		$label = $name !== '' ? $name : $portrait;
 		$initial = preg_match('/^./us', $label, $match) === 1 ? $match[0] : '?';
@@ -1040,8 +1040,8 @@ final class Painter
 		if($key !== '' && $this->canvas->measure($labelText, $labelSize, $this->face) > $kx - 6 * $this->unit - ($x + 8 * $this->unit)) $key = '';
 		if($key !== '')
 		{
-			// Keep short labels centred on the whole button. Reserve the keycap's left margin only when the
-			// centred text would actually enter it, then move the label by the minimum distance needed to clear it.
+			// Keep short labels centered on the whole button. Reserve the keycap's left margin only when the
+			// centered text would actually enter it, then move the label by the minimum distance needed to clear it.
 			$clearRight = $kx - 6 * $this->unit;
 			$measured = min($this->canvas->measure($labelText, $labelSize, $this->face), $labelMax);
 			if($labelX + $measured / 2 > $clearRight)

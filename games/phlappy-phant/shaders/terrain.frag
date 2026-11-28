@@ -13,8 +13,8 @@ vec4 pixel(vec4 rectangle) {
 }
 
 void main() {
-	vec4 colour=pixel(currentRect);
-	if(blend>0.) colour=mix(colour,pixel(nextRect),blend);
-	if(colour.a==0.) discard;
-	outputColor=colour;
+	vec4 color=pixel(currentRect);
+	if(blend>0.) color=mix(color,pixel(nextRect),blend);
+	if(color.a==0.) discard;
+	outputColor=color;
 }

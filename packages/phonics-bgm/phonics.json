@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "name": "@seanmorris/phonics-bgm",
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.1.0"
+  },
+  "php": {
+    "autoload": {
+      "PhonicsBgm\\": "src/"
+    },
+    "files": [
+      "src/BackgroundMusic.php"
+    ]
+  },
+  "browser": {
+    "files": [
+      "browser/BackgroundMusic.mjs"
+    ]
+  },
+  "integrity": {
+    "browser/BackgroundMusic.mjs": "sha256-A+FO7ysZQJd+z/5vk0tF0QRQDSvraqDnCQGFBuKZDAk=",
+    "src/BackgroundMusic.php": "sha256-9szoO9VQN6KKVFHjSW8N2Vl3nIbYBUdj+w2haA1Ta4g="
+  }
+}

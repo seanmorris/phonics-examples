@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "slug": "terrain-sandbox",
+  "title": "Landscape Sandbox",
+  "description": "A 20-mile procedural world written in PHP. Reshape it, lay a road, then drive a 240 mph car, fly an F5 or race the computer across it.",
+  "controls": "Right-drag to look · WASD to fly or drive · Q/E down/up · Shift for fast flight · P to pause · H for controls",
+  "application": "dist/game.phar",
+  "mediaDirectory": "music",
+  "poster": "assets/poster.png",
+  "canvas": {"width": 1280, "height": 720},
+  "aspectRatio": "16/9",
+  "fit": "cover",
+  "documentation": {
+    "chapters": [
+      {"slug": "index", "title": "Landscape Sandbox", "path": "docs/index.md"},
+      {"slug": "authoring", "title": "Shape a landscape", "path": "docs/authoring.md"},
+      {"slug": "how-it-works", "title": "How it works", "path": "docs/how-it-works.md"}
+    ],
+    "api": {"namespace": "TerrainSandbox", "description": "Offline authoring session, camera controls, versioned saves, and landscape sandbox composition."},
+    "embed": {
+      "kind": "external",
+      "frame": "https://seanmorris.github.io/phonics-examples/embed/terrain-sandbox/",
+      "full": "https://seanmorris.github.io/phonics-examples/games/terrain-sandbox/"
+    }
+  }
+}

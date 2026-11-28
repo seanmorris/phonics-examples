@@ -4,7 +4,7 @@ RPSC is Rock Paper Scissors Checkers: a checkers board, two armies that cannot t
 
 ## The board
 
-The board is an ordinary 8 by 8 checkers board with a1 a black square. Black plays on the red squares and Red plays on the black squares. Pieces move diagonally and so never leave their own colour. Two consequences follow:
+The board is an ordinary 8 by 8 checkers board with a1 a black square. Black plays on the red squares and Red plays on the black squares. Pieces move diagonally and so never leave their own color. Two consequences follow:
 
 - Opposing pieces never share a diagonal. They cannot block each other and cannot jump each other.
 - Opposing pieces can stand edge to edge, above, below, or beside each other. That is the only place they interact.

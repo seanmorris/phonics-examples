@@ -137,7 +137,7 @@ final class Bot
 			}
 			elseif(isset($goals[$from])) $score -= 1.5 + .6 * $filled;
 			elseif(!$piece['king']) $score += .3 + .08 * Board::advance($this->side, $to);
-			// A king away from the far rank heads back towards it.
+			// A king away from the far rank heads back toward it.
 			else $score += .15 * (Board::advance($this->side, $to) - Board::advance($this->side, $from));
 
 			// Back-rank men stand beside the squares the opponent needs. The closer the opponent is, the more a
@@ -307,8 +307,8 @@ final class Bot
 	/**
 	 * Weigh what standing on a square exposes a piece to, against what it threatens from there.
 	 *
-	 * The opponent moves next and may challenge first, so a neighbour that beats this piece counts in full when the
-	 * opponent has seen it and in half when it has not. A neighbour this piece beats counts for less, because it may
+	 * The opponent moves next and may challenge first, so a neighbor that beats this piece counts in full when the
+	 * opponent has seen it and in half when it has not. A neighbor this piece beats counts for less, because it may
 	 * simply step away.
 	 *
 	 * @param int $square Square to weigh.
@@ -322,7 +322,7 @@ final class Bot
 		$danger = 0.0;
 		$exposed = isset($this->shown[$piece['key']]) ? 1.0 : .5;
 
-		foreach(Board::neighbours($square) as $next)
+		foreach(Board::neighbors($square) as $next)
 		{
 			$other = $model['at'][$next] ?? null;
 

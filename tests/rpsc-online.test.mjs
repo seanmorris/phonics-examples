@@ -226,7 +226,7 @@ test('a placement is one batch of packets under the room limit, and waits for Re
 	assert.equal(peers.alice.nextAction(), null, 'nothing is published before Ready');
 	assert.equal(peers.bob.nextAction(), null);
 
-	// Before Ready the arrangement can be edited; afterwards it is locked.
+	// Before Ready the arrangement can be edited; afterward it is locked.
 	const before = peers.alice.view().arrangement;
 	assert.equal(before.length, 12);
 	const other = before.findIndex(kind => kind !== before[0]);

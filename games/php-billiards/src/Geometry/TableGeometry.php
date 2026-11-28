@@ -241,8 +241,8 @@ final class TableGeometry
 	/**
 	 * @param float $x Sample X coordinate.
 	 * @param float $z Sample Z coordinate.
-	 * @param float $cx Circle-centre X coordinate.
-	 * @param float $cz Circle-centre Z coordinate.
+	 * @param float $cx Circle-center X coordinate.
+	 * @param float $cz Circle-center Z coordinate.
 	 * @param float $radius Circle radius.
 	 */
 	public static function circleSdf(float $x, float $z, float $cx, float $cz, float $radius): float

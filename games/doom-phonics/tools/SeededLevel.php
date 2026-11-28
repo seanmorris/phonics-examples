@@ -26,7 +26,7 @@ require_once __DIR__ . '/RouteTraversal.php';
  * Generate reproducible basement, ground and upper planar room networks.
  *
  * Local room elevations are resolved before architectural layer placement. A
- * flooded ledge and a curved stair hall connect the storeys; recessed passages
+ * flooded ledge and a curved stair hall connect the stories; recessed passages
  * pin adjacent rooms together independently of their packed WAD coordinates.
  * Deterministic repairs preserve connectivity, stair clearance and layer slabs.
  */
@@ -40,8 +40,8 @@ final class SeededLevel
 	public const ROOM_SIZE = 1280;
 	/** Minimum open headroom in ordinary rooms, approaches and spiral landings. */
 	public const HEADROOM = 192;
-	/** Reserve solid separation between ordinary rooms on adjacent storeys. */
-	public const STOREY_SLAB = 32;
+	/** Reserve solid separation between ordinary rooms on adjacent stories. */
+	public const STORY_SLAB = 32;
 
 	/** Build a fresh map and certify all regions with the runtime movement rules. */
 	public static function build(string $seed = 'first-light', int $rooms = 14, string $layout = 'organic', string $portalDoors = 'seeded', string $switchPanels = 'patch',int $doorChance=30,string $galleryHalls='seeded'): array
@@ -78,7 +78,7 @@ final class SeededLevel
 		$random = new SeedSequence('phonics-seeded-' . self::RANDOM_REVISION . ':' . $seed);
 		$repairs = [];
 		// Leave a basement slab while keeping the drain height in a Hexen byte.
-		$depth = self::HEADROOM+self::STOREY_SLAB+$random->integer(0,1)*16;
+		$depth = self::HEADROOM+self::STORY_SLAB+$random->integer(0,1)*16;
 		$steps = $random->integer(12,16);
 		$mirror = (bool)$random->integer(0,1);
 		$stairSweep=(new SeedSequence('stair-sweep:'.$seed))->integer(0,1) ? 90 : 180;
@@ -124,9 +124,9 @@ final class SeededLevel
 		foreach($network['rooms'] as $i => $grid)
 		{
 			$name = "$plane.$i"; $requested = $random->integer(0,12) * 16;
-			$height = $i === 0 ? ($plane !== 'basement' && $layout === 'organic' ? 64 : 0) : min($requested,$plane === 'basement' ? $depth-self::HEADROOM-self::STOREY_SLAB : 192);
+			$height = $i === 0 ? ($plane !== 'basement' && $layout === 'organic' ? 64 : 0) : min($requested,$plane === 'basement' ? $depth-self::HEADROOM-self::STORY_SLAB : 192);
 			if($height !== $requested) $repairs[] = ['kind'=>'height','room'=>$name,'from'=>$requested,'to'=>$height,
-				'reason'=>'Preserve storey headroom and the fixed inter-layer landings'];
+				'reason'=>'Preserve story headroom and the fixed inter-layer landings'];
 			$specs[$name] = ['floor'=>$height,'plane'=>$plane,'grid'=>$grid,'inset'=>$i===0 ? 256 : 128,'variant'=>$random->integer(0,7)];
 		}
 		$passages = []; $liftTag = 201;
@@ -315,7 +315,7 @@ final class SeededLevel
 		foreach($merged as $join) $repairs[]=['kind'=>'merge','room'=>implode(' + ',$join['rooms']),
 			'reason'=>'Remove a short hallway, retaining the offset polygon union'];
 		if($layout==='building') self::connectionDoors($layers,$pins,$seed,$doorChance);
-		$required = max(array_column(array_filter($layers,static fn($r)=>$r['plane'] === 'ground'),'ceiling')) + self::STOREY_SLAB;
+		$required = max(array_column(array_filter($layers,static fn($r)=>$r['plane'] === 'ground'),'ceiling')) + self::STORY_SLAB;
 		if($steps * 16 < $required)
 		{
 			$newSteps = (int)ceil($required / 16);
@@ -327,7 +327,7 @@ final class SeededLevel
 		foreach($layers['spiral']['cells'] as &$cell) $cell['id'] = 'spiral.' . $cell['id'];
 		unset($cell);
 		$positions = SpatialLayout::solve($layers,$pins,'ground.0',[0,0,0]);
-		// Keep each planar network physically contiguous; only storey links are portals.
+		// Keep each planar network physically contiguous; only story links are portals.
 		$packing = [];
 		foreach(['basement'=>[0,0],'ground'=>[0,0],'upper'=>[0,16384],'connector'=>[16384,16384]] as $plane => [$px,$py])
 		{
@@ -361,7 +361,7 @@ final class SeededLevel
 			foreach($door['faces'] as &$face)
 			{
 				foreach(['from','to','point'] as $key) { $face[$key][0]+=$x; $face[$key][1]+=$y; }
-				// Neighbors precede the door sector, so each usable front faces outwards.
+				// Neighbors precede the door sector, so each usable front faces outward.
 				$boundaries[]=['from'=>$face['from'],'to'=>$face['to'],'action'=>12,'args'=>[0,16,150,0,0],
 					'flags'=>1540,'upperTexture'=>$door['texture'],'xOffset'=>$face['xOffset'],'yOffset'=>0,'upperUnpegged'=>false,'lowerUnpegged'=>true];
 			}

@@ -36,7 +36,7 @@ final class SpatialIndex
 	 * Unique linedefs, in ascending order, registered in the cells along a segment widened by `$radius`. Lines are
 	 * registered in every cell their bounds overlap, and a circle of that radius sweeping the segment can touch only
 	 * these lines, so callers test a number of lines proportional to the segment's length instead of its bounding
-	 * box's area. Where the segment passes exactly through a cell corner, both neighbouring cells are included.
+	 * box's area. Where the segment passes exactly through a cell corner, both neighboring cells are included.
 	 *
 	 * @return list<int>
 	 */

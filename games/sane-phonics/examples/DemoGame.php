@@ -270,12 +270,12 @@ final class DemoGame
 	 */
 	public function cancelLoad(): void
 	{
-		$cancelled = $this->pending !== null;
+		$canceled = $this->pending !== null;
 		$this->releasePending();
 
-		if($cancelled && $this->level === null && $this->startup === null)
+		if($canceled && $this->level === null && $this->startup === null)
 		{
-			$this->notifyReady('Level load cancelled. Run to retry.');
+			$this->notifyReady('Level load canceled. Run to retry.');
 		}
 	}
 

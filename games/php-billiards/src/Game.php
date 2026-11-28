@@ -93,7 +93,7 @@ final class Game
 	private ?float $dragAngle = null;
 	/** Pull-back amount while drawing the cue from the power meter, or null. */
 	private ?float $pull = null;
-	/** Power before a pull-back began, restored when the gesture is cancelled. */
+	/** Power before a pull-back began, restored when the gesture is canceled. */
 	private float $pullPrevious = .58;
 	/** Pointer distance that draws a full-power pull, fitted to the canvas space below the press. */
 	private float $pullTravel = 1.0;
@@ -268,7 +268,7 @@ final class Game
 		$this->camera->animate($easing, $this->simulation->moving());
 		if(abs((float)($rightStick[0] ?? 0)) > 1e-6 || abs((float)($rightStick[1] ?? 0)) > 1e-6)
 		{
-			$this->camera->orbitStick((float)($rightStick[0] ?? 0), (float)($rightStick[1] ?? 0), $elapsed, $this->orbitCentre());
+			$this->camera->orbitStick((float)($rightStick[0] ?? 0), (float)($rightStick[1] ?? 0), $elapsed, $this->orbitCenter());
 		}
 
 		$horizontal = max(-1, min(1, (float)($controls['right'] ?? 0) - (float)($controls['left'] ?? 0)));
@@ -1041,7 +1041,7 @@ final class Game
 		{
 			if($this->started && $this->overlay === null)
 			{
-				$this->camera->zoom(-(float)($event['y'] ?? 0) * 120, $this->orbitCentre());
+				$this->camera->zoom(-(float)($event['y'] ?? 0) * 120, $this->orbitCenter());
 			}
 			return;
 		}
@@ -1092,7 +1092,7 @@ final class Game
 				'power' => $this->updatePull($y),
 				'aim' => $this->aimAt($x, $y, $width, $height, $fine),
 				'orbit' => $this->camera->orbit($x - $previous[0], $y - $previous[1], $this->dragStart[1] / max(1, $height)
-					, $this->orbitCentre()),
+					, $this->orbitCenter()),
 				default => null
 			};
 			return;
@@ -1158,7 +1158,7 @@ final class Game
 	}
 
 	/** @return array{float,float}|null The cue ball's cloth position, which a held view refits around, while it is on the table. */
-	private function orbitCentre(): ?array
+	private function orbitCenter(): ?array
 	{
 		$cue = $this->simulation->cue();
 		return $cue->active ? [$cue->x,$cue->y] : null;
@@ -1381,7 +1381,7 @@ final class Game
 	 * address position.
 	 *
 	 * @param float $amount Progress through the stroke on [0, 1).
-	 * @param float $depth Draw-back distance in metres.
+	 * @param float $depth Draw-back distance in meters.
 	 */
 	private static function practiceStroke(float $amount, float $depth): float
 	{
@@ -1590,7 +1590,7 @@ final class Game
 	}
 
 	/**
-	 * Find the nearest legal placement to a preferred spot, spiralling outward so ball in hand starts valid.
+	 * Find the nearest legal placement to a preferred spot, spiraling outward so ball in hand starts valid.
 	 *
 	 * @return array{float,float}
 	 */
@@ -1609,7 +1609,7 @@ final class Game
 	}
 
 	/**
-	 * Return the simulation-backed cue-ball centre path for the aiming guide.
+	 * Return the simulation-backed cue-ball center path for the aiming guide.
 	 *
 	 * A digest of deterministic state and shot controls keeps the relatively expensive predictive simulation
 	 * cached until the table or controls actually change, and suppresses it during movement or cue animation.

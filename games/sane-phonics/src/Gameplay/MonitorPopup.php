@@ -11,8 +11,8 @@ final class MonitorPopup extends Lifetime
 	/**
 	 * Start a popup at the monitor's screen.
 	 *
-	 * @param float $x Horizontal centre in world pixels.
-	 * @param float $y Starting vertical centre in world pixels.
+	 * @param float $x Horizontal center in world pixels.
+	 * @param float $y Starting vertical center in world pixels.
 	 * @param float $rise Pixels the popup climbs over its rise.
 	 * @param float $riseDuration Seconds the eased climb takes.
 	 * @param float $fadeStart Seconds before the fade to transparent begins.

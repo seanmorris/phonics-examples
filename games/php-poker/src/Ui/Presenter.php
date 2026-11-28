@@ -510,7 +510,7 @@ final class Presenter
 		$targets = array_values(array_filter($this->clickTargets(), static fn(array $target): bool => isset($target['id']) && empty($target['disabled'])));
 		if(!$this->controllerWaiting()) return $targets;
 		// Keep the menu reachable by moving Up, but do not let an old action, draw control or bet stepper retain focus
-		// after its turn. The zero-size centre target is navigation geometry only and never paints or accepts clicks.
+		// after its turn. The zero-size center target is navigation geometry only and never paints or accepts clicks.
 		$targets = array_values(array_filter($targets, static fn(array $target): bool => str_starts_with($target['id'], 'top:')));
 		$layout = $this->layout();
 		$targets[] = ['id'=>'table:waiting', 'rect'=>[$layout->width()/2,$layout->height()/2,0,0], 'hidden'=>true];
@@ -562,7 +562,7 @@ final class Presenter
 				'left' => [-$dx, abs($dy)], 'right' => [$dx, abs($dy)], 'up' => [-$dy, abs($dx)], default => [$dy, abs($dx)]
 			};
 			// Raised discard cards differ slightly in Y. Require meaningful travel on the requested axis so Down
-			// reaches the action row instead of slipping sideways to an unraised neighbour.
+			// reaches the action row instead of slipping sideways to an unraised neighbor.
 			if($primary <= max(1e-6, $cross * .25)) continue;
 			$score = $primary + 1.75 * $cross + hypot($dx, $dy) * .05;
 			if($score < $bestScore) { $bestScore = $score; $best = $target['id']; }
@@ -973,7 +973,7 @@ final class Presenter
 
 	/**
 	 * Fractional odds against, as printed in odds tables: "20/1" against, "1/1" for evens, and "1/4.2" for a
-	 * favourite (4.2 to 1 on), instead of a hard-to-read "0.24/1".
+	 * favorite (4.2 to 1 on), instead of a hard-to-read "0.24/1".
 	 */
 	private function formatOdds(?float $odds): string
 	{
@@ -1114,9 +1114,9 @@ final class Presenter
 	private function turnHelp(int $direction): void
 	{
 		if($this->helpGame === null || $this->helpGame === GameText::PHP_INFO) return;
-		$neighbour = GameText::HELP_GAMES[array_search($this->helpGame, GameText::HELP_GAMES, true) + ($direction <=> 0)] ?? null;
-		if($neighbour === null) return;
-		$this->helpGame = $neighbour;
+		$neighbor = GameText::HELP_GAMES[array_search($this->helpGame, GameText::HELP_GAMES, true) + ($direction <=> 0)] ?? null;
+		if($neighbor === null) return;
+		$this->helpGame = $neighbor;
 		$this->helpScroll = 0;
 		$this->dirty = true;
 	}
@@ -1147,7 +1147,7 @@ final class Presenter
 		$moved = $point[1] - $this->helpDrag['y'];
 		if($this->helpDrag['kind'] === 'thumb') $this->scrollHelp($help->dragged($this->helpDrag['top'] + $moved));
 		if($this->helpDrag['kind'] !== 'copy') return;
-		// A tap may wander a few pixels; the copy follows only a press that has travelled further than that.
+		// A tap may wander a few pixels; the copy follows only a press that has traveled further than that.
 		if(abs($moved) > 8 * $layout->dpr / $layout->scale) $this->helpDrag['moved'] = true;
 		if($this->helpDrag['moved']) $this->scrollHelp($help->at($this->helpDrag['top'] - $moved));
 	}
@@ -1412,7 +1412,7 @@ final class Presenter
 		return $canvas;
 	}
 
-	/** Ask the browser bridge for the latest rasterised card and avatar atlas. */
+	/** Ask the browser bridge for the latest rasterized card and avatar atlas. */
 	private function pollCardAtlas(): bool
 	{
 		if(!function_exists('vrzno_env')) return false;

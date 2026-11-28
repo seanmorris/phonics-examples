@@ -64,7 +64,7 @@ final class GlesMapRenderer
 	private Query $actorQuery;
 	private Query $beamQuery;
 	private int $spriteCapacity = 0;
-	/** Floats per sprite instance: centre, edge offsets and heights, UV edges, texture, light, opacity. */
+	/** Floats per sprite instance: center, edge offsets and heights, UV edges, texture, light, opacity. */
 	private const SPRITE_FLOATS = 15;
 	/** @var array<string,array{0:\DoomPhonics\Graphics\IndexedImage,1:int,2:bool}|false> Sprite image, atlas texture, and flip by frame and rotation. */
 	private array $spriteLooks = [];
@@ -834,9 +834,9 @@ final class GlesMapRenderer
 
 	/**
 	 * How an actor's sprites blend, from its RenderStyle and Alpha: opacity, whether it hangs from the ceiling, the
-	 * blend mode, and the stencil colour packed as r * 65536 + g * 256 + b. Additive styles add their light and need
+	 * blend mode, and the stencil color packed as r * 65536 + g * 256 + b. Additive styles add their light and need
 	 * their black left out, as the Omega pack's beam trails do; `Shaded` paints the picture's brightness in the
-	 * stencil colour, as its smoke is; `None` draws nothing; fuzzy actors (SHADOW) are capped at Doom's fuzz darkness.
+	 * stencil color, as its smoke is; `None` draws nothing; fuzzy actors (SHADOW) are capped at Doom's fuzz darkness.
 	 *
 	 * @return array{float,bool,int,int}
 	 */
@@ -866,7 +866,7 @@ final class GlesMapRenderer
 		, 'orange' => 0xff8000, 'purple' => 0x800080, 'brown' => 0x804000
 	];
 
-	/** A DECORATE colour, `"RR GG BB"`, `"RRGGBB"`, or a common name, packed; ZDoom's default is black. */
+	/** A DECORATE color, `"RR GG BB"`, `"RRGGBB"`, or a common name, packed; ZDoom's default is black. */
 	public static function stencilColor(mixed $value): int
 	{
 		$text = strtolower(trim((string)($value ?? ''), "\" "));

@@ -101,8 +101,8 @@ DECORATE
 	$scheduler->update(1 / 35);
 	$bits = $trailBits();
 	$shotPose = $registry->get($shot, Transform::class);
-	$travelled = hypot($shotPose->x - $startX, $shotPose->y - $startY);
-	verifyWad(count($bits) === 8 && abs($travelled - 50) < .5, 'a 50-unit step by an 8-radius FastProjectile lays eight trail actors, as Doom takes eight sub-steps');
+	$traveled = hypot($shotPose->x - $startX, $shotPose->y - $startY);
+	verifyWad(count($bits) === 8 && abs($traveled - 50) < .5, 'a 50-unit step by an 8-radius FastProjectile lays eight trail actors, as Doom takes eight sub-steps');
 	$along = [];
 
 	foreach($bits as $bit)

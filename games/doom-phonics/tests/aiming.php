@@ -75,7 +75,7 @@ use Phonics\World\ScopeContext;
 	);
 
 	verifyWad($past($ray(-1760.00001, $found['slope'])), 'the autoaimed shot clears the ledge');
-	verifyWad(!$past($ray(-1760.00001, (92 - $eye) / 110)), "a shot at the zombie's hidden centre hits the ledge");
+	verifyWad(!$past($ray(-1760.00001, (92 - $eye) / 110)), "a shot at the zombie's hidden center hits the ledge");
 
 	verifyWad(
 		$aim->aim(-1760.00001, -1864, $eye, 0, AutoAim::RANGE, 0, [7 => [new Transform(-1712, -1864, 64), $targets[7][1]]])

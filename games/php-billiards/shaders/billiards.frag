@@ -31,22 +31,22 @@ vec3 bumpNormal(vec3 position,vec3 normal,float height){vec3 sigmaX=dFdx(positio
 vec4 hash4(vec2 id,float seed){return fract(sin(vec4(dot(id,vec2(127.1,311.7)),dot(id,vec2(269.5,183.3))
 	,dot(id,vec2(419.2,371.9)),dot(id,vec2(97.3,233.1)))+seed)*43758.5453);}
 // Knots live in grain-space cells rather than in the tile, so each gets its own place, size, shape, and edge. A knot is
-// a branch cross-section: roughly concentric growth rings around an off-centre pith inside a lopsided outline, replacing the
+// a branch cross-section: roughly concentric growth rings around an off-center pith inside a lopsided outline, replacing the
 // board grain; about half are drawn out along the grain. None is darker than the knot once baked into wood.svg (a 30%
 // dark stroke and a 20% pale ring); they vary only by fading lighter. Rows are staggered and short blocks of cells stay
 // clear. A knot never reaches more than half a cell past its own, so the two nearest rows and columns hold every knot
 // that can touch this point.
 // Returns the grain displacement across u, in u-units (x), dark edge opacity (y), interior coverage (z), and how much the
 // rings darken the knot's interior (w).
-vec4 woodKnots(vec2 uv,float footprint,float centre){vec2 density=vec2(1.6,9.0),cell=uv/vec2(2.7,7.1)*density;vec4 result=vec4(0.0);
+vec4 woodKnots(vec2 uv,float footprint,float center){vec2 density=vec2(1.6,9.0),cell=uv/vec2(2.7,7.1)*density;vec4 result=vec4(0.0);
 	float row=floor(cell.y),rowStep=fract(cell.y)<.5?-1.0:1.0;
 	for(int j=0;j<2;j++){float line=row+float(j)*rowStep,shift=fract(sin(line*78.233+.77)*43758.5453);
 		float along=cell.x+shift,column=floor(along),columnStep=fract(along)<.5?-1.0:1.0;
 		for(int i=0;i<2;i++){vec2 id=vec2(column+float(i)*columnStep,line);
 			vec4 a=hash4(id,0.0),b=hash4(id,1.7),c=hash4(id,4.3);
-			// Clear and knotty blocks mirror across the board's centre line, so opposite rails share the same density
+			// Clear and knotty blocks mirror across the board's center line, so opposite rails share the same density
 			// while every knot still comes from its own cell.
-			vec2 block=vec2(id.x,floor((centre+abs((id.y+.5)/density.y-centre))*density.y));
+			vec2 block=vec2(id.x,floor((center+abs((id.y+.5)/density.y-center))*density.y));
 			if(a.x>.85*smoothstep(.1,.45,hash4(floor(block/vec2(2.0,3.0)),3.1).x))continue;
 			float stretch=mix(1.8,4.0,fract(b.x*13.7));
 			vec2 radius=vec2(mix(.03,.07,a.w)*stretch,mix(.008,.018,a.w)*mix(.8,1.25,fract(b.y*7.9)));
@@ -55,10 +55,10 @@ vec4 woodKnots(vec2 uv,float footprint,float centre){vec2 density=vec2(1.6,9.0),
 			// Sweet-potato shaped: long, tapering to points, one end fuller than the other, and slightly bent. Scaling
 			// across the grain by (1-u^2)^(1/2-t) turns every ellipse level into a spindle with half-width (1-u^2)^t.
 			vec2 q=offset/radius;q.y-=(c.x-.5)*.7*(q.x*q.x-.35);
-			// The knot forces the board grain outward: each point samples the grain from nearer the knot's centre line,
+			// The knot forces the board grain outward: each point samples the grain from nearer the knot's center line,
 			// so lines that would cross it are pushed aside by exactly its half-width, and the push fades over a couple
 			// of half-widths, bowing the grain well clear of the knot. Its outline becomes a grain line, and its
-			// neighbours run parallel to it, bunching against the sides and closing at the tips. A smooth sign keeps the centre line unbroken past the tips, and a window keeps each knot's pull
+			// neighbors run parallel to it, bunching against the sides and closing at the tips. A smooth sign keeps the center line unbroken past the tips, and a window keeps each knot's pull
 			// inside the cells this search covers.
 			float taper=mix(.65,.9,c.z),fuller=1.0+.35*(c.y-.5)*2.0*q.x,spread=fuller*pow(max(1.0-q.x*q.x,0.0),taper);
 			float envelope=1.7*fuller*max(1.0-q.x*q.x/1.69,0.0),soft=1.5*max(envelope-spread,0.0)+.1;
@@ -76,7 +76,7 @@ vec4 woodKnots(vec2 uv,float footprint,float centre){vec2 density=vec2(1.6,9.0),
 				// Ring count follows the knot's size: two for the smallest, never more than five for the largest.
 				float bands=mix(2.0,4.8,a.w);
 				// Only roughly concentric: a smooth warp drifts the rings apart unevenly, and finer noise lets single
-				// bands pinch and swell on their own. The pith sits off centre so the bands crowd one side.
+				// bands pinch and swell on their own. The pith sits off center so the bands crowd one side.
 				vec2 drift=vec2(noise3(vec3(q*1.7,c.x*31.0)),noise3(vec3(q*1.7,c.y*31.0+7.0)))-.5;
 				float growth=pow(length(q-.45*(vec2(c.y,c.z)-.5)+.35*drift),.85)*bands
 					+.12*sin(2.0*angle+6.3*fract(c.w*17.3))+.35*(noise3(vec3(q*3.1,c.z*23.0))-.5);
@@ -93,7 +93,7 @@ vec4 woodKnots(vec2 uv,float footprint,float centre){vec2 density=vec2(1.6,9.0),
 // Grain runs along u. A gentle wave and a slow drift bend the grain lines across it, and two copies of the texture at
 // hashed offsets crossfade over large irregular regions so its 37 cm repeat never lines up along a rail. Offsets only,
 // never rotation, keep the grain direction; explicit gradients keep region seams and branches on the right mip.
-vec3 woodGrain(vec2 uv,vec2 dx,vec2 dy,float centre){vec4 knots=woodKnots(uv,length((abs(dx)+abs(dy))/vec2(2.7,7.1)),centre);
+vec3 woodGrain(vec2 uv,vec2 dx,vec2 dy,float center){vec4 knots=woodKnots(uv,length((abs(dx)+abs(dy))/vec2(2.7,7.1)),center);
 	float drift=noise3(vec3(uv*vec2(.31,.8),3.7))-.5;
 	uv.y+=.16*sin(uv.x*1.7+drift*2.0)+drift*.45+knots.x;
 	float region=noise3(vec3(uv*.28,9.1))*5.0,index=floor(region),fade=smoothstep(.25,.75,fract(region));
@@ -115,7 +115,7 @@ vec3 wood(vec3 p,vec3 n){vec3 blend=pow(abs(n),vec3(6.0));blend*=step(.01,blend/
 	if(blend.y>0.0)result+=woodGrain(top*scale,topX*scale,topY*scale,17.3*endBoard)*blend.y;
 	if(blend.z>0.0)result+=woodGrain(p.xy*scale,px.xy*scale,py.xy*scale,0.0)*blend.z;
 	return result;}
-// The cue from tip to butt, by distance from the tip (u, metres) and turn around the shaft (v): a leather tip chalked
+// The cue from tip to butt, by distance from the tip (u, meters) and turn around the shaft (v): a leather tip chalked
 // on its face, ivory ferrule, honey maple shaft, steel collar between black rings, a figured forearm with four ebony
 // points edged in the player's veneer, rings, Irish linen wrap, rings, an ebony butt sleeve with diamond inlays, and a
 // rubber bumper. Hands back each zone's roughness, clearcoat, and whether it is metal.
@@ -127,7 +127,7 @@ float cueBand(float value,float from,float to,float aa){return cueEdge(value,fro
 vec3 cueSurface(vec2 uv,vec3 accent,out float rough,out float coat,out bool metal){float d=uv.x,turn=uv.y,angle=turn*6.2832;
 	float aa=max(fwidth(d),.0002);
 	vec3 shaftGrain=texture(uWood,vec2(d*1.1,turn)).rgb;float figure=texture(uWood,vec2(d*2.6,turn+.37)).r;
-	// Distance around the cue from the nearest point edge, in metres; positive inside a point.
+	// Distance around the cue from the nearest point edge, in meters; positive inside a point.
 	float radius=mix(.0109,.0128,clamp((d-.686)/.299,0.0,1.0)),across=abs(fract(turn*4.0)-.5)*2.0;
 	float point=((d-.76)/.225-across)*radius*.7854,pointAa=max(fwidth(point),.00015);
 	float diamond=abs(d-1.285)/.024+abs(fract(turn*4.0+.125)-.5)*.0225/.0065,diamondAa=max(fwidth(diamond),.02);
@@ -158,7 +158,7 @@ vec3 cueSurface(vec2 uv,vec3 accent,out float rough,out float coat,out bool meta
 	}
 	if(d<1.225)
 	{
-		// Irish linen: black thread wound in a fine diagonal weave, a whole number of threads around, flecked with grey.
+		// Irish linen: black thread wound in a fine diagonal weave, a whole number of threads around, flecked with gray.
 		rough=.85;coat=0.0;
 		float weave=sin(d*2600.0+angle*35.0)*sin(d*2600.0-angle*35.0),fleck=step(.93,random(floor(vec3(d*1500.0,turn*110.0,1.0))));
 		float fine=1.0-smoothstep(.0004,.0012,aa);
@@ -174,8 +174,8 @@ vec3 cueSurface(vec2 uv,vec3 accent,out float rough,out float coat,out bool meta
 vec3 ballSkin(vec2 uv){uv=vec2(uv.x,1.0-uv.y);vec2 size=vec2(textureSize(uBallSkins,0).xy);
 	vec2 dx=dFdx(uv),dy=dFdy(uv);float footprint=max(length(dx*size),length(dy*size));
 	float limit=min(1.0,64.0/max(footprint,.0001));return textureGrad(uBallSkins,vec3(uv,vLayer),dx*limit,dy*limit).rgb;}
-float sightDisc(vec2 point,vec2 centre){float distanceToCentre=length(point-centre),edge=max(fwidth(distanceToCentre),.00018);
-	return 1.0-smoothstep(.006-edge,.006+edge,distanceToCentre);}
+float sightDisc(vec2 point,vec2 center){float distanceToCenter=length(point-center),edge=max(fwidth(distanceToCenter),.00018);
+	return 1.0-smoothstep(.006-edge,.006+edge,distanceToCenter);}
 float railSightMask(vec2 point){float result=0.0,offset=.0936625;
 	for(int step=1;step<8;step++){if(step==4)continue;float x=-uTableSize.x*.5+float(step)*uTableSize.x/8.0;
 		result=max(result,sightDisc(point,vec2(x,uTableSize.y*.5+offset)));
@@ -198,8 +198,8 @@ float coatSpec(vec3 lightPosition,vec3 N,vec3 V,float rough,float lightSize){rou
 	float nl=max(dot(N,L),0.0),nv=max(dot(N,V),.001),nh=max(dot(N,H),0.0),vh=max(dot(V,H),0.0);
 	float F=.04+.96*pow(1.0-vh,5.0),D=distribution(nh,rough),k=(rough+1.0)*(rough+1.0)/8.0;
 	float G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));return D*G*F*nl/max(.01,4.0*nl*nv);}
-// felt.svg keeps its noise within about 6% of mid-grey so the pocket-scale macro layer never reads as dirt. The
-// micro-grain and loose-fibre layers stretch that range back out, or the fuzz would vanish with the macro contrast.
+// felt.svg keeps its noise within about 6% of mid-gray so the pocket-scale macro layer never reads as dirt. The
+// micro-grain and loose-fiber layers stretch that range back out, or the fuzz would vanish with the macro contrast.
 float feltDetail(float value){return clamp((value-.5)*8.5+.5,0.0,1.0);}
 vec3 feltLayers(vec2 feltUv){float macro=texture(uFelt,feltUv*.55).r,grain=feltDetail(texture(uFelt,feltUv*7.0+vec2(.17,.43)).r)-.5;
 	float looseFiber=smoothstep(.56,.62,feltDetail(texture(uFelt,feltUv*15.0+vec2(.61,.23)).r));return vec3(macro,grain,looseFiber);}
@@ -227,8 +227,8 @@ void main(){vec4 tint=uInstanced?vTint:uBase;vec3 N=normalize(vNormal),V=normali
 		float height=(macro-.5)*.00055+grain*.00021+looseFiber*.00009;
 		N=bumpNormal(vPosition,N,height);float top=smoothstep(.62,.92,N.y);
 		float track=exp(-pow(abs(vPosition.z-.055*sin(vPosition.x*5.0))*18.0,2.0))*top;
-		// Centre the stronger macro term on the old average so the broad wool variation returns without brightening
-		// or darkening the cloth as a whole. Fine grain and loose fibres keep their existing strength.
+		// Center the stronger macro term on the old average so the broad wool variation returns without brightening
+		// or darkening the cloth as a whole. Fine grain and loose fibers keep their existing strength.
 		base*=.985+(macro-.5)*.2+grain*.08+looseFiber*.05;base=mix(base,base*1.04,track*.035);
 		// Head and foot spots: thin muted cream stickers on the bed, one under the rack's apex ball and its mirror at
 		// the head end. They sit flat, so the cloth's fuzz does not show through them.

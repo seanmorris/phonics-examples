@@ -1,0 +1,11 @@
+{
+  "name": "@seanmorris/terrain-sandbox",
+  "version": "0.1.0",
+  "description": "Editable landscape, atmosphere and watercraft sandbox for Phonics",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {"./phonics.json": "./phonics.json"},
+  "peerDependencies": {"@seanmorris/phonics": "0.1.0"},
+  "peerDependenciesMeta": {"@seanmorris/phonics": {"optional": true}},
+  "files": ["application.php", "autoload.php", "src/", "browser/", "assets/", "music/", "docs/", "phonics.json", "example.json", "README.md", "LICENSE"]
+}

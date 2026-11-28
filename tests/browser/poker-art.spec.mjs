@@ -19,7 +19,7 @@ test('every browser card crop matches an independent SVG rendering at both atlas
 	{
 		const atlas=await page.evaluate(async({source,art,dpr})=>{
 			const url=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
-			try { return await (await import(url)).rasteriseCards(art,dpr); }
+			try { return await (await import(url)).rasterizeCards(art,dpr); }
 			finally { URL.revokeObjectURL(url); }
 		},{source,art,dpr});
 		const reference=PNG.sync.read(new Resvg(art.sheet,{fitTo:{mode:'width',value:atlas.width}}).render().asPng());
@@ -52,16 +52,16 @@ test('Matrix avatar cells are center-cropped and circular',async({page})=>{
 		const url=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
 		try
 		{
-			const atlas=await (await import(url)).rasteriseCards({
+			const atlas=await (await import(url)).rasterizeCards({
 				...art,icons:{matrix:{source:avatar.toDataURL('image/png'),round:true}}
 			},1);
 			const pixels=Uint8Array.from(atob(atlas.base64),character=>character.charCodeAt(0));
 			const [x,y,w,h]=atlas.icons.matrix;
 			const pixel=(px,py)=>[...pixels.slice(((py*atlas.width)+px)*4,((py*atlas.width)+px)*4+4)];
-			return {corner:pixel(x,y),centre:pixel(x+w/2|0,y+h/2|0)};
+			return {corner:pixel(x,y),center:pixel(x+w/2|0,y+h/2|0)};
 		}
 		finally{URL.revokeObjectURL(url);}
 	},{source,art});
 	expect(result.corner[3]).toBe(0);
-	expect(result.centre).toEqual([255,0,0,255]);
+	expect(result.center).toEqual([255,0,0,255]);
 });

@@ -7,7 +7,7 @@ use DoomPhonics\Archive\Lump;
 
 /**
  * Non-interlaced PNG pictures, including ZDoom's signed grAb sprite origin: palette images at 1, 2, 4, or 8 bits,
- * and greyscale, greyscale with alpha, truecolour, and truecolour with alpha at 8 or 16 bits. Colours map to the
+ * and grayscale, grayscale with alpha, truecolor, and truecolor with alpha at 8 or 16 bits. Colors map to the
  * nearest PLAYPAL entry; a 16-bit sample keeps its high byte.
  */
 final class PngDecoder
@@ -141,7 +141,7 @@ final class PngDecoder
 			{
 				for($x = 0; $x < $stride; $x += $step)
 				{
-					// Full-precision samples for the colour key, their high bytes for the palette.
+					// Full-precision samples for the color key, their high bytes for the palette.
 					$samples = [];
 
 					for($i = 0; $i < $channels; $i++)
@@ -151,8 +151,8 @@ final class PngDecoder
 
 					if($type === 0 || $type === 4)
 					{
-						$grey = $samples[0] >> $shift;
-						$pixels .= chr($palette->closestIndex($grey, $grey, $grey));
+						$gray = $samples[0] >> $shift;
+						$pixels .= chr($palette->closestIndex($gray, $gray, $gray));
 						$alpha .= $type === 4
 							? chr($samples[1] >> $shift)
 							: ($transparency === pack('n', $samples[0]) ? "\0" : "\xff");

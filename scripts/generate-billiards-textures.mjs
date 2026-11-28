@@ -17,7 +17,7 @@ const generated = new Map;
  *
  * resvg's turbulence does not stitch at the tile edge, so the wood showed a seam every repeat along the rails. One pass
  * per axis: near the left and right borders the output becomes the copy shifted half a tile along x, whose pixels there
- * were interior neighbours, and likewise for top and bottom. Each copy is used only away from its own centre seam, and
+ * were interior neighbors, and likewise for top and bottom. Each copy is used only away from its own center seam, and
  * the second pass mixes pixels within a column, so it keeps the first pass's wrap.
  */
 const seamless = image => {

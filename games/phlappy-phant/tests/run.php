@@ -42,7 +42,7 @@ $beats = 0;
 $previous = $idle->frame;
 for($i = 0; $i < 30; $i++) { $idle->step(); if($idle->frame !== $previous) $beats++; $previous = $idle->frame; }
 check($beats >= 4 && $beats <= 6, 'the wing beats a few times after a flap');
-check($idle->frame === 0, 'the wing rests folded afterwards');
+check($idle->frame === 0, 'the wing rests folded afterward');
 check($idle->consumeEvents() === [], 'events are cleared once consumed');
 
 $falling = new Simulation(1);
@@ -137,14 +137,14 @@ for($i = 1; $i <= 3600 && $tas->phase === 'playing'; $i++)
 {
 	$tas->step();
 	$boxHeight = Simulation::PHANT_H - 2 * Simulation::HITBOX_INSET_Y;
-	$boxCentre = $tas->y + Simulation::HITBOX_INSET_Y + $boxHeight / 2;
+	$boxCenter = $tas->y + Simulation::HITBOX_INSET_Y + $boxHeight / 2;
 
 	foreach($tas->pillars as $pillar)
 	{
 		if($pillar->x >= Simulation::HITBOX_INSET_X + Simulation::PHANT_W - 2 * Simulation::HITBOX_INSET_X) continue;
 		if($pillar->x + Simulation::PILLAR_W <= Simulation::HITBOX_INSET_X) continue;
 
-		$centering[] = $boxCentre - ($pillar->gapTop + $pillar->gap / 2);
+		$centering[] = $boxCenter - ($pillar->gapTop + $pillar->gap / 2);
 	}
 
 	if(!in_array('flap', $tas->events, true)) continue;
@@ -158,9 +158,9 @@ check($tas->phase === 'playing', 'the autopilot survives a minute at the speed c
 check($tas->score >= 60 && Simulation::gapFor($tas->score) === (float)Simulation::GAP_MIN, 'the autopilot scores through the narrowest gaps');
 check($flaps > 60 && $flaps < 900, 'the autopilot flaps on fewer than a quarter of the steps');
 check($closest >= Simulation::TAS_FLAP_GAP && Simulation::TAS_FLAP_GAP * Simulation::STEP >= .2, 'the autopilot never taps faster than five times a second');
-$centreBias = array_sum($centering) / count($centering);
-$centreError = array_sum(array_map('abs', $centering)) / count($centering);
-check(abs($centreBias) < 3 && $centreError < 12, 'the autopilot crosses gaps around their centre instead of hugging the lower pillar');
+$centerBias = array_sum($centering) / count($centering);
+$centerError = array_sum(array_map('abs', $centering)) / count($centering);
+check(abs($centerBias) < 3 && $centerError < 12, 'the autopilot crosses gaps around their center instead of hugging the lower pillar');
 
 $manual = new Simulation(14);
 $manual->step(true);

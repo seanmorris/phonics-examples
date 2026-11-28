@@ -6,7 +6,7 @@ namespace Rpsc;
  * Board geometry and the rock-paper-scissors order for RPSC.
  *
  * Squares are numbered 0 to 63 from a1 along each rank, so `square = y * 8 + x`, and a1 is a black square as on a
- * tournament checkers board. Each side plays only on the squares of the other side's colour: Black on the red
+ * tournament checkers board. Each side plays only on the squares of the other side's color: Black on the red
  * squares and Red on the black squares. Opposing pieces therefore never share a diagonal. They cannot block or jump
  * each other, and they meet only edge to edge, which is where a challenge happens.
  */
@@ -147,7 +147,7 @@ final class Board
 	/**
 	 * List the four squares a side must fill on the far rank.
 	 *
-	 * They are the squares of that side's own playing colour on the opponent's back rank, between the opponent's four
+	 * They are the squares of that side's own playing color on the opponent's back rank, between the opponent's four
 	 * home squares.
 	 *
 	 * @param int $side Board::BLACK or Board::RED.
@@ -174,7 +174,7 @@ final class Board
 	 * @param int $square Square the piece stands on.
 	 * @param int $side Side the piece belongs to.
 	 * @param bool $king Whether the piece is crowned and may also step backward.
-	 * @return list<int> Diagonal neighbours on the board, forward steps first.
+	 * @return list<int> Diagonal neighbors on the board, forward steps first.
 	 */
 	public static function steps(int $square, int $side, bool $king): array
 	{
@@ -199,9 +199,9 @@ final class Board
 	 * These always belong to the other side, so they are the only squares an opposing piece can be challenged on.
 	 *
 	 * @param int $square Square number from 0 to 63.
-	 * @return list<int> Up to four orthogonal neighbours on the board.
+	 * @return list<int> Up to four orthogonal neighbors on the board.
 	 */
-	public static function neighbours(int $square): array
+	public static function neighbors(int $square): array
 	{
 		$x = self::x($square);
 		$y = self::y($square);

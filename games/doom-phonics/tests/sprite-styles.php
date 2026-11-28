@@ -58,7 +58,7 @@ DECORATE
 	verifyWad($style('Unseen')[2] === GlesMapRenderer::STYLE_HIDDEN, 'RenderStyle None is not drawn');
 	verifyWad(abs($style('Fuzzy')[0] - .32) < 1e-9, 'a SHADOW actor is capped at fuzz darkness');
 	verifyWad($style('Hanging') === [1.0, true, GlesMapRenderer::STYLE_NORMAL, 0], 'a normal-style Alpha without a translucent style stays opaque, and SPAWNCEILING is carried');
-	verifyWad($style('Smoke') === [0.8, false, GlesMapRenderer::STYLE_SHADED, 0xa0a0a0], 'RenderStyle Shaded carries its Alpha and the stencil colour from hex pairs');
-	verifyWad($style('NamedSmoke') === [1.0, false, GlesMapRenderer::STYLE_SHADED, 0xffffff], 'a named stencil colour is understood');
-	verifyWad(GlesMapRenderer::stencilColor('"ff8000"') === 0xff8000 && GlesMapRenderer::stencilColor(null) === 0, 'stencil colours parse without spaces and default to black');
+	verifyWad($style('Smoke') === [0.8, false, GlesMapRenderer::STYLE_SHADED, 0xa0a0a0], 'RenderStyle Shaded carries its Alpha and the stencil color from hex pairs');
+	verifyWad($style('NamedSmoke') === [1.0, false, GlesMapRenderer::STYLE_SHADED, 0xffffff], 'a named stencil color is understood');
+	verifyWad(GlesMapRenderer::stencilColor('"ff8000"') === 0xff8000 && GlesMapRenderer::stencilColor(null) === 0, 'stencil colors parse without spaces and default to black');
 })();

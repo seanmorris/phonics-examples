@@ -337,7 +337,7 @@ export function boot(
 
 		return php;
 	}).catch(async error => {
-		const cancelled = signal.aborted;
+		const canceled = signal.aborted;
 		request.abort();
 
 		try
@@ -355,10 +355,10 @@ export function boot(
 		{
 			setState('idle');
 
-			if(!cancelled) status.textContent = error.message;
+			if(!canceled) status.textContent = error.message;
 		}
 
-		throw cancelled ? signal.reason : error;
+		throw canceled ? signal.reason : error;
 	});
 
 	queue = task.catch(() => {});

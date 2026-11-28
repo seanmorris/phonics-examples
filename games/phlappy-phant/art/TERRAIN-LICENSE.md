@@ -1,4 +1,4 @@
-# Terrain artwork licence
+# Terrain artwork license
 
 `art/terrain.png` is cut from **Seasonal Platformer Tiles** by **GrafxKid**
 (https://opengameart.org/content/seasonal-platformer-tiles), released under the Creative Commons CC0 1.0 Universal

@@ -7,7 +7,7 @@ use Rpsc\Board;
 /**
  * What the player sees and touches: the pieces as drawn, the animation of each event, and the selection.
  *
- * The rules move on the instant an action is taken, but the table shows it afterwards, one event at a time: a piece
+ * The rules move on the instant an action is taken, but the table shows it afterward, one event at a time: a piece
  * slides, two pieces trade places during placement, or two pieces turn face up, wait, and settle. Until an event has played, the table keeps drawing the
  * position from before it. Nothing here touches the graphics device, so the whole class runs in a plain PHP test.
  */
@@ -346,7 +346,7 @@ final class Table
 		if($this->busy()) return '';
 		if($notice !== '') return $notice;
 		if(($view['turn'] ?? -1) !== $human) return "$other is thinking";
-		if($this->selected !== null) return $this->victims() === [] ? 'Choose where to move' : 'Move or challenge a neighbour';
+		if($this->selected !== null) return $this->victims() === [] ? 'Choose where to move' : 'Move or challenge a neighbor';
 		if($view['challenged']) return 'Now move a piece';
 
 		return $view['challenges'] === [] ? 'Your move' : 'Challenge or move';

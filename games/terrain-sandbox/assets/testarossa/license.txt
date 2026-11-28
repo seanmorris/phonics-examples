@@ -1,0 +1,11 @@
+Model Information:
+* title:	Ferrari-Testarossa-84-low-poly
+* source:	https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a
+* author:	XGLOL235 (https://sketchfab.com/XGLOL235)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Ferrari-Testarossa-84-low-poly" (https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a) by XGLOL235 (https://sketchfab.com/XGLOL235) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

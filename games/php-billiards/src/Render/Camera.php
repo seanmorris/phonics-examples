@@ -31,7 +31,7 @@ final class Camera
 	private array $lookTarget = [.1,0.0,0.0];
 	/** Unmodified table framing, retained when zooming back out or taking manual control. */
 	private array $farTarget = [.1,0.0,0.0];
-	/** Latest cue centre; tracking it alone never animates a suspended camera. */
+	/** Latest cue center; tracking it alone never animates a suspended camera. */
 	private ?array $cueFocus = null;
 	/** @var array{yaw:float,pitch:float,distance:float,target:array,lookTarget:array,farTarget:array}|null */
 	private ?array $transitionFrom = null;
@@ -302,19 +302,19 @@ final class Camera
 	}
 
 	/**
-	 * Frame the table for one heading at a point on the line from the cue ball to the table centre.
+	 * Frame the table for one heading at a point on the line from the cue ball to the table center.
 	 *
 	 * A fixed blend between the two framed a corner ball's view on the corner: aiming out over the rails left most of
-	 * the table off screen, while looking at the table centre instead lost a nearby ball off the bottom. The best blend
-	 * depends on the heading, so this finds it. Moving the view centre toward the table centre moves the ball away
+	 * the table off screen, while looking at the table center instead lost a nearby ball off the bottom. The best blend
+	 * depends on the heading, so this finds it. Moving the view center toward the table center moves the ball away
 	 * from the middle of the screen; the blend goes as far as the ball's band allows and, within that, picks the point
-	 * that best centres the cloth outline. It is solved on the composed view, so close zoom keeps its cue placement.
+	 * that best centers the cloth outline. It is solved on the composed view, so close zoom keeps its cue placement.
 	 *
 	 * @param float $cueX Cue-ball cloth X.
 	 * @param float $cueY Cue-ball cloth Y.
 	 * @param float $heading Direction the view faces across the cloth, in radians.
 	 * @param float $pitch Orbit pitch in radians.
-	 * @param float $distance Orbit distance in metres.
+	 * @param float $distance Orbit distance in meters.
 	 * @return array{float,float,float} The table view's far target.
 	 */
 	private function tableFrame(float $cueX, float $cueY, float $heading, float $pitch, float $distance): array
@@ -328,8 +328,8 @@ final class Camera
 		$ball = [$cueX,$height + Ball::RADIUS,$cueY];
 		$focus = $this->cueFocus;
 		$this->cueFocus = [$cueX,$height + Ball::RADIUS,$cueY];
-		// Close zoom composes around the cue itself. Below two metres the fit fades back to the blend that composition
-		// was solved with, 45% of the way to the centre, and is gone by 1.2 m, so close cue placement is unchanged.
+		// Close zoom composes around the cue itself. Below two meters the fit fades back to the blend that composition
+		// was solved with, 45% of the way to the center, and is gone by 1.2 m, so close cue placement is unchanged.
 		$t = max(0.0, min(1.0, (2.0 - $distance) / (2.0 - 1.2)));
 		$close = $t * $t * (3 - 2 * $t);
 		$far = static fn(float $blend): array => [
@@ -356,8 +356,8 @@ final class Camera
 			return $point !== null && abs($point[0]) <= self::BALL_SIDE && $point[1] <= self::BALL_TOP
 				&& $point[1] >= self::BALL_BOTTOM;
 		};
-		// How far the projected cloth outline's centre sits from the middle of the screen.
-		$offCentre = function(float $blend) use ($matrix, $project, $corners): float {
+		// How far the projected cloth outline's center sits from the middle of the screen.
+		$offCenter = function(float $blend) use ($matrix, $project, $corners): float {
 			$view = $matrix($blend);
 			$xs = $ys = [];
 			foreach($corners as $corner) if($point = $project($view, $corner)) {$xs[] = $point[0]; $ys[] = $point[1];}
@@ -380,11 +380,11 @@ final class Camera
 
 		// Coarse scan, then a golden-section search around the best sample.
 		$best = 0.0;
-		$bestMiss = $offCentre(0.0);
+		$bestMiss = $offCenter(0.0);
 		for($sample = 1; $sample <= 8; $sample++)
 		{
 			$blend = $reach * $sample / 8;
-			$miss = $offCentre($blend);
+			$miss = $offCenter($blend);
 			if($miss < $bestMiss) [$best,$bestMiss] = [$blend,$miss];
 		}
 		if(is_finite($bestMiss) && $reach > 0)
@@ -394,14 +394,14 @@ final class Camera
 			$ratio = (sqrt(5) - 1) / 2;
 			$a = $high - ($high - $low) * $ratio;
 			$b = $low + ($high - $low) * $ratio;
-			[$missA,$missB] = [$offCentre($a),$offCentre($b)];
+			[$missA,$missB] = [$offCenter($a),$offCenter($b)];
 			for($step = 0; $step < 20; $step++)
 			{
-				if($missA <= $missB) {$high = $b; $b = $a; $missB = $missA; $a = $high - ($high - $low) * $ratio; $missA = $offCentre($a);}
-				else {$low = $a; $a = $b; $missA = $missB; $b = $low + ($high - $low) * $ratio; $missB = $offCentre($b);}
+				if($missA <= $missB) {$high = $b; $b = $a; $missB = $missA; $a = $high - ($high - $low) * $ratio; $missA = $offCenter($a);}
+				else {$low = $a; $a = $b; $missA = $missB; $b = $low + ($high - $low) * $ratio; $missB = $offCenter($b);}
 			}
 			$refined = ($low + $high) / 2;
-			if($offCentre($refined) <= $bestMiss) $best = $refined;
+			if($offCenter($refined) <= $bestMiss) $best = $refined;
 		}
 
 		$this->cueFocus = $focus;
@@ -411,7 +411,7 @@ final class Camera
 	}
 
 	/**
-	 * Blend the established table view into a cue-centred orbit below two metres.
+	 * Blend the established table view into a cue-centered orbit below two meters.
 	 *
 	 * At minimum zoom, with r = distance*cos(pitch), h = distance*sin(pitch) and
 	 * k = .45*tan(FOV/2), projection of the cue gives y = -h*L / ((r*r+h*h+r*L)*tan(FOV/2)).
@@ -441,7 +441,7 @@ final class Camera
 	 */
 	private function frameManualView(bool $ease = false, ?array $cue = null): void
 	{
-		// The opening's canonical view frames the table centre until the view first takes up the cue.
+		// The opening's canonical view frames the table center until the view first takes up the cue.
 		if($cue !== null && $this->followEnabled && is_finite((float)($cue[0] ?? NAN)) && is_finite((float)($cue[1] ?? NAN)))
 		{
 			[$cueX,$cueY] = [(float)$cue[0],(float)$cue[1]];
@@ -600,7 +600,7 @@ final class Camera
 			if($distance > 0) $distances[] = $distance;
 		}
 
-		// Pocket jaws can leave a legal ball centre just beyond a nominal cushion
+		// Pocket jaws can leave a legal ball center just beyond a nominal cushion
 		// plane. In that case the rearward cue ray has no positive intersection
 		// with either plane; use the minimum clearance distance and pitch the cue
 		// over the rail instead of asking min() to reduce an empty list.

@@ -358,7 +358,7 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	const helpDown=await point(canvas,(await regions(canvas)).help.down);
 	await page.mouse.click(helpDown.x,helpDown.y);
 	await expect.poll(helpRow).toBe('draw 1');
-	// Next and the arrow keys beside it turn to the neighbouring game, from its top.
+	// Next and the arrow keys beside it turn to the neighboring game, from its top.
 	const helpNext=await point(canvas,(await regions(canvas)).help.next);
 	await page.mouse.click(helpNext.x,helpNext.y);
 	await expect.poll(helpRow).toBe('holdem 0');
@@ -598,7 +598,7 @@ test('discard cards stand apart in a compressed window and each edge activates i
 	await canvas.focus();await page.keyboard.press('c');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
 	const before=await state(canvas),layout=await regions(canvas),[first,second]=layout.cards;
-	// The dialog keeps its CSS size on a compressed oval, so neighbouring faces never cover one another.
+	// The dialog keeps its CSS size on a compressed oval, so neighboring faces never cover one another.
 	expect(first[0]+first[2]).toBeLessThanOrEqual(second[0]);
 	const leading=await point(canvas,[second[0]+2,Math.max(first[1],second[1])+20,2,2]);
 	await page.mouse.click(leading.x,leading.y);
@@ -799,7 +799,7 @@ async function settled(canvas)
 	await expect.poll(async()=>{
 		snapshot=await state(canvas);
 		// The final animation frame still owns the prompt and input. Return the same unlocked snapshot we checked;
-		// reading it again afterwards can instead observe the next bot action's chip animation.
+		// reading it again afterward can instead observe the next bot action's chip animation.
 		return !snapshot.ui.animation&&!snapshot.ui.locked;
 	},{timeout:20_000}).toBe(true);
 	return snapshot;

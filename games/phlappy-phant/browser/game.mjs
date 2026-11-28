@@ -196,7 +196,7 @@ class HintOverlay
 		this.fontShadow = this.tint(this.fontImage, [.21, .20, .33]);
 	}
 
-	tint(image, colour)
+	tint(image, color)
 	{
 		const canvas = document.createElement('canvas');
 		canvas.width = image.naturalWidth;
@@ -206,12 +206,12 @@ class HintOverlay
 		const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
 
 		// The font sheet has a light face and a dark inset. Multiply both by the requested tint just as the sprite
-		// shader does; replacing every non-transparent pixel with one flat colour destroys the letter forms.
+		// shader does; replacing every non-transparent pixel with one flat color destroys the letter forms.
 		for(let offset = 0; offset < pixels.data.length; offset += 4)
 		{
-			pixels.data[offset] = Math.round(pixels.data[offset] * colour[0]);
-			pixels.data[offset + 1] = Math.round(pixels.data[offset + 1] * colour[1]);
-			pixels.data[offset + 2] = Math.round(pixels.data[offset + 2] * colour[2]);
+			pixels.data[offset] = Math.round(pixels.data[offset] * color[0]);
+			pixels.data[offset + 1] = Math.round(pixels.data[offset + 1] * color[1]);
+			pixels.data[offset + 2] = Math.round(pixels.data[offset + 2] * color[2]);
 		}
 
 		context.putImageData(pixels, 0, 0);

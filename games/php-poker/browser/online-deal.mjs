@@ -838,7 +838,7 @@ export class OnlineDeal
 	/**
 	 * Open a street's betting round. Heads-up, the dealer posts the small blind and acts first before the flop and
 	 * last after it. In stud the lower exposed card brings in for the minimum bet on the first street, and the better
-	 * exposed hand acts first afterwards; a tie goes to the seat on the dealer's left.
+	 * exposed hand acts first afterward; a tie goes to the seat on the dealer's left.
 	 */
 	beginStreetBetting()
 	{

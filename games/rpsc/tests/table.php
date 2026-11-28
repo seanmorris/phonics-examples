@@ -96,7 +96,7 @@ $session->command($intent);
 $table->show($session->view());
 check($table->busy() && !$table->live($home[2]), 'the swap is shown before anything else can be pressed');
 check($table->pieces[$first]['kind'] === $kinds[$second] && $table->pieces[$second]['kind'] === $kinds[$first], 'each piece already carries its new kind');
-check($table->pieces[$first]['square'] === $home[$first] && $table->label($home[$first]) === Board::name($home[$first]) . ' your ' . strtolower(Board::KINDS[$kinds[$second]]), 'and is labelled on its new square');
+check($table->pieces[$first]['square'] === $home[$first] && $table->label($home[$first]) === Board::name($home[$first]) . ' your ' . strtolower(Board::KINDS[$kinds[$second]]), 'and is labeled on its new square');
 check($table->pieces[$first]['x'] === (float)Board::x($home[$second]) && $table->pieces[$first]['y'] === (float)Board::y($home[$second]), 'it starts where its kind came from');
 check($table->pieces[$second]['x'] === (float)Board::x($home[$first]) && $table->pieces[$second]['y'] === (float)Board::y($home[$first]), 'and so does the other');
 $table->advance(Table::SWAP / 2);
@@ -190,7 +190,7 @@ $red->show($other->view());
 $red->steer(1, 0);
 $start = $red->cursor;
 $red->steer(1, 0);
-check(Board::x($red->cursor) === Board::x($start) - 1, 'right on screen is towards file a for Red');
+check(Board::x($red->cursor) === Board::x($start) - 1, 'right on screen is toward file a for Red');
 $red->steer(0, 1);
 check(Board::y($red->cursor) === Board::y($start) - 1, 'up on screen is down the ranks for Red');
 

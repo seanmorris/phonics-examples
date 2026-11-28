@@ -93,7 +93,7 @@ $helpText = [
 	['heading' => 'Goal']
 	, 'Take every opposing piece, or fill the four crowned squares on the far row.'
 	, ['heading' => 'The board']
-	, 'Each side plays on the squares of the other side\'s colour. Pieces move diagonally, so the two sides never block or jump each other. They only meet edge to edge.'
+	, 'Each side plays on the squares of the other side\'s color. Pieces move diagonally, so the two sides never block or jump each other. They only meet edge to edge.'
 	, ['heading' => 'The pieces']
 	, 'Each side places four rocks, four papers and four scissors face down. You always see your own.'
 	, ['heading' => 'A turn']
@@ -205,7 +205,7 @@ $setPage = static function(string $next) use (&$setPage, &$page, &$session, &$on
 			, 'text' => [
 				'Rock Paper Scissors Checkers: a checkers board, two hidden armies, and one question asked edge to edge.'
 				, 'Built with Phonics.'
-				, ['name' => 'Licence', 'value' => 'Apache-2.0']
+				, ['name' => 'License', 'value' => 'Apache-2.0']
 			]
 		]
 	];

@@ -60,7 +60,7 @@ test('pocket knocks pick the strongest recording for hard strikes and the weakes
 	}
 });
 
-test('jitter varies a pocket knock only between neighbouring recordings', () => {
+test('jitter varies a pocket knock only between neighboring recordings', () => {
 	const tier=name=>Number(name.slice(-1));
 	let varied=false;
 	for(let step=1;step<=1000;step++)
@@ -72,7 +72,7 @@ test('jitter varies a pocket knock only between neighbouring recordings', () => 
 		varied||=stronger!==weaker;
 		if(step>1)assert.ok(steady<=tier(pocketHit((step-1)/1000,()=>.5)),'a harder strike chose a weaker recording');
 	}
-	assert.ok(varied,'no strike could use either neighbouring recording');
+	assert.ok(varied,'no strike could use either neighboring recording');
 });
 
 test('invalid pocket strengths and random values clamp to a recording', () => {

@@ -992,7 +992,7 @@ export class MatrixLobbyProvider extends EventTarget
 			() => pending.reject(
 				new MatrixLobbyError(
 					'invite_unavailable'
-					, 'The host did not admit this invitation. It may be cancelled or already claimed.'
+					, 'The host did not admit this invitation. It may be canceled or already claimed.'
 				)
 			)
 			, 120_000
@@ -1029,7 +1029,7 @@ export class MatrixLobbyProvider extends EventTarget
 				, 'Guest registration requires extra onboarding on this homeserver'
 			);
 
-			if(state.closed) throw new Error('Invitation cancelled');
+			if(state.closed) throw new Error('Invitation canceled');
 
 			this.accessToken = registration.access_token;
 			this.userId = peer(registration.user_id);
@@ -1334,7 +1334,7 @@ export class MatrixLobbyProvider extends EventTarget
 		await this.privateSend('ready', {});
 	}
 
-	async cancelInviteLink(reason = 'Invitation cancelled')
+	async cancelInviteLink(reason = 'Invitation canceled')
 	{
 		const state = this.linkState;
 
@@ -2596,8 +2596,8 @@ export class MatrixLobbyProvider extends EventTarget
 	{
 		if(this.closed) return this.closeTask;
 
-		const cancelled = this.cancelInviteLink('Session closed');
-		this.closeTask = Promise.allSettled([cancelled, ...this.cleanupTasks.values()]);
+		const canceled = this.cancelInviteLink('Session closed');
+		this.closeTask = Promise.allSettled([canceled, ...this.cleanupTasks.values()]);
 		this.closed = true;
 		this.connected = false;
 		clearInterval(this.cleanupTimer);

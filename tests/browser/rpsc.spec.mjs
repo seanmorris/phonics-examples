@@ -112,7 +112,7 @@ test('RPSC places, moves, challenges, saves, and resigns', async({page}) => {
 
 		if(now.challenges.length)
 		{
-			// Picking up the piece marks its neighbour; pressing the neighbour makes the challenge.
+			// Picking up the piece marks its neighbor; pressing the neighbor makes the challenge.
 			const [from, to] = now.challenges[0];
 			await square(page, from).click();
 			await expect.poll(async() => (await status(page)).victims).toContain(to);
@@ -429,7 +429,7 @@ test('RPSC plays an online game through the room: hidden placements, a challenge
 
 	if(challenged)
 	{
-		// Both pieces were opened with proofs and are shown; afterwards the survivor is hidden again.
+		// Both pieces were opened with proofs and are shown; afterward the survivor is hidden again.
 		await expect.poll(async() => (await status(page)).status, {timeout: 30_000}).toMatch(/ beats | meets /);
 
 		await expect.poll(

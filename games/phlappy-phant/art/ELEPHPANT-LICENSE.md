@@ -1,4 +1,4 @@
-# elePHPant artwork licence
+# elePHPant artwork license
 
 `art/elephpant.svg` is the elePHPant, the PHP mascot created by **Vincent Pontier** in 1998, in the vector drawing
 uploaded to Wikimedia Commons by **Webysther** on 23 April 2016 as *Webysther 20160423 - Elephpant.svg*

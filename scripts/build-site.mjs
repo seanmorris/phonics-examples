@@ -119,6 +119,8 @@ for(const entry of entries)
 	const gameRoot = path.join(gamesRoot, entry.directory);
 	const pharRoute = `applications/${entry.slug}/game.phar`;
 	await copyTree(path.join(gameRoot, entry.application), path.join(destination, pharRoute));
+	if(entry.mediaDirectory) await copyTree(path.join(gameRoot,entry.mediaDirectory),
+		path.join(destination,path.dirname(pharRoute),entry.mediaDirectory));
 
 	for(const [source, route] of await worldResources(gameRoot, entry, pharRoute))
 	{

@@ -61,7 +61,7 @@ final class Scene
 	private MenuRenderer $menus;
 	/** @var array<string,int> Global tile id for each named tile of the pieces sheet. */
 	private array $tiles = [];
-	/** @var array<string,array<string,mixed>> Text layouts by content, scale, and colour. */
+	/** @var array<string,array<string,mixed>> Text layouts by content, scale, and color. */
 	private array $cache = [];
 	/**
 	 * @var array<string,array{int,int,int,int,int}> Where each font glyph's ink falls in its cell, and its advance:
@@ -95,7 +95,7 @@ final class Scene
 		// The generator names every tile in the tileset, so this class never hard-codes a position on the sheet.
 		foreach($map->tilesets as $set) foreach($set['properties'] ?? [] as $entry)
 		{
-			// The generator also measures the font, because a label is centred by its ink, not by its cells.
+			// The generator also measures the font, because a label is centered by its ink, not by its cells.
 			if($entry['name'] === 'rpsc.ink') $this->ink = json_decode((string)$entry['value'], true, 4, JSON_THROW_ON_ERROR);
 
 			if($entry['name'] !== 'rpsc.tiles') continue;
@@ -110,9 +110,9 @@ final class Scene
 	}
 
 	/**
-	 * Colour to clear the frame with before render().
+	 * Color to clear the frame with before render().
 	 *
-	 * @return array{float,float,float,float} RGBA clear colour.
+	 * @return array{float,float,float,float} RGBA clear color.
 	 */
 	public function background(): array
 	{
@@ -148,7 +148,7 @@ final class Scene
 		 *
 		 * @param float $x File from 0 (a) to 7 (h); a sliding piece is between two.
 		 * @param float $y Rank from 0 (rank 1) to 7 (rank 8).
-		 * @return array{float,float} Centre of that position in frame pixels.
+		 * @return array{float,float} Center of that position in frame pixels.
 		 */
 		$place = static function(float $x, float $y) use ($human, $left, $top, $tile): array {
 			$column = $human === Board::RED ? Board::SIZE - 1 - $x : $x;
@@ -249,7 +249,7 @@ final class Scene
 		// Online, the other row carries the other player's name instead of the computer's level.
 		$names = [$human => 'You', $other => $view['names'][$other] ?? ($level === '' ? 'Computer' : "Computer: $level")];
 		$status = $rows ? $table->status() : '';
-		$statusColour = $table->banner !== '' || ($view['phase'] ?? '') === 'over' ? self::GOLD : self::CREAM;
+		$statusColor = $table->banner !== '' || ($view['phase'] ?? '') === 'over' ? self::GOLD : self::CREAM;
 		$wide = $fit['mode'] === 'landscape';
 		$rowLeft = $wide ? $left + $size + $border + 2 * $gap : $left;
 		$rowRight = $wide ? $rowLeft + $fit['column'] : $left + $size;
@@ -288,16 +288,16 @@ final class Scene
 
 		if($status !== '' && $wide)
 		{
-			$set = $this->label($labels, $status, $rowLeft, 0, $t, 'left', $statusColour, $fit['column']);
+			$set = $this->label($labels, $status, $rowLeft, 0, $t, 'left', $statusColor, $fit['column']);
 			$middle = ($placed[0][1] + $block + $placed[1][1]) / 2;
 
-			// The wrapped status is centred in the gap between the two rows.
+			// The wrapped status is centered in the gap between the two rows.
 			foreach($set['count'] > 0 ? array_slice($labels, -$set['count']) : [] as $sprite) $sprite->y += floor($middle - $set['height'] / 2);
 		}
 		elseif($status !== '')
 		{
 			[$inkLeft, , $inkWidth] = $this->inkBox($status);
-			$this->label($labels, $status, $left + ($size - $inkWidth * $t) / 2 - $inkLeft * $t, $bottom + $gap, $t, 'left', $statusColour);
+			$this->label($labels, $status, $left + ($size - $inkWidth * $t) / 2 - $inkLeft * $t, $bottom + $gap, $t, 'left', $statusColor);
 		}
 
 		// Buttons sit at the right of the player's lowest line, beside the lost pieces on a tall frame.
@@ -306,7 +306,7 @@ final class Scene
 
 		foreach(array_reverse($buttons) as $button)
 		{
-			// The label is centred by its ink: the same margin left and right of the strokes, and above and below.
+			// The label is centered by its ink: the same margin left and right of the strokes, and above and below.
 			[$inkLeft, $inkTop, $inkWidth, $inkHeight] = $this->inkBox($button['label']);
 			$buttonWidth = (int)ceil($inkWidth * $t) + 6 * $k;
 			$x -= $buttonWidth;
@@ -467,13 +467,13 @@ final class Scene
 	}
 
 	/**
-	 * Build one sprite from the pieces sheet, centred on a point.
+	 * Build one sprite from the pieces sheet, centered on a point.
 	 *
 	 * @param string $name Tile name from the tileset.
-	 * @param float $x Centre in frame pixels.
-	 * @param float $y Centre in frame pixels.
+	 * @param float $x Center in frame pixels.
+	 * @param float $y Center in frame pixels.
 	 * @param float $scale Frame pixels per art pixel.
-	 * @param array{float,float,float}|null $tint Colour multiplier for white marks, or null to keep the art's colours.
+	 * @param array{float,float,float}|null $tint Color multiplier for white marks, or null to keep the art's colors.
 	 * @param float $opacity Opacity from 0 to 1.
 	 * @param float $squash Horizontal scale from 0 to 1, for a piece turning over.
 	 * @return Sprite The sprite, without the engine's outline.
@@ -497,23 +497,23 @@ final class Scene
 	 *
 	 * @param list<Sprite> $batch Text batch to append to.
 	 * @param string $text Text to draw.
-	 * @param float $x Left, centre, or right edge in frame pixels, by alignment.
+	 * @param float $x Left, center, or right edge in frame pixels, by alignment.
 	 * @param float $y Top of the first line in frame pixels.
 	 * @param float $scale Whole-number text scale.
 	 * @param string $align left, center, or right.
-	 * @param array{float,float,float} $colour Text colour.
+	 * @param array{float,float,float} $color Text color.
 	 * @param float $wrap Width in frame pixels to wrap at, or INF for a single line.
 	 * @return array{count:int,height:float} How many glyph sprites were appended, and the height they cover.
 	 */
-	private function label(array &$batch, string $text, float $x, float $y, float $scale, string $align, array $colour, float $wrap = INF): array
+	private function label(array &$batch, string $text, float $x, float $y, float $scale, string $align, array $color, float $wrap = INF): array
 	{
-		$key = json_encode([$text, $scale, $this->font->theme, $colour, is_finite($wrap) ? $wrap : null]);
+		$key = json_encode([$text, $scale, $this->font->theme, $color, is_finite($wrap) ? $wrap : null]);
 
 		if(!isset($this->cache[$key]))
 		{
 			if(count($this->cache) > 400) $this->cache = [];
 
-			$this->cache[$key] = $this->font->layout($text, $scale, $wrap, [...$colour, 1.0]);
+			$this->cache[$key] = $this->font->layout($text, $scale, $wrap, [...$color, 1.0]);
 		}
 
 		if($align === 'right') $x -= $this->cache[$key]['width'];
@@ -534,7 +534,7 @@ final class Scene
 	 * Find the box a line's ink covers at scale one.
 	 *
 	 * The font's cells are wider and taller than its strokes: capitals fill rows 1 to 11 of a 16-row line, and most
-	 * leave their last column empty. Centring a label by its cells would set it left of and above the middle.
+	 * leave their last column empty. Centering a label by its cells would set it left of and above the middle.
 	 *
 	 * @param string $text One line of text.
 	 * @return array{float,float,float,float} Left and top of the ink from the line's origin, then its width and height.

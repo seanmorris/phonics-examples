@@ -4,11 +4,11 @@ RPSC is seven PHP classes, one entry script, three browser modules, and one gene
 
 ## Rules: `Board` and `Game`
 
-`Rpsc\Board` is geometry with no state. Squares are numbered 0 to 63 from a1, `owner()` says which side plays on a square, `steps()` lists the diagonal squares a piece could move to, and `neighbours()` lists the squares that share an edge. A diagonal step keeps a square's colour and an edge neighbour always has the other colour, so the rule that the two sides never block each other needs no code: `Game::moves()` only has to ask whether the target square is empty.
+`Rpsc\Board` is geometry with no state. Squares are numbered 0 to 63 from a1, `owner()` says which side plays on a square, `steps()` lists the diagonal squares a piece could move to, and `neighbors()` lists the squares that share an edge. A diagonal step keeps a square's color and an edge neighbor always has the other color, so the rule that the two sides never block each other needs no code: `Game::moves()` only has to ask whether the target square is empty.
 
 `Rpsc\Game` holds the true position, including both sides' hidden kinds. `place()`, `challenge()`, `move()`, and `resign()` validate and apply one action each, and queue an event that says what happened. `view($side)` is the only method that decides what a side may know. It returns an opposing piece's kind as `null` until the game is over.
 
-`export()` and `import()` write and read a save. Saves come back from browser storage, so `import()` checks every field. It refuses a piece on the wrong colour, a repeated piece id, a man on the far row, and any position whose pieces on the board and pieces lost do not add up to four of each kind.
+`export()` and `import()` write and read a save. Saves come back from browser storage, so `import()` checks every field. It refuses a piece on the wrong color, a repeated piece id, a man on the far row, and any position whose pieces on the board and pieces lost do not add up to four of each kind.
 
 ## Session: `Bot` and `Session`
 
@@ -20,7 +20,7 @@ The bot keeps two small tables: the opposing pieces it has seen, with the turn i
 
 ## Presentation: `Table` and `Scene`
 
-The rules apply an action at once. `Rpsc\Ui\Table` shows it afterwards. It keeps its own copy of the pieces as drawn and plays one event at a time: a move slides a piece, and a challenge turns both pieces face up, holds them, removes the loser, and turns the survivors back. During placement it compares each new arrangement with the last and slides the pieces whose kind changed, two for a swap and more for a shuffle; the rules send no event for that. The table also owns the selection, the keyboard cursor, the status line, and the label of every square. It has no graphics calls, so `tests/table.php` plays twelve whole games through it and checks after every event that the animated pieces match a fresh look at the game.
+The rules apply an action at once. `Rpsc\Ui\Table` shows it afterward. It keeps its own copy of the pieces as drawn and plays one event at a time: a move slides a piece, and a challenge turns both pieces face up, holds them, removes the loser, and turns the survivors back. During placement it compares each new arrangement with the last and slides the pieces whose kind changed, two for a swap and more for a shuffle; the rules send no event for that. The table also owns the selection, the keyboard cursor, the status line, and the label of every square. It has no graphics calls, so `tests/table.php` plays twelve whole games through it and checks after every event that the animated pieces match a fresh look at the game.
 
 `Rpsc\Render\Scene` draws the table with the engine's sprite, rectangle, and bitmap text renderers. The art is pixel art, so `fit()` picks the largest whole-number scale at which the board and both sides' rows fit the frame. It tries two layouts, rows stacked above and below the board or both rows in a column beside it, and keeps the one with the larger board. A 720 by 960 frame gets the stacked layout at four times. A 1280 by 680 window gets the column at four times, where stacking would only reach two.
 
@@ -61,7 +61,7 @@ While `rpscOnline` returns a view, `game.php` shows it on the same `Table` and s
 
 ## Assets
 
-`scripts/generate-rpsc-assets.mjs` computes everything in `assets/` and the poster: two board squares, eight checkers, the king's rim, five white marks that the renderer tints, and seven synthesised sounds. The tileset records each tile's name in an `rpsc.tiles` property and `Scene` looks tiles up by name, so the sheet can be reordered without touching PHP.
+`scripts/generate-rpsc-assets.mjs` computes everything in `assets/` and the poster: two board squares, eight checkers, the king's rim, five white marks that the renderer tints, and seven synthesized sounds. The tileset records each tile's name in an `rpsc.tiles` property and `Scene` looks tiles up by name, so the sheet can be reordered without touching PHP.
 
 ## Tests
 
