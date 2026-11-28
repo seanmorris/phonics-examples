@@ -449,7 +449,7 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 		expect(max(abs($pan),abs($tilt))<.02,'The view eases back to the road after the flash.');
 		$away=new AirPatrol; $away->resume($hitPatrol);
 		$fast=$game->car->state(); $fast['speed']=70.; $watch=new Camera;
-		$touch=null; $flare=false; $puffs=$streak=false;
+		$touch=null; $puffs=$streak=false;
 		for($tick=0;$tick<1500;$tick++) {
 			$prev=$away->pose();
 			$fast['x']=$prev['x']; $fast['z']=$prev['z']+30.;
@@ -467,24 +467,28 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 				$branch->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
 				$nextLandingPose=$branch->pose();
 			} elseif(isset($nextLandingPose)) {
-				expect(abs($nextLandingPose['y']-$p['y'])<1.e-8 && abs($nextLandingPose['z']-$p['z'])<1.e-8,
+				expect(abs($nextLandingPose['y']-$p['y'])<1.e-8 && abs($nextLandingPose['z']-$p['z'])<1.e-8 && abs($nextLandingPose['pitch']-$p['pitch'])<1.e-8,
 					'Branching during the glide or slide preserves landing velocity and surface contact.');
 				unset($nextLandingPose);
 			}
 			if($state['phase']==='glide') {
 				expect($p['power']===0. && abs($p['roll'])<=abs($prev['roll'])+.000001,'The gliding pilot levels the wings without thrust.');
-				if($p['pitch']>.01 && $p['vy']<0.) $flare=true;
 				foreach(str_split($away->smoke->instances(),FlightTrails::STRIDE) as $bytes) {
 					$kind=unpack('g',substr($bytes,32,4))[1];
 					$puffs=$puffs || $kind===5.; $streak=$streak || $kind===4.;
 				}
 			} else {
 				expect($state['phase']==='slide' && $p['y']>=.82,'The downed aircraft remains on its belly when the nearby driver looks away.');
-				$touch??=$p;
+				if($touch===null) {
+					$flightPath=atan2($prev['vy'],hypot($prev['vx'],$prev['vz']));
+					expect($flightPath<0. && $prev['pitch']-$flightPath>deg2rad(15.) && $p['pitch']>deg2rad(12.),
+						'The wings-level jet holds its nose high above the descending flight path through first contact.');
+					$touch=$p;
+				}
 				if($p['speed']===0.) break;
 			}
 		}
-		expect($touch && $flare && $puffs && !$streak && $p['speed']===0. && hypot($p['x']-$touch['x'],$p['z']-$touch['z'])>20.,
+		expect($touch && abs($p['pitch'])<.001 && $puffs && !$streak && $p['speed']===0. && hypot($p['x']-$touch['x'],$p['z']-$touch['z'])>20.,
 			'The powerless aircraft sheds separate puffs with the exhaust streak off, flares, slides and stops.');
 		$fast['x']=$p['x']; $fast['z']=$p['z']+650.; $watch->position=[$fast['x'],$p['y'],$fast['z']]; $watch->yaw=0.;
 		$away->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
@@ -1022,6 +1026,13 @@ foreach([30,60,120] as $hz) {
 	}
 	expect(abs($firstPuff-.46)<=1./$hz && $surge>84.,'The first puff and forward surge coincide.');
 	expect($touch && $t>4.25 && $t<4.65 && $p['z']>330. && $p['vz']>69.,'The powerless glide carries speed to a later touchdown.');
+	$flightPath=atan2($before['vy'],hypot($before['vx'],$before['vz']));
+	expect($before['pitch']-$flightPath>deg2rad(15.) && $p['pitch']>deg2rad(12.),"The nose stays high through touchdown at $hz Hz.");
+	for($i=1;$i<=$hz;$i++) {
+		$touch=$wreck->landUnpowered(1./$hz,$land,-10.,$touch,$t+$i/$hz);
+		expect($touch,"The aircraft stays in contact as its nose lowers at $hz Hz.");
+	}
+	expect(abs($wreck->state()['pitch'])<deg2rad(1.),"The nose lowers to the surface during the belly slide at $hz Hz.");
 }
 
 // A raised roadbed gives a reproducible canyon wall with a level approach, a steep face and a flat top.

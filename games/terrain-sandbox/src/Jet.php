@@ -259,11 +259,18 @@ final class Jet
 		$along=$dx*sin($p['yaw'])+$dz*cos($p['yaw']);
 		$across=$dx*cos($p['yaw'])-$dz*sin($p['yaw']);
 		$clearance=$p['y']-$surface-.83;
-		$flare=max(0.,min(1.,1.-$clearance/10.));
+		// Ease into the flare, reducing sink and raising the nose together as the tail nears the surface.
+		$approach=max(0.,min(1.,1.-$clearance/14.));
+		$flare=$approach*$approach*(3.-2.*$approach);
 		$sink=max(2.6,.092*$speed);
 		$desiredVy=-$sink+(max(-$sink,min(-1.2,$speed*$along-1.6))+$sink)*$flare;
 		$p['vy']+=($desiredVy-$p['vy'])*(1.-exp(-$dt/.38));
-		$pitch=$sliding ? atan($along) : atan2($p['vy'],max(1.,$speed))*(1.-$flare)+.085*$flare;
+		// When a wall arrests the glide, level the body for the remaining vertical drop.
+		$pitch=atan($along);
+		if(!$sliding && $speed>0.) {
+			$glidePitch=atan2($p['vy'],$speed)+deg2rad(20.)*$flare;
+			$pitch+=($glidePitch-$pitch)*min(1.,$speed/$sink);
+		}
 		$roll=$sliding ? -atan($across*cos($pitch)) : 0.;
 		$blend=$sliding && $speed===0. ? 1. : 1.-exp(-$dt/.30);
 		$this->deflect($dt,$roll-$p['roll'],$pitch-$p['pitch'],0.);
