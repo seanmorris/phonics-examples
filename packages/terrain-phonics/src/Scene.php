@@ -3030,6 +3030,28 @@ final class Scene
 		);
 	}
 
+	/** Link a decal fragment to the same position and LOD calculation as the terrain pass. */
+	public function groundOverlayProgram(string $fragment): Program
+	{
+		return new Program($this->groundVertexSource,$fragment);
+	}
+
+	/** Redraw only visible ground intersecting [minX, minZ, maxX, maxZ]. The fragment clips the tile edges. */
+	public function drawGroundRegion(Program $program,Camera $camera,array $bounds): void
+	{
+		if($this->clipmap) {
+			$this->clipmap->drawRegion($program,$camera,$this->groundGroups,$bounds);
+			return;
+		}
+		$last=null;
+		foreach($this->draw as $n) {
+			if(isset($this->groundCull[$n['key']]) || $n['x'] >= $bounds[2] || $n['z'] >= $bounds[3]
+				|| $n['x']+$n['size'] <= $bounds[0] || $n['z']+$n['size'] <= $bounds[1]) continue;
+			$this->patches[$n['key']]['mesh']->draw($this->bindPatch($program->location('uPatch'),
+				$program->location('uEdges'),$program->location('uCorners'),$n,$last));
+		}
+	}
+
 	/**
 	 * Draw an overlay on the same triangles as the finest resident terrain, including edits and LOD blending.
 	 * @param Program $program Active overlay program using the vertex functions from Clipmap::gridShader().

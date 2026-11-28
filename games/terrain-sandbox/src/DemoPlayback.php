@@ -8,6 +8,7 @@ use TerrainPhonics\Landscape;
 /** A playback owns its world and graphics cache. The parked live session keeps its physics and edit history. */
 final class DemoPlayback
 {
+	private int $skidSample=-1;
 	public readonly Session $world;
 	public readonly Scene $scene;
 	public float $shown = -1.;
@@ -70,6 +71,7 @@ final class DemoPlayback
 			$this->ready = false;
 			$this->sun = [];
 		}
+		$this->skidSample=$tape->replaySkids($s->skidMarks,$tape->playhead ?? 0.,$this->skidSample);
 		$before = $this->previous;
 		$dt = $frame['time']-($before['time'] ?? $frame['time']);
 		if(!$before || $before['mode']!==$frame['mode'] || $before['world']!==$frame['world'] || $dt<0 || $dt>.25) {

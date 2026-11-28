@@ -1751,6 +1751,23 @@ final class Clipmap
 		return $groups;
 	}
 
+	/** Intersect a world-space decal footprint with the strips actually drawn at each LOD. */
+	public function drawRegion(Program $program,Camera $camera,array $visible,array $bounds): void
+	{
+		$groups=[];
+		foreach($visible as $level=>$strips) {
+			$step=$this->levels[$level]['step'];
+			// Include a neighboring cell for the stitched vertices at a ring edge.
+			$l=(int)floor($bounds[0]/$step)-1; $r=(int)ceil($bounds[2]/$step)+1;
+			$t=(int)floor($bounds[1]/$step)-1; $b=(int)ceil($bounds[3]/$step)+1;
+			foreach($strips as [$x,$z,$right,$bottom]) {
+				if($x<$r && $right>$l && $z<$b && $bottom>$t)
+					$groups[$level][]=[max($x,$l),max($z,$t),min($right,$r),min($bottom,$b)];
+			}
+		}
+		if($groups) $this->drawGroups($program,$camera,$groups);
+	}
+
 	/**
 	 * Submit the previously culled terrain strips for this program.
 	 *

@@ -179,6 +179,39 @@ final class DemoTape
 		return $lo;
 	}
 
+	/** Repaint saved contacts once per recorded sample, including after a seek or when branching. */
+	public function replaySkids(SkidMarks &$marks,float $time,int $cursor=-1): int
+	{
+		$end=$this->sampleIndex($time);
+		if(!$this->events->hasSkids || $cursor===$end) return $end;
+		$now=$this->row($end); $world=$now[1];
+		if($cursor<0 || $cursor>$end || $this->row($cursor)[1]!==$world) {
+			$marks=new SkidMarks; $cursor=$end-1;
+			$field=$now[2]==0 ? 7 : 14;
+			while($cursor>=0) {
+				$past=$this->row($cursor); $at=$past[2]==0 ? 7 : 14;
+				// Disjoint half-mile circles cannot share a surviving mark.
+				if($past[1]!==$world || hypot($past[$at]-$now[$field],$past[$at+2]-$now[$field+2])>2*SkidMarks::RADIUS) break;
+				$cursor--;
+			}
+		}
+		for($i=$cursor+1;$i<=$end;$i++) {
+			$r=$this->row($i); $mode=self::MODES[(int)$r[2]]; $at=$mode==='fly' ? 7 : 14;
+			$x=$r[$at]; $z=$r[$at+2]; $contacts=[];
+			if($mode==='car' && ($bits=$this->events->at($i,$r[4],$mode)['skids'] ?? 0)) {
+				$sin=sin($r[17]); $cos=cos($r[17]);
+				for($wheel=0;$wheel<4;$wheel++) {
+					$ink=($bits >> (4*$wheel)) & 15;
+					if(!$ink) continue;
+					[$wx,$wz]=Car::wheelPoint($wheel,$x,$z,$sin,$cos);
+					$contacts[]=[$wheel,$wx,$r[15],$wz,$ink/15];
+				}
+			}
+			$marks->step($contacts,$x,$z);
+		}
+		return $end;
+	}
+
 	public function seek(float $seconds): void
 	{
 		if(!$this->count() || $this->recording || !is_finite($seconds)) return;

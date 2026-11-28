@@ -9,6 +9,7 @@ final class DemoEvents
 	private array $anchors = [];
 	private int $cursor = 0, $sample = -1;
 	public int $bytes = 0;
+	public bool $hasSkids = false;
 
 	public function capture(Session $s, ?array $vehicle, int $index, int $budget): bool
 	{
@@ -31,6 +32,11 @@ final class DemoEvents
 			'delivery'=>$s->delivery ? ['delivered'=>$s->delivery->delivered,'carrying'=>$s->delivery->carrying,'target'=>$s->delivery->target()] : null,
 			'beachBalls'=>$s->balloons->beachBalls->states(),'balloons'=>$s->balloons->targets(),'slots'=>$s->balloons->readySlots(),'shots'=>$shots,'range'=>$range,
 			'contacts'=>$s->mode === 'car' ? $s->car->dustContacts : []];
+		// Four four-bit strengths. Wheel positions are already in the resolved car pose.
+		$skids=0;
+		if($s->mode==='car') foreach($s->car->skidContacts as [$wheel,,,,$strength])
+			$skids|=(int)round(15*$strength) << (4*$wheel);
+		if($skids || isset($this->last['skids'])) $state['skids']=$skids;
 		$delta = [];
 		foreach($state as $key=>$value) if(!array_key_exists($key,$this->last) || $this->last[$key] !== $value) $delta[$key]=$value;
 		if(!$delta) return true;
@@ -42,6 +48,7 @@ final class DemoEvents
 
 	private function append(int $index, string $encoded, array $delta): void
 	{
+		$this->hasSkids = $this->hasSkids || !empty($delta['skids']);
 		$n = count($this->changes);
 		if($n % 256 === 0) $this->anchors[$n] = $this->last;
 		$this->last = $delta + $this->last;
@@ -116,6 +123,7 @@ final class DemoEvents
 
 	private static function valid(string $key, mixed $v): bool
 	{
+		if($key==='skids') return is_int($v) && $v>=0 && $v<=65535;
 		if($key==='stars') {
 			if(!self::vector($v,3)) return false;
 			try { new \TerrainPhonics\Starfield(...$v); }

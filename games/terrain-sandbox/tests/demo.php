@@ -167,4 +167,24 @@ $copy->close();
 check($s->weather->controls()['kind']==='snow' && abs($s->weather->ground($s->time)[1]-$snowSample/60.)<.00001,'Branching restores the snow already on the ground at the seek time');
 $s->close();
 
+$s=new Session(['worldSize'=>512,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-5.]);
+$s->landscape->queue(['type'=>'road','points'=>[[0,0,-120],[0,0,120]],'width'=>12.,'shoulder'=>4.]);
+$s->landscape->commit();
+$s->camera->position=[0.,10.,0.]; $s->camera->yaw=M_PI;
+$s->input(['actions'=>['car']],0.,1.);
+for($i=0;$i<1000 && $s->findingCarSite();$i++) $s->input([],0.,1.);
+$s->demo->start($s);
+$s->input(['keys'=>['KeyW'=>true]],0.,1.);
+for($i=0;$i<100;$i++) { $s->step(1/60); $s->demo->capture($s); }
+$s->input(['keys'=>['Space'=>true]],0.,1.);
+for($i=0;$i<35;$i++) { $s->step(1/60); $s->demo->capture($s); }
+check((bool)$s->skidMarks->tiles,'A handbrake stop writes asphalt marks in the live session.');
+$loaded=DemoTape::import($s->demo->export());
+$marks=new TerrainSandbox\SkidMarks;
+$end=$loaded->replaySkids($marks,$loaded->duration());
+check((bool)$marks->tiles,'Seeking to the stop restores the recorded marks.');
+$loaded->replaySkids($marks,0.,$end);
+check(!$marks->tiles,'Rewinding to before the launch removes future tire marks.');
+$s->close();
+
 echo "Terrain demo capture, scrubbing, branching, vehicle momentum and file isolation passed.\n";

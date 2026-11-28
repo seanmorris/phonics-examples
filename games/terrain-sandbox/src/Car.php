@@ -32,7 +32,7 @@ final class Car
 	private CarGearbox $gearbox;
 	private float $squeal = 0.;
 	/** Dry, loose tire contacts this step: world x/y/z, outward side, emission strength. */
-	public array $dustContacts = [];
+	public array $dustContacts = [], $skidContacts = [];
 	/** Angle in radians from the direction of travel to the way the body points, while the tail slides out. */
 	private float $drift = 0;
 	/** Deceleration in meters a second squared from locked rear tires carrying all the rear load. */
@@ -154,7 +154,7 @@ final class Car
 		if($this->lastSafe) { $this->lastSafe[0]+=$dx; $this->lastSafe[1]+=$dz; }
 		$this->suspension->translate($dy);
 		$this->tumble?->translate($dx,$dy,$dz);
-		$this->dustContacts=[];
+		$this->dustContacts=$this->skidContacts=[];
 		$this->revision=$land->revision(); $this->waterLevel=$water;
 	}
 
@@ -223,7 +223,7 @@ final class Car
 		$this->speed = $this->steering = $this->spin = $this->rearSpin = $this->drift = 0;
 		$this->gearbox = new CarGearbox;
 		$this->squeal = 0.;
-		$this->dustContacts = [];
+		$this->dustContacts = $this->skidContacts = [];
 		$this->tumble = null; $this->recoveryTime = 0;
 		$this->braking = $this->reversing = false;
 		$this->lastSafe = [$this->x,$this->z,$this->yaw];
@@ -272,7 +272,7 @@ final class Car
 	{
 		if($dt <= 0) return true;
 		$this->squeal = 0.;
-		$this->dustContacts = [];
+		$this->dustContacts = $this->skidContacts = [];
 		if($this->revision !== $land->revision() || $this->waterLevel !== $waterLevel)
 		{
 			$support = $this->support($land, $this->x, $this->z, $this->yaw);
@@ -510,13 +510,11 @@ final class Car
 			$slip = $i < 2 ? $front : $rear;
 			$dust = min(1.,max($slip/4.,$i < 2 ? 0. : .8*$boost));
 			if($dust < .04) continue;
-			$along = ($i < 2 ? .5 : -.5)*self::WHEELBASE;
 			$side = $i % 2 ? 1 : -1;
-			$across = .5*$side*($i < 2 ? self::FRONT_TRACK : self::REAR_TRACK);
-			$x = $this->x + $along*$sin + $across*$cos;
-			$z = $this->z + $along*$cos - $across*$sin;
+			[$x,$z]=self::wheelPoint($i,$this->x,$this->z,$sin,$cos);
 			if(self::onPavement($land,$x,$z))
 			{
+				if($slip>1.5) $this->skidContacts[]=[$i,$x,$height,$z,min(1.,($slip-1.5)/8.)];
 				// Quiet tire scrub below 1 m/s; a fast locked wheel reaches full voice at 17 m/s.
 				$t = max(0.,min(1.,($slip-1.)/16.));
 				$level = $t*$t*(3.-2.*$t);
@@ -525,6 +523,13 @@ final class Car
 			else $this->dustContacts[] = [$x,$height,$z,$side,$dust];
 		}
 		$this->squeal = sqrt($power/4.);
+	}
+
+	public static function wheelPoint(int $wheel,float $x,float $z,float $sinYaw,float $cosYaw): array
+	{
+		$along=($wheel<2 ? .5 : -.5)*self::WHEELBASE;
+		$across=($wheel%2 ? .5 : -.5)*($wheel<2 ? self::FRONT_TRACK : self::REAR_TRACK);
+		return [$x+$along*$sinYaw+$across*$cosYaw,$z+$along*$cosYaw-$across*$sinYaw];
 	}
 
 	/** A road brush paints its whole footprint. A graded spline paints only its pavement width. */
@@ -843,7 +848,7 @@ final class Car
 		$this->gearbox->resume(array_slice($motion,12,3),$p['rpm'],$p['engineLoad']);
 		$this->suspension->resume($p,$support,array_slice($motion,15,5));
 		$this->tumble=count($motion)===26 ? CarTumble::resume($p,array_slice($motion,20)) : null;
-		$this->dustContacts=[]; $this->revision=$land->revision(); $this->waterLevel=$water;
+		$this->dustContacts=$this->skidContacts=[]; $this->revision=$land->revision(); $this->waterLevel=$water;
 	}
 
 	public function state(): array

@@ -50,6 +50,7 @@ final class Session
 	private ?array $searchOrigin = null;
 	private ?\WeakMap $circuitSources = null;
 	public TireDust $tireDust;
+	public SkidMarks $skidMarks;
 	public AirPatrol $airPatrol;
 	/** The car's lamp levels and how far its pop-up headlights stand open. */
 	private CarLamps $lamps;
@@ -605,6 +606,7 @@ final class Session
 		$this->car = new Car;
 		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
+		$this->skidMarks = new SkidMarks;
 		$this->lamps = new CarLamps;
 		$this->jet = new Jet;
 		$this->balloons = new BalloonPractice;
@@ -839,6 +841,7 @@ final class Session
 					$this->journeyClock->advance($this->journeySigns->timingGates,$stages,$before,$after,$this->time,$seconds);
 				}
 				if(!empty($this->network->nodes[$this->square]['exits']) && !$this->preparing && !$racing && !$this->delivery) $this->approachSquare($after);
+				$this->skidMarks->step($this->car->skidContacts,$after['x'],$after['z']);
 				$hadDust = $this->tireDust->active();
 				$this->tireDust->step($seconds,$this->car->dustContacts,$after);
 				if($hadDust || $this->tireDust->active()) $this->dirty = true;
@@ -892,6 +895,10 @@ final class Session
 		}
 		if($this->balloons->beachBalls->step($seconds,$this->landscape,$this->water->level(),$mode,
 			$mode===$this->mode ? ($before ?? null) : null,$after ?? null)) $this->dirty=true;
+		if($this->mode!=='car' && $this->skidMarks->tiles) {
+			$this->skidMarks->lift();
+			$this->skidMarks->prune($after['x'] ?? $this->camera->position[0],$after['z'] ?? $this->camera->position[2]);
+		}
 		$this->time += $seconds;
 		$this->water->update($this->time);
 		// The application redraws for wave time whenever water shows, which covers the gates that float on it.
@@ -1025,6 +1032,7 @@ final class Session
 			$this->driver?->restart($site[0],$site[1]);
 			$this->airPatrol = new AirPatrol;
 			$this->tireDust = new TireDust;
+			$this->skidMarks->lift();
 			$this->lamps->reset();
 			$this->chase->board($this->camera,$this->car->state(),$this->landscape);
 		} else {
@@ -1082,6 +1090,7 @@ final class Session
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
 		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
+		$this->skidMarks->lift();
 		$this->lamps->reset();
 		$this->chase->board($this->camera,$car->state(),$this->landscape);
 		$this->message = 'CPU racer approaching the start.';
@@ -1223,6 +1232,7 @@ final class Session
 			(bool)($this->held('ShiftLeft') || $this->held('ShiftRight') || ($buttons & self::PAD_LB)),$this->trialRecover));
 		$this->trialRecover = false;
 		$after = $this->car->state();
+		$this->skidMarks->step($this->car->skidContacts,$after['x'],$after['z']);
 		$this->time = $trial->tick / CircuitTrial::HZ;
 		$this->water->update($this->time);
 		if($this->settings['clock']) {
@@ -2541,7 +2551,9 @@ final class Session
 		$cpu=$this->journeyDriver!==null;
 		$props=$this->balloons->beachBalls->translated($shift,$next->recipe()['worldSize']/2);
 		$clock=$this->journeyClock;
+		$marks=$this->skidMarks;
 		$this->replace($next,$this->driveHighways);
+		$this->skidMarks=$marks; $marks->translate($shift);
 		$this->journeyClock=$clock;
 		$this->balloons->beachBalls->restore($props);
 		$this->journeyViews=$views;
@@ -2555,6 +2567,7 @@ final class Session
 		$this->chase->resetInterpolation();
 		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
+		$this->skidMarks->lift();
 		$this->message="Driving through $child."; $this->dirty=true;
 		if($cpu) $this->startJourneyDriver();
 	}
@@ -2573,6 +2586,7 @@ final class Session
 		$this->car->spawn($site,$this->landscape,$this->water->level());
 		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
+		$this->skidMarks->lift();
 		$this->lamps->reset();
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
 		$this->chase->board($this->camera,$this->car->state(),$this->landscape);
@@ -2623,6 +2637,7 @@ final class Session
 		if($this->journeyDriver) $this->startJourneyDriver($this->journeyDriver->exit);
 		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
+		$this->skidMarks->lift();
 		if(!$flooded) $this->chase->board($this->camera,$this->car->state(),$this->landscape);
 		$this->dirty = true;
 		return true;
@@ -2651,6 +2666,7 @@ final class Session
 		$this->car->spawn($site, $this->landscape, $this->water->level());
 		$this->airPatrol = new AirPatrol;
 		$this->tireDust = new TireDust;
+		$this->skidMarks->lift();
 		$this->lamps->reset();
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
 		$this->chase->board($this->camera, $this->car->state(), $this->landscape);
@@ -2827,6 +2843,7 @@ final class Session
 		$this->releasePin();
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		$this->skidMarks = new SkidMarks;
 		$this->airPatrol = new AirPatrol;
 		$this->journeyEntrances = JourneyRoad::entrances($landscape,$this->driveHighways!==null);
 		$this->duck = null;
@@ -2975,6 +2992,7 @@ final class Session
 			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		$this->skidMarks = new SkidMarks;
 		$this->journeyEntrances = JourneyRoad::entrances($landscape,$this->driveHighways!==null);
 		$this->duck = null;
 		if($this->circuitCommit !== null)
@@ -3298,6 +3316,7 @@ final class Session
 		$source->playhead=null;
 		try { DemoPlayback::restoreWorld($this,$world); }
 		finally { $source->playhead=$at; }
+		$source->replaySkids($this->skidMarks,$at);
 		$this->time=$frame['time']; $this->water->update($this->time);
 		if(isset($events['weather'])) $this->weather->restore($events['weather']);
 		if(isset($events['stars'])) $this->setStars(new Starfield(...$events['stars']));

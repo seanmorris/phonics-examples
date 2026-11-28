@@ -117,13 +117,15 @@ foreach([0.,$edge,16.] as $x)
 	$pose = $car->state();
 	$expected = $x === 0. ? 0 : ($x === $edge ? 1 : 2);
 	$patchLevels[] = $pose['tireSqueal'];
+	check(count($car->skidContacts)===2-$expected && !array_diff(array_column($car->skidContacts,0),[2,3]),
+		'Only grounded rear tires on the pavement leave handbrake marks.');
 	check(count($car->dustContacts) === $expected && ($pose['tireSqueal'] > 0.) === ($expected < 2),
 		'Each locked rear tire contributes the effect for its own surface.');
 	foreach($car->dustContacts as [$px,$py,$pz,$side,$strength])
 		check($py === 0. && abs($pz-($pose['z']-.5*Car::WHEELBASE)) < 1.e-6
 			&& abs(($px-$pose['x']) - $side*.5*Car::REAR_TRACK) < 1.e-6 && $strength > .5,'Dust is born at a rear contact patch.');
 	$car->step($dt,0.,0.,$land,.1,true);
-	check(!$car->dustContacts && $car->state()['tireSqueal'] === 0.,'Submerged contacts suppress dust and asphalt squeal.');
+	check(!$car->skidContacts && !$car->dustContacts && $car->state()['tireSqueal'] === 0.,'Submerged contacts suppress dust and asphalt squeal.');
 }
 check(abs($patchLevels[1]*sqrt(2.) - $patchLevels[0]) < .00001,'A single paved tire contributes half as much acoustic power as two.');
 function slideLevel(Landscape $land, int $run, float $pedal, float $steering, bool $lock = false): float
@@ -176,7 +178,7 @@ for($i=0;$i<400;$i++)
 	if($jump->state()['motion'] === 'airborne')
 	{
 		$air++;
-		check(!$jump->dustContacts && $jump->state()['tireSqueal'] === 0.,'Airborne wheels produce no fresh tire effects.');
+		check(!$jump->skidContacts && !$jump->dustContacts && $jump->state()['tireSqueal'] === 0.,'Airborne wheels produce no fresh tire effects.');
 	}
 	elseif($air) break;
 }
