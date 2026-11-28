@@ -8,6 +8,8 @@ use Phonics\Render\Program;
 final class Clipmap
 {
 	private Program $generator;
+	// Only the last set of overlay footprints is retained. Each LOD snaps and changes visibility independently.
+	private array $overlayRegions = [], $overlayClips = [];
 	private bool $joined = false;
 	private const AXES = 1, DETAIL_SHAPE = 2, GULLY_CUT = 4, COAST_PROFILE = 8;
 	private int $formFeatures = 0;
@@ -1754,18 +1756,49 @@ final class Clipmap
 	/** Intersect a world-space decal footprint with the strips actually drawn at each LOD. */
 	public function drawRegion(Program $program,Camera $camera,array $visible,array $bounds): void
 	{
-		$groups=[];
-		foreach($visible as $level=>$strips) {
-			$step=$this->levels[$level]['step'];
-			// Include a neighboring cell for the stitched vertices at a ring edge.
-			$l=(int)floor($bounds[0]/$step)-1; $r=(int)ceil($bounds[2]/$step)+1;
-			$t=(int)floor($bounds[1]/$step)-1; $b=(int)ceil($bounds[3]/$step)+1;
-			foreach($strips as [$x,$z,$right,$bottom]) {
-				if($x<$r && $right>$l && $z<$b && $bottom>$t)
-					$groups[$level][]=[max($x,$l),max($z,$t),min($right,$r),min($bottom,$b)];
-			}
+		$this->drawRegions($program,$camera,$visible,[$bounds]);
+	}
+
+	/**
+	 * Draw disjoint decal footprints together so their strips share grid bindings.
+	 * Each region is keyed by its material and contains [minX, minZ, maxX, maxZ] in world space.
+	 */
+	public function drawRegions(
+		Program $program, Camera $camera, array $visible, array $regions, ?callable $bindRegion = null
+	): void {
+		if($groups = $this->overlayGroups($visible, $regions)) $this->drawGroups($program, $camera, $groups, $bindRegion);
+	}
+
+	/** A moving camera can keep the same integer strips on some levels while others scroll. */
+	private function overlayGroups(array $visible, array $regions): array
+	{
+		if($regions !== $this->overlayRegions) {
+			$this->overlayRegions = $regions;
+			$this->overlayClips = [];
 		}
-		if($groups) $this->drawGroups($program,$camera,$groups);
+		$groups = [];
+		foreach($visible as $level => $strips) {
+			$step = $this->levels[$level]['step'];
+			$cached = $this->overlayClips[$level] ?? null;
+			if($cached !== null && $step === $cached[0] && $strips === $cached[1]) {
+				if($cached[2]) $groups[$level] = $cached[2];
+				continue;
+			}
+			foreach($strips as [$x0, $z0, $x1, $z1]) {
+				// Stitched vertices may use the next cell. Reject misses before converting world bounds to cells.
+				$left = ($x0 - 1) * $step; $top = ($z0 - 1) * $step;
+				$right = ($x1 + 1) * $step; $bottom = ($z1 + 1) * $step;
+				foreach($regions as $key => [$l, $t, $r, $b]) {
+					if($l >= $right || $r <= $left || $t >= $bottom || $b <= $top) continue;
+					$groups[$level][] = [
+						max($x0, (int)floor($l / $step) - 1), max($z0, (int)floor($t / $step) - 1),
+						min($x1, (int)ceil($r / $step) + 1), min($z1, (int)ceil($b / $step) + 1), $key
+					];
+				}
+			}
+			$this->overlayClips[$level] = [$step, $strips, $groups[$level] ?? []];
+		}
+		return $groups;
 	}
 
 	/**
@@ -1774,11 +1807,14 @@ final class Clipmap
 	 * @param Program $p Active GPU program receiving terrain uniforms.
 	 * @param Camera $camera Camera defining the viewpoint and projection.
 	 * @param array $groups Visible clipmap strips from the culling pass.
+	 * @param callable|null $bindRegion Selects the material for strips tagged with a region key.
 	 * @return int Number of submitted draws.
 	 */
-	public function drawGroups(Program $p, Camera $camera, array $groups): int
+	public function drawGroups(Program $p, Camera $camera, array $groups, ?callable $bindRegion = null): int
 	{
 		$count = 0;
+		$activeRegion = null;
+		$drawCell = $p->location('uDrawCell');
 		glBindVertexArray($this->vao[0]);
 		glUniform1i($p->location('uPacked'), (int)$this->packed);
 		glUniform1i($p->location('uElevations'), 7);
@@ -1791,9 +1827,14 @@ final class Clipmap
 		{
 			$this->bindGrid($p, $camera, $index, $this->levels[$index]);
 
-			foreach($visible as [$left,$top,$right,$bottom])
+			foreach($visible as $strip)
 			{
-				glUniform2i($p->location('uDrawCell'), $left, $top);
+				if($bindRegion !== null && $strip[4] !== $activeRegion) {
+					$activeRegion = $strip[4];
+					$bindRegion($activeRegion);
+				}
+				[$left,$top,$right,$bottom] = $strip;
+				glUniform2i($drawCell, $left, $top);
 				glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * ($right - $left + 1), $bottom - $top);
 			}
 

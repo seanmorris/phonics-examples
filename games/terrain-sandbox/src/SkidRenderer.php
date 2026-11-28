@@ -44,30 +44,32 @@ final class SkidRenderer
 		if(!$marks->tiles) return;
 		$planes=$camera->clipPlanes($width,$height);
 		[$dx,$dy,$dz]=$marks->offset;
-		$bound=false;
+		$regions=[];
+		$size=SkidTile::METERS;
 		foreach($marks->tiles as $key=>$tile) {
-			$x=$tile->x+$dx; $z=$tile->z+$dz; $size=SkidTile::METERS;
-			if(!Camera::inView($planes,$camera->position,['x'=>$x,'z'=>$z,'size'=>$size],$tile->low+$dy-2.,$tile->high+$dy+2.)) continue;
-			if(!$bound) {
-				$p=$this->program ??= $scene->groundOverlayProgram(self::FRAGMENT);
-				$p->use();
-				glUniformMatrix4fv($p->location('uViewProjection'),1,false,$camera->viewProjection($width,$height));
-				glUniform3f($p->location('uEye'),...$camera->position);
-				glUniform1i($p->location('uRubber'),0);
-				glUniform1f($p->location('uBorder'),SkidTile::BORDER/SkidTile::SIZE);
-				glDepthMask(false); glDepthFunc(GL_LEQUAL);
-				glEnable(GL_BLEND); glBlendFuncSeparate(GL_ZERO,GL_SRC_COLOR,GL_ZERO,GL_ONE);
-				$bound=true;
-			}
+			$x=$tile->x+$dx; $z=$tile->z+$dz;
+			if(Camera::inView($planes,$camera->position,['x'=>$x,'z'=>$z,'size'=>$size],$tile->low+$dy-2.,$tile->high+$dy+2.))
+				$regions[$key]=[$x,$z,$x+$size,$z+$size];
+		}
+		if(!$regions) return;
+
+		$p=$this->program ??= $scene->groundOverlayProgram(self::FRAGMENT);
+		$p->use();
+		glUniformMatrix4fv($p->location('uViewProjection'),1,false,$camera->viewProjection($width,$height));
+		glUniform3f($p->location('uEye'),...$camera->position);
+		glUniform1i($p->location('uRubber'),0);
+		glUniform1f($p->location('uBorder'),SkidTile::BORDER/SkidTile::SIZE);
+		glDepthMask(false); glDepthFunc(GL_LEQUAL);
+		glEnable(GL_BLEND); glBlendFuncSeparate(GL_ZERO,GL_SRC_COLOR,GL_ZERO,GL_ONE);
+
+		$tileUniform=$p->location('uTile');
+		$scene->drawGroundRegions($p,$camera,$regions,function($key) use ($marks,$regions,$tileUniform,$size) {
 			glActiveTexture(GL_TEXTURE0);
-			$this->bind($key,$tile);
-			glUniform3f($p->location('uTile'),$x,$z,1./$size);
-			$scene->drawGroundRegion($p,$camera,[$x,$z,$x+$size,$z+$size]);
-		}
-		if($bound) {
-			glActiveTexture(GL_TEXTURE0); glBindVertexArray(0);
-			glDepthMask(true); glDepthFunc(GL_LESS); glDisable(GL_BLEND);
-		}
+			$this->bind($key,$marks->tiles[$key]);
+			glUniform3f($tileUniform,$regions[$key][0],$regions[$key][1],1./$size);
+		});
+		glActiveTexture(GL_TEXTURE0); glBindVertexArray(0);
+		glDepthMask(true); glDepthFunc(GL_LESS); glDisable(GL_BLEND);
 	}
 
 	private function bind(string $key,SkidTile $tile): void

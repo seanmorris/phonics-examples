@@ -39,6 +39,8 @@ final class SkidTile
 		if($clipRows) $reach=$outer/abs($dz);
 		$l=max(0,(int)floor(min($ax,$bx)-$outer)); $r=min(self::SIZE,(int)ceil(max($ax,$bx)+$outer));
 		$t=max(0,(int)floor(min($az,$bz)-$outer)); $b=min(self::SIZE,(int)ceil(max($az,$bz)+$outer));
+		static $blank=null;
+		$blank ??= str_repeat("\0",self::SIZE);
 		$changed=false;
 		for($j=$t;$j<$b;$j++) {
 			$z=$j+.5-$az;
@@ -49,13 +51,16 @@ final class SkidTile
 				$x1=$ax+$near*$dx; $x2=$ax+$far*$dx;
 				$left=max($l,(int)floor(min($x1,$x2)-$outer)); $right=min($r,(int)ceil(max($x1,$x2)+$outer));
 			}
-			$row=$this->rows[$j] ?? str_repeat("\0",self::SIZE);
+			$row=$this->rows[$j] ?? $blank;
+			$rowDot=$z*$dz;
 			$rowChanged=false;
 			for($i=$left;$i<$right;$i++) {
 				$previous=ord($row[$i]);
 				if($previous>=$peak) continue;
 				$x=$i+.5-$ax;
-				$at=max(0.,min(1.,($x*$dx+$z*$dz)*$invLength2));
+				$at=($x*$dx+$rowDot)*$invLength2;
+				if($at<0.) $at=0.;
+				elseif($at>1.) $at=1.;
 				$px=$x-$at*$dx; $pz=$z-$at*$dz;
 				$d2=$px*$px+$pz*$pz;
 				if($d2>=$outer2) continue;
