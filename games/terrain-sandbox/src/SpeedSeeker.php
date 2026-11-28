@@ -16,7 +16,7 @@ final class SpeedSeeker
 	// Preserve the original release speed and handoff beat. A miss carries on for two escort lengths.
 	private const PASS_SECONDS = .78, MISS_SECONDS = 1.52, MISS_FRAME = .64, HANDOFF_SECONDS = .10, AIM_ANGLE = 22.;
 	private const MISS_LEAD = 2.*AirPatrol::ESCORT_LEAD, MISS_PAST_JET = 32.;
-	private const BOOST_RAMP = .24;
+	private const BOOST_RAMP = .34;
 	private bool $driftPass=false;
 	/** Direction of the ongoing flick during its brief follow-through, zero once decided. */
 	private int $flickSide=0;
