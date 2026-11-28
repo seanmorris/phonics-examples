@@ -772,6 +772,38 @@ expect($driver['z']-$tail['z']>2. && $driver['z']-$tail['z']<3.2 && abs($tail['x
 	}
 })($driver,$checkpoint,$land);
 
+// Give the chassis opposite spins on exactly the same center-of-mass path. The visible
+// approach should match up to first contact, whether the roll starts at release or at the bumper.
+(static function(array $driver,array $checkpoint,Landscape $land): void {
+	$trace=static function(float $spin,bool $atRelease) use($driver,$checkpoint,$land): array {
+		$shot=new SpeedSeeker;
+		if(!$atRelease) $shot->resume($checkpoint['seeker']);
+		$car=$driver+['pitch'=>0.,'roll'=>0.]; $trace=[];
+		$eye=new Camera; $eye->yaw=M_PI; $eye->pitch=.32; $eye->fov=1.36;
+		$plane=$checkpoint['pose']; $plane['yaw']=$plane['pitch']=$plane['roll']=0.;
+		for($tick=0;$tick<300;$tick++) {
+			$old=$car;
+			$car['motion']='tumbling'; $car['roll']=$spin*$tick/60.; $car['pitch']=.2*sin($car['roll']);
+			$offset=Car::massOffset($car['yaw'],$car['pitch'],$car['roll']);
+			$z=$driver['z']+$car['speed']*($tick+1)/60.;
+			$car['x']=-$offset[0]; $car['y']=Car::CENTER_OF_MASS_HEIGHT-$offset[1]; $car['z']=$z-$offset[2];
+			$eye->position=[0.,3.,$z-7.]; $plane['x']=6.; $plane['y']=22.; $plane['z']=$z+40.;
+			$hit=$shot->step(1/60,$car,$plane,'escort',$land,-10.,$old,fn()=>$eye,16/9);
+			if($hit!==null) break;
+			if($pose=$shot->state()['pose']) $trace[$tick]=$pose;
+		}
+		expect(($hit['kind'] ?? null)==='car','A fast barrel roll still ends in visible chassis contact.');
+		return $trace;
+	};
+	foreach([true,false] as $atRelease) {
+		$left=$trace(-9.,$atRelease); $right=$trace(9.,$atRelease);
+		$shared=array_intersect_key($left,$right); $error=0.;
+		foreach($shared as $tick=>$pose) foreach(['x','y','z','pitch','yaw','roll'] as $key)
+			$error=max($error,abs($pose[$key]-$right[$tick][$key]));
+		expect(count($shared)>=5 && $error<1e-8,'The approach follows the same moving center of mass in either roll direction.');
+	}
+})($driver,$checkpoint,$land);
+
 // A take recorded before the higher pass should continue at its original height when branched.
 $oldTail=$checkpoint['seeker'];
 array_pop($oldTail['start']); $oldTail['pose']['y']-=.8;

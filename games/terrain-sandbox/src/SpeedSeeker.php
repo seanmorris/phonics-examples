@@ -124,7 +124,17 @@ final class SpeedSeeker
 			return null;
 		}
 		$drop=$this->phase==='drop';
-		$carFrame=$this->animatedCar($car,$dt);
+		$rolling=$this->tumbleClose>0. || $motion==='tumbling' || $motion==='overturned';
+		$trackingCar=$car;
+		if($rolling) {
+			// The tire-sole origin swings around the center of mass on each roll.
+			// Keep the approach level in that moving center's frame until contact.
+			$center=Car::centerOfMass($car+['pitch'=>0.,'roll'=>0.]);
+			[$trackingCar['x'],$trackingCar['y'],$trackingCar['z']]=$center;
+			$trackingCar['y']-=Car::CENTER_OF_MASS_HEIGHT;
+			$trackingCar['pitch']=$trackingCar['roll']=0.;
+		}
+		$carFrame=$this->animatedCar($trackingCar,$dt);
 		$body=VehicleModel::basis($carFrame);
 		$closing=$drop ? 0. : min(1.,$this->clock/self::CLOSE_SECONDS);
 		$shoulder=$this->start[0]>=0. ? 1. : -1.;
@@ -136,14 +146,10 @@ final class SpeedSeeker
 		foreach(['x','y','z'] as $i=>$axis) $p[$axis]+=$body[$i]*$mark[0]+$body[$i+3]*$mark[1]+$body[$i+6]*$mark[2];
 		// A rolling car has no steady bumper station. Blend the end of this pass into the
 		// chassis, including if the tires catch again before contact.
-		if($this->tumbleClose>0. || $motion==='tumbling' || $motion==='overturned') {
+		if($rolling) {
 			$this->tumbleClose=min(1.,$this->tumbleClose+$dt/self::TUMBLE_CLOSE_SECONDS);
 			$blend=self::smooth($this->tumbleClose);
-			$chassis=VehicleModel::basis($car+['pitch'=>0.,'roll'=>0.]);
-			foreach(['x','y','z'] as $i=>$axis) {
-				$center=$car[$axis]+.5*Car::BODY_HEIGHT*$chassis[3+$i];
-				$p[$axis]+=$blend*($center-$p[$axis]);
-			}
+			foreach(['x','y','z'] as $i=>$axis) $p[$axis]+=$blend*($center[$i]-$p[$axis]);
 		}
 		if($drop) {
 			// The first beat uses the moving wing as its reference. The next beat arcs around the rear quarter.
