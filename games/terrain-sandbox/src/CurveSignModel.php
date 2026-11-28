@@ -123,7 +123,7 @@ final class CurveSignModel
 		return [$fitted,$low,$high];
 	}
 
-	public function draw(Camera $camera, Atmosphere $sky, float $water, int $w, int $h, array $lights): void
+	public function draw(Camera $camera, Atmosphere $sky, float $water, int $w, int $h, array $lights, ?array $bolt = null): void
 	{
 		$this->drawn = 0;
 		$this->fitting = false;
@@ -163,6 +163,8 @@ final class CurveSignModel
 				glUniform3f($p->location('sun'),...$sun);
 				glUniform1f($p->location('day'),max(0.,min(1.,($sun[1]+.10)/.22)));
 				glUniform1f($p->location('waterLevel'),$water);
+				// A lit lightning strike flashes the sheeting. With none the strength is zero.
+				glUniform4f($p->location('uBoltFlash'),...($bolt ?? [0.,0.,0.,0.]));
 				$this->lamps->set(...$lights);
 				$this->lamps->bind($p,$env['nightVisibility']);
 				glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,$this->texture[0]);

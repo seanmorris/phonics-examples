@@ -348,8 +348,9 @@ $drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates
 	}
 	if($session->skidMarks->tiles)
 		($skidRenderer ??= new TerrainSandbox\SkidRenderer)->draw($session->skidMarks,$scene,$viewCamera,$width,$height);
-	$curveSigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
-	$journeySigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
+	$bolt = $scene->bolt();
+	$curveSigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights,$bolt);
+	$journeySigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights,$bolt);
 	foreach($visibleSites as $site)
 		if($site['kind'] !== 'smoke') ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
 	// The car's shadow darkens the ground under it, so it draws after the terrain and before the car.

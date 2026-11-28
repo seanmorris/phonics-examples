@@ -4,6 +4,10 @@ uniform int uSpotLightCount;
 uniform vec4 uSpotLights[TERRAIN_MAX_SPOT_LIGHTS * 3];
 #endif
 
+#ifdef TERRAIN_SIGN_FLASH
+uniform vec4 uBoltFlash; // where a lit lightning strike shines from, in meters, and its strength; none when zero
+#endif
+
 // Sheeting returns light toward its source over a longer range than matte pavement.
 float retroreflection(vec3 point, vec3 eye, vec3 normal, vec3 sun, float day)
 {
@@ -20,6 +24,17 @@ float retroreflection(vec3 point, vec3 eye, vec3 normal, vec3 sun, float day)
 		float range = 1.-smoothstep(.25,1.,d2*place.w/16.);
 		float alignment = smoothstep(.91,.996,dot(incident,view));
 		returned += 32.*light.r/d2*cone*cone*range*alignment*max(dot(normal,incident),0.);
+	}
+#endif
+#ifdef TERRAIN_SIGN_FLASH
+	if(uBoltFlash.w>0.) {
+		// A lightning flash lights sheeting that faces it. Most comes back toward the bolt, and enough goes to every
+		// side that the sign flashes from anywhere in front of it. It is half as strong 2.5 kilometers away.
+		vec3 delta = uBoltFlash.xyz-point;
+		float d2 = max(dot(delta,delta),1.);
+		vec3 incident = delta*inversesqrt(d2);
+		returned += 4.*uBoltFlash.w*max(dot(normal,incident),0.)*mix(.35,1.,smoothstep(.2,.95,dot(incident,view)))
+			/(1.+d2/6250000.);
 	}
 #endif
 	return 1.-exp(-returned);

@@ -312,9 +312,10 @@ foreach(['arctic-meltwater'=>'glacier-ice','tidal-lagoon'=>'seagrass-beds'] as $
 // Standing grass is on at its low level by default, follows its setting and comes from the surface that grows it.
 $grassy = new Session;
 $grown = static fn(string $surface): ?array => TerrainPhonics\GrassShells::style($surface);
-expect($grassy->status()['grass'] === 1
-	&& $grassy->grassStyles() === [$grown(TerrainPhonics\TerrainAppearance::style($grassy->landscape->recipe()))],
-	'Grass starts at its low level on the landscape\'s own surface.');
+// On the opening coast the grass stands clear of the beach: it starts where the sand has half faded.
+$shore = TerrainPhonics\GrassShells::clear($grown(TerrainPhonics\TerrainAppearance::style($grassy->landscape->recipe())), $grassy->displayedLayers());
+expect($grassy->status()['grass'] === 1 && $grassy->grassStyles() === [$shore] && $shore['above'][0] > 5.,
+	'Grass starts at its low level on the landscape\'s own surface, clear of its sand.');
 input($grassy,['values'=>['grass'=>2]]);
 expect($grassy->status()['grass'] === 2 && $grassy->dirty, 'Raising the grass level redraws the view.');
 input($grassy,['values'=>['grass'=>7]]);
@@ -322,8 +323,8 @@ expect($grassy->status()['grass'] === 2, 'The grass level stays within its range
 input($grassy,['values'=>['grass'=>0]]);
 expect($grassy->status()['grass'] === 0, 'Grass can be turned off.');
 input($grassy,['actions'=>[['type'=>'generate','preset'=>'painted-badlands']]]);
-expect($grassy->grassStyles() === [$grown('painted-badlands')] && $grown('painted-badlands') !== null,
-	'A landscape that borrows another style grows its own grass.');
+expect($grassy->grassStyles() === [TerrainPhonics\GrassShells::clear($grown('painted-badlands'), $grassy->displayedLayers())]
+	&& $grown('painted-badlands') !== null, 'A landscape that borrows another style grows its own grass.');
 input($grassy,['actions'=>[['type'=>'generate','preset'=>'canyon']]]);
 expect($grassy->grassStyles() === [null], 'Bare rock grows no grass.');
 // A journey grows each landscape's grass. A destination's height limit follows it to the departure's water level.

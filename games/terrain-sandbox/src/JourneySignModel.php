@@ -64,7 +64,7 @@ final class JourneySignModel
 		return array_pad($data,32,0.);
 	}
 
-	public function draw(Camera $camera,Atmosphere $sky,float $water,int $w,int $h,array $lights): void
+	public function draw(Camera $camera,Atmosphere $sky,float $water,int $w,int $h,array $lights,?array $bolt=null): void
 	{
 		$this->drawn=0;
 		if(!$this->sites) return;
@@ -91,6 +91,8 @@ final class JourneySignModel
 				glUniform3f($p->location('eye'),...$eye); glUniform3f($p->location('sun'),...$sun);
 				glUniform1f($p->location('day'),max(0.,min(1.,($sun[1]+.10)/.22)));
 				glUniform1f($p->location('waterLevel'),$water); glUniform1i($p->location('artwork'),0);
+				// A lit lightning strike flashes the sheeting. With none the strength is zero.
+				glUniform4f($p->location('uBoltFlash'),...($bolt ?? [0.,0.,0.,0.]));
 				glUniform4f($p->location('textV'),$this->art['glyphV'],$this->art['glyphHeight'],$this->art['greenScale'],$this->art['panelBottom']);
 				$this->lamps->set(...$lights); $this->lamps->bind($p,$env['nightVisibility']);
 				glEnable(GL_DEPTH_TEST); glDepthMask(true); glDisable(GL_CULL_FACE);

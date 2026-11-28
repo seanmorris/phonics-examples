@@ -2782,6 +2782,11 @@ final class Scene
 		glDepthMask(false);
 		$this->skyProgram->use();
 		$this->common($this->skyProgram, $camera, $width, $height, $environment);
+
+		// Under a heavy cloud deck the strip of open sky at the horizon dims most of the way with the haze.
+		if($this->weatherRenderer)
+		$this->scalar($this->skyProgram, 'uSkyDim', .7 * (1. - $this->weatherRenderer->air()));
+
 		glBindVertexArray($this->vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 		$stars = $this->atmosphere->stars;
@@ -2906,6 +2911,13 @@ final class Scene
 		glBindVertexArray(0);
 		$this->morphMemo = null;
 	}
+
+	/**
+	 * Tell where the nearest lit lightning strike shines from, so a caller's own models can flash with it.
+	 *
+	 * @return ?array The light's X, height and Z in meters and its strength from 0 to 1, or null when none is lit.
+	 */
+	public function bolt(): ?array { return $this->weatherRenderer?->bolt(); }
 
 	/**
 	 * Upload camera, atmosphere and common surface uniforms to one draw program.

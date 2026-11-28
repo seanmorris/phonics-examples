@@ -53,14 +53,37 @@ final class GrassShells
 	 * - lean: how far a blade's tip stands from its foot, as a share of its height.
 	 * - slope: where the grass starts to thin and where it ends, as one minus the upward part of the ground normal.
 	 * - above: meters above the water at which grass starts and is full.
+	 * - bare: surface layers that grow no grass, such as a beach's sand. clear() starts the grass where they end.
 	 * - top: absolute heights in meters at which it starts to thin and ends, or null.
 	 * - wind: sway of the tips in meters.
 	 */
 	public const STYLES = [
-		'coast' => ['height' => .30, 'density' => 19., 'tip' => [1.25, 1.35, .95], 'slope' => [.06, .16]]
-		, 'limestone' => ['height' => .25, 'density' => 20., 'tip' => [1.2, 1.35, .95], 'slope' => [.06, .16]]
+		'coast' => [
+			'height' => .30
+			, 'density' => 19.
+			, 'tip' => [1.25, 1.35, .95]
+			, 'slope' => [.06, .16]
+			, 'bare' => ['sand']
+		]
+
+		, 'limestone' => [
+			'height' => .25
+			, 'density' => 20.
+			, 'tip' => [1.2, 1.35, .95]
+			, 'slope' => [.06, .16]
+			, 'bare' => ['sand']
+		]
+
 		, 'mountain' => ['height' => .30, 'density' => 19., 'tip' => [1.25, 1.3, .95], 'slope' => [.08, .22]]
-		, 'heather-moor' => ['height' => .30, 'density' => 16., 'tip' => [1.35, 1.15, 1.25], 'slope' => [.10, .24]]
+
+		, 'heather-moor' => [
+			'height' => .30
+			, 'density' => 16.
+			, 'tip' => [1.35, 1.15, 1.25]
+			, 'slope' => [.10, .24]
+			, 'bare' => ['peat-banks']
+		]
+
 		, 'tidal-lagoon' => ['height' => .30, 'density' => 16., 'tip' => [1.3, 1.3, .95], 'above' => [1.5, 3.]]
 
 		, 'rolling-prairie' => [
@@ -71,7 +94,14 @@ final class GrassShells
 			, 'wind' => .22
 		]
 
-		, 'river-valley' => ['height' => .50, 'density' => 16., 'tip' => [1.25, 1.4, .9], 'slope' => [.08, .2]]
+		, 'river-valley' => [
+			'height' => .50
+			, 'density' => 16.
+			, 'tip' => [1.25, 1.4, .9]
+			, 'slope' => [.08, .2]
+			, 'bare' => ['wet-silt']
+		]
+
 		, 'wooded-foothills' => ['height' => .35, 'density' => 19., 'tip' => [1.25, 1.35, .9], 'slope' => [.06, .16]]
 
 		, 'high-desert-steppe' => [
@@ -84,7 +114,14 @@ final class GrassShells
 		]
 
 		, 'alaska-range' => ['height' => .25, 'density' => 13., 'tip' => [1.3, 1.25, .95], 'slope' => [.08, .2]]
-		, 'chalk-headlands' => ['height' => .14, 'density' => 22., 'tip' => [1.2, 1.3, .95], 'slope' => [.05, .14]]
+		, 'chalk-headlands' => [
+			'height' => .14
+			, 'density' => 22.
+			, 'tip' => [1.2, 1.3, .95]
+			, 'slope' => [.05, .14]
+			, 'bare' => ['wet-chalk']
+		]
+
 		, 'karst-bay' => ['height' => .50, 'density' => 13., 'tip' => [1.2, 1.4, .9], 'slope' => [.25, .45]]
 		, 'tepui-highlands' => ['height' => .40, 'density' => 16., 'tip' => [1.25, 1.35, .9], 'slope' => [.15, .3]]
 
@@ -95,6 +132,7 @@ final class GrassShells
 			, 'root' => .96
 			, 'tip' => [1.3, 1.25, 1.]
 			, 'slope' => [.02, .05]
+			, 'bare' => ['sand']
 		]
 
 		, 'emerald-ridges' => ['height' => .50, 'density' => 13., 'tip' => [1.2, 1.4, .9], 'slope' => [.24, .40]]
@@ -128,6 +166,7 @@ final class GrassShells
 
 		, 'slope' => [.06, .16]
 		, 'above' => [.5, 2.]
+		, 'bare' => []
 		, 'top' => null
 		, 'wind' => .08
 	];
@@ -541,6 +580,35 @@ final class GrassShells
 	public static function style(string $style): ?array
 	{
 		return isset(self::STYLES[$style]) ? self::STYLES[$style] + self::DEFAULTS : null;
+	}
+
+	/**
+	 * Keep a style's grass off the surface layers it names as bare, such as a beach's sand.
+	 *
+	 * Grass is placed by height above the water. A bare layer is painted up from the water to its own height and
+	 * fades out above it. The grass's start is raised to where half of that fade is behind it, and it is full with
+	 * nine tenths behind it, so the grass follows the layer when the layer is edited or removed.
+	 *
+	 * @param ?array $style A style from style(), or null where no grass grows.
+	 * @param SurfaceLayers $layers The surface layers the landscape is drawn with.
+	 * @return ?array The style with its start raised past its bare layers.
+	 */
+	public static function clear(?array $style, SurfaceLayers $layers): ?array
+	{
+		if($style === null) return null;
+
+		foreach($layers->layers as $row)
+		{
+			if(!in_array($row['id'], $style['bare'], true) || $row['datum'] !== 'water' || $row['channel'] !== 'color')
+			continue;
+
+			$style['above'] = [
+				max($style['above'][0], $row['high'] + .5 * $row['fade'])
+				, max($style['above'][1], $row['high'] + .9 * $row['fade'])
+			];
+		}
+
+		return $style;
 	}
 
 	/**

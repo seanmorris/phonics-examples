@@ -298,6 +298,38 @@ final class WeatherRenderer
 	}
 
 	/**
+	 * Tell what share of ordinary daylight is left in the air under the cloud deck.
+	 *
+	 * It mirrors deckAir() in weather.glsl: 1 with no storm darkness, and less the darker and more closed the deck
+	 * is.
+	 *
+	 * @return float From 0.08 under the heaviest closed deck to 1.
+	 */
+	public function air(): float
+	{
+		if(!$this->active || !$this->deck || $this->deck[0] <= 0. || $this->deck[3] <= 0.) return 1.;
+
+		$closed = min(1., max(0., ($this->deck[0] - .55) / .4));
+		$block = $this->deck[2] + (1. - $this->deck[2]) * $closed * $closed * (3. - 2. * $closed);
+
+		return 1. - .92 * $this->deck[0] * $block * $this->controls['stormDark'] / 100.;
+	}
+
+	/**
+	 * Tell where the nearest lit strike shines from, for anything outside the scene that should flash with it.
+	 *
+	 * @return ?array The light's X, height and Z in meters and its strength from 0 to 1, or null when none is lit.
+	 */
+	public function bolt(): ?array
+	{
+		if(!$this->strikes) return null;
+
+		[$top, $land, , $light] = $this->strikes[0];
+
+		return [...self::lamp($top, $land), $light[0]];
+	}
+
+	/**
 	 * Tell how far the land's exposure drops while lightning lights it.
 	 *
 	 * @return float A factor for the exposure of everything but the sky and the cloud: 1 with no flash.
@@ -399,6 +431,7 @@ final class WeatherRenderer
 		glUniform2f($p->location('uGroundCover'), ...$this->ground);
 		glUniform1f($p->location('uRoadSnow'), $this->controls['roadSnow'] / 100.);
 		glUniform1f($p->location('uCloudLight'), $this->controls['cloudLight'] / 100.);
+		glUniform1f($p->location('uStormDark'), $this->controls['stormDark'] / 100.);
 		$this->shine($p);
 
 		if($this->deck[0] <= 0.) return;
@@ -491,7 +524,8 @@ final class WeatherRenderer
 			$speed = $c['wind'] * .44704;
 			glUniform2f($p->location('uWind'), $speed * sin($angle), -$speed * cos($angle));
 			glUniform2f($p->location('uHeightBand'), $this->sea, $this->deck[1]);
-			glUniform1f($p->location('uDay'), $this->deck[3]);
+			// Rain and snow are lit by the same air, so under a heavy deck they dim with the haze.
+			glUniform1f($p->location('uDay'), $this->deck[3] * (.3 + .7 * $this->air()));
 			glUniform2f($p->location('uView'), 2 * tan($camera->fov / 2) / max(1, $height), $height);
 			$this->follow($camera->position);
 			glUniform3f($p->location('uDrift'), ...$this->drift);

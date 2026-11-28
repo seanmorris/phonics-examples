@@ -128,5 +128,10 @@ void main()
 	// A thin film gives way to the bed before the two surfaces intersect. Widen that
 	// transition when a pixel spans more depth than the near-field film.
 	float wet = smoothstep(0.0,max(0.18,2.0 * shoreFootprint),shoreDepth);
-	color = vec4(terrainToneMap(terrainAtmosphere(normalize(vRelative),uEye.y,length(vRelative),lit)),alpha * wet);
+	float air=1.;
+	#ifdef TERRAIN_WEATHER
+	// The haze over distant water dims under a heavy deck, as it does over the land.
+	if(uDeck.x>0. && uSunDirection.y>.015) air=deckAir();
+	#endif
+	color = vec4(terrainToneMap(air*terrainAtmosphere(normalize(vRelative),uEye.y,length(vRelative),lit/air)),alpha * wet);
 }

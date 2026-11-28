@@ -197,8 +197,14 @@ test('the Weather panel sets wetness and lightning and refuses a strike from a c
 	await panel.locator('[data-weather="cloudLight"]').fill('30');
 	await expect.poll(async() => (await status(page)).weather.controls.cloudLight).toBe(30);
 
+	// The storm opens dark, and choosing rain afterward lifts the darkness. Neither touches the light through
+	// the cloud.
 	await panel.locator('[data-weather-preset="storm"]').click();
 	await expect.poll(async() => (await status(page)).weather.controls.lightning).toBe(60);
+	expect((await status(page)).weather.controls.stormDark).toBe(65);
+	await expect(panel.locator('[data-weather="stormDark"]')).toHaveValue('65');
+	await panel.locator('[data-weather="stormDark"]').fill('90');
+	await expect.poll(async() => (await status(page)).weather.controls.stormDark).toBe(90);
 	await expect(panel.locator('[data-weather="lightning"]')).toHaveValue('60');
 	await panel.locator('[data-weather="lightning"]').fill('25');
 	await expect.poll(async() => (await status(page)).weather.controls.lightning).toBe(25);
@@ -216,6 +222,8 @@ test('the Weather panel sets wetness and lightning and refuses a strike from a c
 
 	await panel.locator('[data-weather-preset="rain"]').click();
 	await expect.poll(async() => (await status(page)).weather.controls.lightning).toBe(0);
+	expect((await status(page)).weather.controls.stormDark).toBe(0);
+	expect((await status(page)).weather.controls.cloudLight).toBe(30);
 	expect((await status(page)).weather.controls.boltColor).toBe('#ff8800');
 	await expect.poll(async() => (await status(page)).weather.ground[0]).toBeCloseTo(.65, 5);
 });

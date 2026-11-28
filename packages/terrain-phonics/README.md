@@ -178,6 +178,8 @@ Cloud altitude is in feet above the water datum. Wind is in mph toward a compass
 
 Broken cloud dims the sun's beam where it shades the ground, by the `shadow` control. As `coverage` rises from 55 to 95 the deck comes to stop the whole beam, so under a closed deck the land has no sunlit and shaded sides and casts no sun shadows. The `cloudLight` control, from 0 to 100, is the share of the stopped sunlight that comes down again as even light from the whole sky.
 
+At its default a closed deck is a mild overcast. The `stormDark` control, from 0 to 100, makes the deck heavy, and everything under it darkens together: the cloud's underside, the even light and what is left of the open sky's fill on the land, the haze over distant ground, the strip of open sky at the horizon, and the rain. At 100 the land is close to night. The `storm` preset sets it to 65 and the other presets to 0.
+
 `cover($snow, $time)` sets the snow lying on the ground outright, from 0 to 1, and `soak($wet, $time)` sets its wetness. The weather goes on from there. Set the `hold` control to 1 to keep the ground's wetness and snow as they are whatever the weather, and to 0 to let them change again.
 
 The `lightning` control, from 0 to 100, sets how often the cloud strikes, and the `storm` preset turns it on with heavy rain. Strikes are a function of the clock and the place, so a replay shows the same storm. Each bolt leaves opaque cloud, lands on the highest ground within about 800 meters and lights the cloud around its top. While it is lit, the land and the rest of the cloud darken against it. `strike($x, $z, $time)` calls a single bolt down over a place. Eight more controls shape a strike: `boltSeconds` (how long it lasts, 0.3 to 2), `flashDark` (how far the land and unlit cloud darken, 0 to 100), `flashGlow` (the glow in the cloud, 0 to 200), `boltWidth`, `boltZigzag` and `boltForks` (percentages of the designed bolt), `boltReach` (how far it may move toward high ground, 0 to 1,500 meters) and `boltColor` (a six-digit hex color).
@@ -523,6 +525,12 @@ if(array_filter($styles)) {
 	$grass->draw($scene, $camera, $styles, $waterLevel, $seconds, GrassShells::steps(2), $width, $height, $eyeAboveGround);
 }
 ```
+
+Grass is placed by its height above the water and by slope, not by what the ground is painted with. A style names the
+surface layers that grow nothing in `bare`, such as Coast's sand, which is painted to 3 meters above the water and
+fades out over the next 15. `GrassShells::clear($style, $layers)` returns the style with its grass starting where
+half of that fade is behind it and full where nine tenths is, so the grass keeps off the layer and follows it when
+the layer is edited or removed.
 
 Each pixel of that surface follows its view ray down through the grass and stops at the first blade it meets. Near
 blades hide far ones, and every pixel is shaded once however tall or dense the grass is. A blade is a hash of its

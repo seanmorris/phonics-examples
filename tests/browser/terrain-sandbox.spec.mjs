@@ -1347,8 +1347,17 @@ test('a narrow headlight beam crosses the interior and diagonal of a journey sig
 		const dark = draw(green, 0), lit = draw(green, 1);
 		const colors = [[239,20,40],[252,209,22],[249,249,249],[0,0,0]].map(ink => draw(ink, 1)[2]);
 		aim(2);
+		const steered = draw(green, 1);
 
-		return {dark, lit, colors, steered: draw(green, 1)};
+		// A lightning strike 600 meters off on the viewer's side flashes the unlit sheeting. One behind the sign, or
+		// one that has spent its light, leaves it as dark as before.
+		const struck = (z, strength) => {
+			gl.uniform4f(loc('uBoltFlash'), 0, 100, z, strength);
+
+			return draw(green, 0);
+		};
+
+		return {dark, lit, colors, steered, flashed: struck(-600, 1), behind: struck(600, 1), spent: struck(-600, 0)};
 	}, {vertex, fragment: fragment.replace('// RETROREFLECTION', reflection)});
 
 	const green = samples.lit.map(rgb => rgb[1]);
@@ -1364,6 +1373,11 @@ test('a narrow headlight beam crosses the interior and diagonal of a journey sig
 	expect(yellow[1]).toBeGreaterThan(yellow[2]+120);
 	expect(Math.min(...white)).toBeGreaterThan(240);
 	expect(black).toEqual([0,0,0]);
+
+	for(const [n, rgb] of samples.flashed.entries()) expect(rgb[1]).toBeGreaterThan(samples.dark[n][1]+60);
+
+	expect(samples.behind).toEqual(samples.dark);
+	expect(samples.spent).toEqual(samples.dark);
 });
 
 test('the local racer records checkpoint and finish splits in the packaged sandbox', async({page}) => {

@@ -4,6 +4,7 @@ precision highp int;
 uniform sampler2D artwork;
 uniform vec3 eye, sun;
 uniform float waterLevel, day;
+#define TERRAIN_SIGN_FLASH
 // RETROREFLECTION
 in vec2 uv;
 in vec3 relative;

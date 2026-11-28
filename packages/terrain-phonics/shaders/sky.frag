@@ -5,6 +5,7 @@ precision highp int;
 in vec2 vScreen;
 uniform vec3 uForward, uRight, uUp, uEye;
 uniform vec2 uScreen;
+uniform float uSkyDim; // the share of its light the open sky loses under a heavy cloud deck
 out vec4 color;
 // One digit of an 8×8 Bayer threshold. The fixed, zero-mean pattern survives pause and replay.
 int bayerDigit(ivec2 p)
@@ -15,7 +16,7 @@ int bayerDigit(ivec2 p)
 void main()
 {
 	vec3 ray = normalize(uForward + uRight * vScreen.x * uScreen.x * uScreen.y + uUp * vScreen.y * uScreen.y);
-	vec3 display = terrainToneMap(skyRadiance(ray, uEye.y));
+	vec3 display = terrainToneMap(skyRadiance(ray, uEye.y) * (1.0 - uSkyDim));
 	if(uSunDirection.y < 0.0) {
 		ivec2 p = ivec2(gl_FragCoord.xy);
 		int rank = 16 * bayerDigit(p) + 4 * bayerDigit(p >> 1) + bayerDigit(p >> 2);

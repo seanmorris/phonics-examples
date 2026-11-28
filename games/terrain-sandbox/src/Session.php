@@ -342,14 +342,25 @@ final class Session
 	public function grassStyles(): array
 	{
 		$recipe = $this->landscape->recipe();
+		$layers = $this->displayedLayers();
+		// The styles are asked for every frame and change only with the landscape or its surface layers.
+		$key = [$recipe,$this->materialPreset,$layers];
 
-		if(!isset($recipe['join'])) return [GrassShells::style($this->materialPreset ?? self::materialStyle($recipe))];
+		if($key === $this->grassKey) return $this->grassStyles;
 
-		$styles = [GrassShells::style(self::materialStyle($recipe))];
+		$this->grassKey = $key;
+
+		// Grass keeps off the layers its style names as bare, such as a beach's sand, wherever the lab has put them.
+		if(!isset($recipe['join']))
+			return $this->grassStyles = [GrassShells::clear(GrassShells::style($this->materialPreset ?? self::materialStyle($recipe)),$layers)];
+
+		$styles = [GrassShells::clear(GrassShells::style(self::materialStyle($recipe)),$layers)];
 
 		foreach($recipe['join']['destinations'] as $destination)
 		{
-			$style = GrassShells::style(self::materialStyle($destination));
+			// A destination is drawn with its own preset's layers, as the scene draws it.
+			$style = GrassShells::clear(GrassShells::style(self::materialStyle($destination)),SurfaceLayers::landscape($destination,
+				new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$destination['preset']] ?? [])));
 
 			// A destination is raised or lowered until its water meets the departure's. Its height limit moves with it.
 			if(isset($style['top']))
@@ -361,8 +372,10 @@ final class Session
 			$styles[] = $style;
 		}
 
-		return $styles;
+		return $this->grassStyles = $styles;
 	}
+
+	private array $grassKey = [], $grassStyles = [];
 
 	private static function materialStyle(array $recipe): string
 	{

@@ -2875,6 +2875,7 @@ function markup(journeyMarkup)
 		, weatherRange('Altitude above sea level · ft', 'altitude', 100, 30000, 100, 3500)
 		, weatherRange('Cloud shadow · %', 'shadow', 0, 100, 1, 45)
 		, weatherRange('Light through the cloud · %', 'cloudLight', 0, 100, 1, 50)
+		, weatherRange('Storm darkness · %', 'stormDark', 0, 100, 1, 0)
 		, weatherRange('Wind speed · mph', 'wind', 0, 150, 1, 12)
 		, weatherRange('Wind heading · °', 'heading', 0, 360, 1, 90)
 	].join('');

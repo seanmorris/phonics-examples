@@ -10,6 +10,7 @@ final class Weather
 		, 'altitude' => 3500
 		, 'shadow' => 45
 		, 'cloudLight' => 50
+		, 'stormDark' => 0
 		, 'wind' => 12
 		, 'heading' => 90
 		, 'kind' => 'none'
@@ -28,17 +29,18 @@ final class Weather
 		, 'boltColor' => '#80a3ff'
 	];
 	public const PRESETS = [
-		'clear' => ['coverage' => 0,'kind' => 'none','intensity' => 0,'lightning' => 0]
-		, 'cloudy' => ['coverage' => 55,'kind' => 'none','intensity' => 0,'lightning' => 0]
-		, 'rain' => ['coverage' => 88,'kind' => 'rain','intensity' => 100,'lightning' => 0]
-		, 'snow' => ['coverage' => 78,'kind' => 'snow','intensity' => 100,'lightning' => 0]
-		, 'storm' => ['coverage' => 96,'kind' => 'rain','intensity' => 100,'lightning' => 60]
+		'clear' => ['coverage' => 0,'kind' => 'none','intensity' => 0,'lightning' => 0,'stormDark' => 0]
+		, 'cloudy' => ['coverage' => 55,'kind' => 'none','intensity' => 0,'lightning' => 0,'stormDark' => 0]
+		, 'rain' => ['coverage' => 88,'kind' => 'rain','intensity' => 100,'lightning' => 0,'stormDark' => 0]
+		, 'snow' => ['coverage' => 78,'kind' => 'snow','intensity' => 100,'lightning' => 0,'stormDark' => 0]
+		, 'storm' => ['coverage' => 96,'kind' => 'rain','intensity' => 100,'lightning' => 60,'stormDark' => 65]
 	];
 	private const LIMITS = [
 		'coverage' => [0,100]
 		, 'altitude' => [100,30000]
 		, 'shadow' => [0,100]
 		, 'cloudLight' => [0,100]
+		, 'stormDark' => [0,100]
 		, 'wind' => [0,150]
 		, 'heading' => [0,360]
 		, 'intensity' => [0,100]
@@ -59,6 +61,7 @@ final class Weather
 		'roadSnow' => true
 		, 'hold' => true
 		, 'cloudLight' => true
+		, 'stormDark' => true
 		, 'lightning' => true
 		, 'boltSeconds' => true
 		, 'flashDark' => true

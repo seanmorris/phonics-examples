@@ -5,6 +5,7 @@ uniform vec4 uDeck; // coverage, height above world zero, shadow strength, dayli
 uniform vec2 uWeatherOffset, uGroundCover;
 uniform float uRoadSnow; // the most snow that may lie on pavement, as a share of full cover
 uniform float uCloudLight; // the share of the sunlight the deck stops that comes down again as even light
+uniform float uStormDark; // how heavy the deck is, from a mild overcast at 0 to the darkest storm at 1
 // How much of the sun's beam the deck stops where it stands between a place and the sun. Up to about half cover that
 // is the shadow strength. As the deck closes over it rises to all of the beam, so under a closed deck no light
 // arrives from the sun's direction and nothing casts a sun shadow.
@@ -12,10 +13,21 @@ float deckBlock()
 {
 	return mix(uDeck.z,1.,smoothstep(.55,.95,uDeck.x));
 }
+// What a heavy deck leaves of the light a mild one lets through: all of it at no storm darkness, a twelfth at the
+// most. Everything under the deck darkens by it together.
+float deckDim()
+{
+	return 1.-.92*uStormDark;
+}
 // The stopped sunlight that comes down again from the whole deck, as a share of the sun's light on level ground.
 float deckGlow()
 {
-	return uDeck.x*deckBlock()*uCloudLight;
+	return uDeck.x*deckBlock()*uCloudLight*deckDim();
+}
+// The share of ordinary daylight left in the air under the deck, which lights the haze over distant ground.
+float deckAir()
+{
+	return 1.-.92*uDeck.x*deckBlock()*uStormDark;
 }
 // Where a lit lightning strike shines from, in meters, and the distance at which it is half as bright.
 uniform vec4 uBoltAt;
@@ -64,7 +76,8 @@ vec2 cloudsOnRay(vec3 origin, vec3 ray)
 }
 vec3 cloudRadiance(float thickness, float above)
 {
-	vec3 underside=mix(vec3(.83,.94,1.09),vec3(.22,.27,.34),thickness);
+	// A heavy deck's underside darkens toward charcoal, a little faster than the light under it does.
+	vec3 underside=mix(vec3(.83,.94,1.09),vec3(.22,.27,.34),thickness)*pow(deckDim(),1.3);
 	vec3 sunlit=mix(underside,mix(vec3(.87,.94,1.02),vec3(1.48,1.52,1.55),thickness),above);
 	return mix(vec3(.016,.024,.047),sunlit,uDeck.w);
 }
