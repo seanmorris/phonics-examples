@@ -3522,20 +3522,25 @@ test('the signed clipmap grid covers the ground after relocation', async({page})
 		const result = await settled(page);
 		expect(result.renderer.visible).toBeGreaterThan(4);
 		expect(result.renderer.proceduralVertexBytes).toBe(0);
-		const image = PNG.sync.read(await canvas(page).screenshot());
-		let sky = 0;
 
-		// Left-hand crop is clear of the controls. A missing triangle in this down-facing
-		// view shows the sky's blue or the blue clear color through the red ground.
-		for(let y = 45; y < image.height - 110; ++y)
-		for(let x = 35; x < 265; ++x)
-		{
-			const index = 4 * (y * image.width + x);
+		// The settled state can be published a frame before the canvas shows it. The capture repeats until the
+		// ground is whole. A lasting hole still fails when the limit runs out.
+		await expect.poll(async() => {
+			const image = PNG.sync.read(await canvas(page).screenshot());
+			let sky = 0;
 
-			if(image.data[index + 2] > image.data[index] + 5) ++sky;
-		}
+			// Left-hand crop is clear of the controls. A missing triangle in this down-facing
+			// view shows the sky's blue or the blue clear color through the red ground.
+			for(let y = 45; y < image.height - 110; ++y)
+			for(let x = 35; x < 265; ++x)
+			{
+				const index = 4 * (y * image.width + x);
 
-		expect(sky).toBe(0);
+				if(image.data[index + 2] > image.data[index] + 5) ++sky;
+			}
+
+			return sky;
+		}).toBe(0);
 	}
 });
 

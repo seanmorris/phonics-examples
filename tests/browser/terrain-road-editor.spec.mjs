@@ -432,41 +432,46 @@ test('diagonal road edges stay continuous and only the markings glow in darkness
 		});
 		await expect.poll(async() => (await status()).generation).toBe(generation+1);
 		await expect.poll(async() => (await status()).renderer.pending,{timeout:slow(70_000)}).toBe(0);
-		const {width,height,data} = PNG.sync.read(await canvas.screenshot({
-			style:'.terrain-panel,.terrain-hud{visibility:hidden!important}',
-		}));
 
-		let dashedRows = 0, gapRows = 0;
-		for(let y = Math.floor(height*.20); y < height*.80; y += 4) {
-			const edges = [];
-			// Separating the runs also checks that the road surface between them stays dark.
-			let inStripe = false;
-			for(let x = Math.floor(width*.2); x < width*.8; x++) {
-				const i = 4*(y*width+x);
-				const neutral = Math.max(data[i],data[i+1],data[i+2])-Math.min(data[i],data[i+1],data[i+2]);
-				const white = night ? data[i]>=8 && neutral<=2 : data[i]>=190 && neutral<15;
-				if(white && !inStripe) edges.push(x);
-				inStripe = white;
+		// Nothing pending does not mean the last frame is on the canvas: the road's paint can still be refining. The
+		// capture and its checks repeat until they hold. A lasting fault still fails when the limit runs out.
+		await expect(async() => {
+			const {width,height,data} = PNG.sync.read(await canvas.screenshot({
+				style:'.terrain-panel,.terrain-hud{visibility:hidden!important}',
+			}));
+
+			let dashedRows = 0, gapRows = 0;
+			for(let y = Math.floor(height*.20); y < height*.80; y += 4) {
+				const edges = [];
+				// Separating the runs also checks that the road surface between them stays dark.
+				let inStripe = false;
+				for(let x = Math.floor(width*.2); x < width*.8; x++) {
+					const i = 4*(y*width+x);
+					const neutral = Math.max(data[i],data[i+1],data[i+2])-Math.min(data[i],data[i+1],data[i+2]);
+					const white = night ? data[i]>=8 && neutral<=2 : data[i]>=190 && neutral<15;
+					if(white && !inStripe) edges.push(x);
+					inStripe = white;
+				}
+				expect(edges, 'two distinct white lines at row '+y).toHaveLength(2);
+				if(!night) continue;
+				const span = edges[1]-edges[0];
+				const quarter = 4*(y*width+Math.round(edges[0]+.25*span));
+				expect(data[quarter], 'unlit pavement').toBeLessThan(3);
+				const stripe = 4*(y*width+edges[0]+2);
+				expect(data[stripe], 'faint shoulder glow').toBeLessThan(25);
+				let warm = false;
+				for(let x = Math.round(edges[0]+.4*span); x < edges[0]+.6*span; x++) {
+					const i = 4*(y*width+x);
+					if(data[i]>8 && data[i]<25 && data[i]>data[i+2]*2) warm = true;
+				}
+				if(warm) dashedRows++;
+				else gapRows++;
 			}
-			expect(edges, 'two distinct white lines at row '+y).toHaveLength(2);
-			if(!night) continue;
-			const span = edges[1]-edges[0];
-			const quarter = 4*(y*width+Math.round(edges[0]+.25*span));
-			expect(data[quarter], 'unlit pavement').toBeLessThan(3);
-			const stripe = 4*(y*width+edges[0]+2);
-			expect(data[stripe], 'faint shoulder glow').toBeLessThan(25);
-			let warm = false;
-			for(let x = Math.round(edges[0]+.4*span); x < edges[0]+.6*span; x++) {
-				const i = 4*(y*width+x);
-				if(data[i]>8 && data[i]<25 && data[i]>data[i+2]*2) warm = true;
+			if(night) {
+				expect(dashedRows).toBeGreaterThan(10);
+				expect(gapRows).toBeGreaterThan(10);
 			}
-			if(warm) dashedRows++;
-			else gapRows++;
-		}
-		if(night) {
-			expect(dashedRows).toBeGreaterThan(10);
-			expect(gapRows).toBeGreaterThan(10);
-		}
+		}).toPass({timeout:slow(30_000)});
 	}
 });
 
