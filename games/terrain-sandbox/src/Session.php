@@ -1766,6 +1766,20 @@ final class Session
 					if(!is_int($action['cover']) && !is_float($action['cover'])) throw new \InvalidArgumentException('Expected a snow cover percentage.');
 					$this->weather->cover($action['cover'] / 100,$this->time);
 				}
+				if(isset($action['wet']))
+				{
+					if(!is_int($action['wet']) && !is_float($action['wet'])) throw new \InvalidArgumentException('Expected a wetness percentage.');
+					$this->weather->soak($action['wet'] / 100,$this->time);
+				}
+				if(($action['strike'] ?? false) === true)
+				{
+					if($this->weather->controls()['coverage'] <= 0) throw new \InvalidArgumentException('Lightning needs cloud to strike from.');
+					// The strike leaves the cloud 1,200 meters ahead of the camera and lands on the highest ground near there.
+					[$forward] = $this->camera->basis();
+					$level = hypot($forward[0],$forward[2]) ?: 1.;
+					$this->weather->strike($this->camera->position[0] + 1200 * $forward[0] / $level,
+						$this->camera->position[2] + 1200 * $forward[2] / $level,$this->time);
+				}
 				$this->dirty = true;
 				break;
 			case 'atmosphere-layers':

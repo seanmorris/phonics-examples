@@ -361,17 +361,28 @@ export function activate({module, canvas, session, services})
 	for(const preset of frame.querySelectorAll('[data-weather-preset]'))
 	preset.addEventListener('click', () => push({type: 'weather',preset: preset.dataset.weatherPreset}), {signal});
 
+	frame.querySelector('[data-weather-strike]').addEventListener('click', () => {
+		push({type: 'weather', strike: true});
+	}, {signal});
+
 	const resetWeatherGround = frame.querySelector('[data-weather-reset]');
 	resetWeatherGround.addEventListener('click', () => push({type: 'weather', resetGround: true}), {signal});
 
 	const groundReadout = frame.querySelector('[data-weather-ground]');
 
-	// Snow cover can be set outright, without waiting for it to fall.
+	// Snow cover and wetness can be set outright, without waiting for the weather to bring them.
 	const snowCover = frame.querySelector('[data-weather-cover]');
 
 	snowCover.addEventListener('input', () => {
 		snowCover.nextElementSibling.value = snowCover.valueAsNumber;
 		push({type: 'weather', cover: snowCover.valueAsNumber});
+	}, {signal});
+
+	const groundWet = frame.querySelector('[data-weather-wet]');
+
+	groundWet.addEventListener('input', () => {
+		groundWet.nextElementSibling.value = groundWet.valueAsNumber;
+		push({type: 'weather', wet: groundWet.valueAsNumber});
 	}, {signal});
 
 	// Holding the ground keeps its wetness and snow whatever the weather, so a cover set here stays.
@@ -1377,11 +1388,13 @@ export function activate({module, canvas, session, services})
 				const [wet,snow] = state.weather.ground.map(v => Math.round(v*100));
 				groundReadout.value = `Wetness ${wet}% · Snow cover ${snow}%`;
 
-				if(!snowCover.matches(':active'))
+				for(const [slider, percent] of [[snowCover, snow], [groundWet, wet]])
 				{
-					if(snowCover.value !== String(snow)) snowCover.value = snow;
+					if(slider.matches(':active')) continue;
 
-					snowCover.nextElementSibling.value = snow;
+					if(slider.value !== String(percent)) slider.value = percent;
+
+					slider.nextElementSibling.value = percent;
 				}
 
 				holdGround.checked = state.weather.controls.hold >= 1;
@@ -2850,17 +2863,32 @@ let labCount = 0;
 
 function markup(journeyMarkup)
 {
-	const weatherPresets = ['Clear', 'Cloudy', 'Rain', 'Snow'].map(weatherButton).join('');
+	const weatherPresets = ['Clear', 'Cloudy', 'Rain', 'Snow', 'Storm'].map(weatherButton).join('');
 
 	const cloudControls = [
 		weatherRange('Cloud cover · %', 'coverage', 0, 100, 1, 0)
 		, weatherRange('Altitude above sea level · ft', 'altitude', 100, 30000, 100, 3500)
 		, weatherRange('Cloud shadow · %', 'shadow', 0, 100, 1, 45)
+		, weatherRange('Light through the cloud · %', 'cloudLight', 0, 100, 1, 50)
 		, weatherRange('Wind speed · mph', 'wind', 0, 150, 1, 12)
 		, weatherRange('Wind heading · °', 'heading', 0, 360, 1, 90)
 	].join('');
 
 	const precipitationControl = weatherRange('Intensity · %', 'intensity', 0, 100, 1, 0);
+
+	const lightningControls = [
+		weatherRange('How often it strikes · %', 'lightning', 0, 100, 1, 0)
+		, weatherRange('Strike lasts · s', 'boltSeconds', .3, 2, .05, .8)
+		, weatherRange('Land and cloud darken · %', 'flashDark', 0, 100, 1, 70)
+		, weatherRange('Glow in the cloud · %', 'flashGlow', 0, 200, 5, 100)
+		, weatherRange('Flash lights the land · %', 'flashLight', 0, 100, 5, 0)
+
+		, weatherRange('Bolt thickness · %', 'boltWidth', 25, 400, 5, 100)
+		, weatherRange('Zigzag · %', 'boltZigzag', 0, 200, 5, 100)
+		, weatherRange('Forks · %', 'boltForks', 0, 100, 10, 100)
+		, weatherRange('Reach for high ground · m', 'boltReach', 0, 1500, 50, 800)
+	].join('');
+
 	const roadSnowControl = weatherRange('Most snow on roads · %', 'roadSnow', 0, 100, 1, 100);
 
 	const lapSelector = '<select data-value="gateLaps">' + Array.from({length: 20}, (_, i) =>
@@ -3376,9 +3404,15 @@ function markup(journeyMarkup)
 	<label class="terrain-control"><span>Type</span><select data-weather="kind"><option value="none">None</option><option value="rain">Rain</option><option value="snow">Snow</option></select></label>
 	${precipitationControl}
 	</fieldset>
+	<fieldset><legend>Lightning</legend>
+	${lightningControls}
+	<label class="terrain-control"><span>Color</span><input data-weather="boltColor" type="color" value="#80a3ff"></label>
+	<div class="terrain-row"><button type="button" data-weather-strike>Strike ahead</button></div>
+	</fieldset>
 	<fieldset><legend>Ground</legend><div class="terrain-row"><output data-weather-ground>Wetness 0% · Snow cover 0%</output>
 	<button type="button" data-weather-reset>Reset ground</button></div>
 	<label class="terrain-control"><span>Snow on the ground · %</span><input type="range" data-weather-cover min="0" max="100" step="1" value="0"><output>0</output></label>
+	<label class="terrain-control"><span>Wetness of the ground · %</span><input type="range" data-weather-wet min="0" max="100" step="1" value="0"><output>0</output></label>
 	<label class="terrain-check"><input type="checkbox" data-weather-hold>Hold the ground as it is</label>
 	${roadSnowControl}
 	</fieldset></section>

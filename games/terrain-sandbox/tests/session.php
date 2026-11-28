@@ -2595,9 +2595,41 @@ expect($covered->message === 'Expected a snow cover percentage.' && $covered->st
 input($covered, ['actions' => [['type' => 'weather', 'cover' => 140]]]);
 expect($covered->message === 'Invalid snow cover.' && $covered->status()['weather']['ground'] === [0., .4],
 	'Snow cover past 100 percent is refused');
+input($covered, ['actions' => [['type' => 'weather', 'wet' => 65]]]);
+expect($covered->status()['weather']['ground'] === [.65, .4], 'The lab sets the wetness of the ground outright');
+input($covered, ['actions' => [['type' => 'weather', 'wet' => 'soaked']]]);
+expect($covered->message === 'Expected a wetness percentage.' && $covered->status()['weather']['ground'] === [.65, .4],
+	'Wetness that is not a number is refused');
+input($covered, ['actions' => [['type' => 'weather', 'wet' => -5]]]);
+expect($covered->message === 'Invalid wetness.' && $covered->status()['weather']['ground'] === [.65, .4],
+	'Wetness below nothing is refused');
 input($covered, ['actions' => [['type' => 'weather', 'controls' => ['hold' => 0]]]]);
 for($i = 0; $i < 60; $i++) $covered->step(1 / 60);
 expect($covered->status()['weather']['ground'][1] < .4, 'Released ground melts in clear weather');
+
+// A strike can be called down ahead of the camera, but only from cloud.
+input($covered, ['actions' => [['type' => 'weather', 'strike' => true]]]);
+expect($covered->message === 'Lightning needs cloud to strike from.' && $covered->weather->called() === [],
+	'A clear sky cannot strike');
+input($covered, ['actions' => [['type' => 'weather', 'preset' => 'storm']]]);
+expect($covered->status()['weather']['controls']['lightning'] === 60, 'The storm preset brings lightning');
+input($covered, ['actions' => [['type' => 'weather', 'strike' => true]]]);
+[$strikeX, $strikeZ, $strikeAt] = $covered->weather->called();
+[$ahead] = $covered->camera->basis();
+$level = hypot($ahead[0], $ahead[2]);
+expect(abs($strikeX - $covered->camera->position[0] - 1200 * $ahead[0] / $level) < 1e-6
+	&& abs($strikeZ - $covered->camera->position[2] - 1200 * $ahead[2] / $level) < 1e-6 && $strikeAt === $covered->time,
+	'A called strike leaves the cloud 1,200 meters ahead of the camera, now');
+expect(isset($covered->weather->snapshot($covered->time)['strike']), 'A lit strike is part of the saved weather');
+input($covered, ['actions' => [['type' => 'weather', 'controls' => ['boltColor' => '#ff8800', 'boltSeconds' => 1.5, 'boltReach' => 0]]]]);
+$bolt = $covered->status()['weather']['controls'];
+expect([$bolt['boltColor'], $bolt['boltSeconds'], $bolt['boltReach']] === ['#ff8800', 1.5, 0], 'The lab shapes the strike');
+input($covered, ['actions' => [['type' => 'weather', 'controls' => ['boltColor' => 'orange']]]]);
+expect($covered->message === 'Invalid weather control: boltColor'
+	&& $covered->status()['weather']['controls']['boltColor'] === '#ff8800', 'A color that is not a hex color is refused');
+input($covered, ['actions' => [['type' => 'weather', 'preset' => 'rain']]]);
+$bolt = $covered->status()['weather']['controls'];
+expect($bolt['lightning'] === 0 && $bolt['boltColor'] === '#ff8800', 'Choosing rain ends the storm and keeps the strike\'s shape');
 $covered->close();
 
 require __DIR__.'/support/air-patrol.php';
