@@ -106,6 +106,19 @@ check($full->wheelSlip === 0.,'Steady reversing at the governor does not keep sp
 
 $land->queue(['type'=>'road','points'=>[[0,0,-100],[0,0,100]],'width'=>8,'shoulder'=>8,'crown'=>0]);
 $land->commit();
+// With the rear wheels locked on a straight, their slip speed equals the car's ground speed.
+foreach([1.,4.,8.,14.,24.] as $speed) {
+	$car = board($land);
+	$car->resume(array_replace($car->state(),['speed'=>$speed]),$car->motion(),$land,-5.);
+	$car->step($dt,0.,0.,$land,-5.);
+	check(!$car->skidContacts, 'Freely rolling tires leave the pavement clear at every test speed.');
+	$car->step($dt,0.,0.,$land,-5.,true);
+	$expectedInk = min(1.,abs($car->state()['speed'])/18.);
+	check(array_column($car->skidContacts,0)===[2,3], 'A straight lockup marks only the two rear tire paths.');
+	foreach($car->skidContacts as $contact)
+		check(abs($contact[4]-$expectedInk)<1e-6,'Rubber follows slip proportionally from a light scrub through saturation.');
+}
+
 $edge = 4.; // Half the width of the paved strip. Its graded shoulder is unpaved.
 $patchLevels = [];
 check($land->material($edge+1.,0.) === 'road' && !Car::onPavement($land,$edge+1.,0.),'Grading outside the pavement stays dusty.');

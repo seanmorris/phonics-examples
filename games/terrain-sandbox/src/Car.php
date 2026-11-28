@@ -30,6 +30,8 @@ final class Car
 	private float $x = 0, $y = 0, $z = 0, $yaw = 0, $pitch = 0, $roll = 0;
 	private float $speed = 0, $steering = 0, $spin = 0, $rearSpin = 0;
 	private CarGearbox $gearbox;
+	// Contact effects ignore sub-scrub motion. Rubber density rises linearly with slip speed (m/s).
+	private const MIN_TIRE_SLIP = .16, FULL_MARK_SLIP = 18.;
 	private float $squeal = 0.;
 	/** Dry, loose tire contacts this step: world x/y/z, outward side, emission strength. */
 	public array $dustContacts = [], $skidContacts = [];
@@ -501,7 +503,7 @@ final class Car
 
 	private function tireEffects(Landscape $land, float $water, array $heights, float $front, float $rear, float $boost): void
 	{
-		if(max($front,$rear) < .16 && $boost < .05) return;
+		if(max($front,$rear) < self::MIN_TIRE_SLIP && $boost < .05) return;
 		$sin = sin($this->yaw); $cos = cos($this->yaw);
 		$power = 0.;
 		foreach($heights as $i => $height)
@@ -514,7 +516,8 @@ final class Car
 			[$x,$z]=self::wheelPoint($i,$this->x,$this->z,$sin,$cos);
 			if(self::onPavement($land,$x,$z))
 			{
-				if($slip>1.5) $this->skidContacts[]=[$i,$x,$height,$z,min(1.,($slip-1.5)/8.)];
+				if($slip >= self::MIN_TIRE_SLIP)
+					$this->skidContacts[] = [$i,$x,$height,$z,min(1.,$slip/self::FULL_MARK_SLIP)];
 				// Quiet tire scrub below 1 m/s; a fast locked wheel reaches full voice at 17 m/s.
 				$t = max(0.,min(1.,($slip-1.)/16.));
 				$level = $t*$t*(3.-2.*$t);

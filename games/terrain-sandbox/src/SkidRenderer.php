@@ -25,7 +25,7 @@ final class SkidRenderer
 			float pavement=clamp(vPaint1.y-vSplinePaint*outside,0.,1.);
 			float rubber=texture(uRubber,uv).r*pavement;
 			if(any(lessThan(uv,vec2(0.))) || any(greaterThanEqual(uv,vec2(1.)))) discard;
-			color=vec4(vec3(1.-.70*rubber),1.);
+			color=vec4(vec3(1.-.40*rubber),1.);
 		}
 		GLSL;
 
