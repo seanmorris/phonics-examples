@@ -299,7 +299,8 @@ void main()
 		shadow*=1.-uDeck.z*cloudsOnRay(vWorld,uSunDirection).x;
 	float wet=uCraft<.5 && vWorld.y>uWaterLevel ? uGroundCover.x : 0.;
 	if((wet>0. || uGroundCover.y>0.) && uCraft<.5 && vWorld.y>uWaterLevel) {
-		float snow=uGroundCover.y*smoothstep(.38,.88,n.y);
+		// Pavement holds no more than its limit. The limit eases in across the road's edge with the paint.
+		float snow=min(uGroundCover.y,mix(1.,uRoadSnow,clamp(road,0.,1.)))*smoothstep(.38,.88,n.y);
 		albedo=mix(albedo*(1.-.31*wet),vec3(.82,.88,.93),snow);
 		markingGlow*=1.-snow;
 	}

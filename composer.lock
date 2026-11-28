@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fdc06ec5066d971b4bc147f574fb6b89",
+    "content-hash": "5c8caf52fa6a5a15ec126f06c40a862f",
     "packages": [
         {
             "name": "seanmorris/phonics",
@@ -12,17 +12,17 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/seanmorris/php-wasm-engine.git",
-                "reference": "bb11e4f7a6320de06b4f90c734e52c70a1a2f7af"
+                "reference": "660cc0b447b2bb582f80f820fd27418072385c51"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/bb11e4f7a6320de06b4f90c734e52c70a1a2f7af",
-                "reference": "bb11e4f7a6320de06b4f90c734e52c70a1a2f7af",
+                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/660cc0b447b2bb582f80f820fd27418072385c51",
+                "reference": "660cc0b447b2bb582f80f820fd27418072385c51",
                 "shasum": ""
             },
             "require": {
-                "php": ">=8.0",
-                "ext-json": "*"
+                "ext-json": "*",
+                "php": ">=8.0"
             },
             "require-dev": {
                 "seanmorris/sm-no-saccade-style": "dev-fix/readable-block-layout"
@@ -86,25 +86,25 @@
                     "php packages/php-tris/tests/run.php",
                     "php packages/php-slalom/tests/run.php",
                     "php packages/php-buster/tests/run.php",
-                    "php packages/doom-phonics/tests/run.php",
-                    "php packages/terrain-phonics/tests/surface.php",
-                    "php packages/terrain-phonics/tests/water.php",
-                    "php packages/terrain-phonics/tests/appearance.php",
-                    "php packages/terrain-phonics/tests/atmosphere.php",
-                    "php packages/terrain-phonics/tests/render.php",
-                    "php packages/terrain-phonics/tests/atmosphere-renderer.php",
-                    "php packages/terrain-phonics/tests/shadows.php",
-                    "php packages/terrain-phonics/tests/grass-shells.php"
+                    "php packages/doom-phonics/tests/run.php"
                 ],
-                "bench:ecs": "php benchmarks/ecs.php",
+                "bench:ecs": [
+                    "php benchmarks/ecs.php"
+                ],
                 "lint": [
                     "php-cs-fixer fix --dry-run --diff",
                     "@lint:docs",
                     "@lint:readability"
                 ],
-                "lint:docs": "php scripts/check-phpdoc.php src packages/sane-phonics/src packages/php-noid/src packages/php-tris/src packages/php-slalom/src packages/php-buster/src packages/terrain-phonics/src",
-                "lint:fix": "php-cs-fixer fix",
-                "lint:readability": "sm-no-saccade-style --max-line-length=120 src packages tests examples benchmarks autoload.php scripts/check-phpdoc.php .php-cs-fixer.php"
+                "lint:docs": [
+                    "php scripts/check-phpdoc.php src packages/sane-phonics/src packages/php-noid/src packages/php-tris/src packages/php-slalom/src packages/php-buster/src"
+                ],
+                "lint:fix": [
+                    "php-cs-fixer fix"
+                ],
+                "lint:readability": [
+                    "sm-no-saccade-style --max-line-length=120 src packages tests examples benchmarks autoload.php scripts/check-phpdoc.php .php-cs-fixer.php"
+                ]
             },
             "license": [
                 "Apache-2.0"
@@ -114,7 +114,7 @@
                 "source": "https://github.com/seanmorris/php-wasm-engine/tree/main",
                 "issues": "https://github.com/seanmorris/php-wasm-engine/issues"
             },
-            "time": "2026-11-26T18:16:17+00:00"
+            "time": "2026-11-18T18:10:37+00:00"
         }
     ],
     "packages-dev": [],

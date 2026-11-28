@@ -7,6 +7,9 @@ use Phonics\Render\Program;
 /** One cloud sheet and one bounded particle draw. Both read simulation time and camera-relative coordinates. */
 final class WeatherRenderer
 {
+	/** Raindrops and snowflakes drawn around the eye at full intensity. */
+	private const DROPS = 98304, FLAKES = 36864;
+
 	private array $texture = [];
 	private \WeakMap $enabled;
 	private bool $active = false;
@@ -19,6 +22,9 @@ final class WeatherRenderer
 	public function __construct() { $this->enabled = new \WeakMap; }
 
 	private ?Program $clouds = null, $particles = null;
+	/** Where the eye last was, when, and its velocity from there, which slants the rain. */
+	private array $eye = [], $drift = [0., 0., 0.];
+	private float $seen = 0.;
 	private array $deck = [], $offset = [], $ground = [], $controls = [];
 	private float $time = 0., $sea = 0.;
 
@@ -103,6 +109,7 @@ final class WeatherRenderer
 		$this->enabled[$p] = true;
 		glUniform4f($p->location('uDeck'), ...$this->deck);
 		glUniform2f($p->location('uGroundCover'), ...$this->ground);
+		glUniform1f($p->location('uRoadSnow'), $this->controls['roadSnow'] / 100.);
 
 		if($this->deck[0] <= 0.) return;
 
@@ -174,10 +181,47 @@ final class WeatherRenderer
 			glUniform2f($p->location('uWind'), $speed * sin($angle), -$speed * cos($angle));
 			glUniform2f($p->location('uHeightBand'), $this->sea, $this->deck[1]);
 			glUniform1f($p->location('uDay'), $this->deck[3]);
-			glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (int)ceil(15.36 * $c['intensity']));
+			glUniform2f($p->location('uView'), 2 * tan($camera->fov / 2) / max(1, $height), $height);
+			$this->follow($camera->position);
+			glUniform3f($p->location('uDrift'), ...$this->drift);
+
+			$each = $c['kind'] === 'snow' ? self::FLAKES : self::DROPS;
+			glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (int)ceil($each * $c['intensity'] / 100));
 		}
 
 		glDepthMask(true);
+	}
+
+	/**
+	 * Follow the eye from one frame to the next to learn its velocity.
+	 *
+	 * A jump too far for one frame, or a step in time that is backward or long, is a cut and not a motion: the
+	 * velocity starts again from rest. While time stands still the last velocity is kept.
+	 *
+	 * @param array $eye Eye position in meters.
+	 * @return void No value.
+	 */
+	private function follow(array $eye): void
+	{
+		$elapsed = $this->time - $this->seen;
+
+		if($elapsed === 0.) return;
+
+		if($this->eye === [] || $elapsed < 0 || $elapsed > .25) $this->drift = [0., 0., 0.];
+		else
+		{
+			$step = [$eye[0] - $this->eye[0], $eye[1] - $this->eye[1], $eye[2] - $this->eye[2]];
+			$speed = sqrt($step[0] ** 2 + $step[1] ** 2 + $step[2] ** 2) / $elapsed;
+
+			// The eye's motion is smoothed over a few frames, so a camera that shakes does not shake the rain.
+			foreach($step as $axis => $moved)
+			$this->drift[$axis] = $speed > 200.
+				? 0.
+				: $this->drift[$axis] + .25 * ($moved / $elapsed - $this->drift[$axis]);
+		}
+
+		$this->eye = [$eye[0], $eye[1], $eye[2]];
+		$this->seen = $this->time;
 	}
 
 	/**

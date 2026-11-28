@@ -3,6 +3,7 @@
 uniform sampler2D uCloudNoise;
 uniform vec4 uDeck; // coverage, height above world zero, shadow strength, daylight
 uniform vec2 uWeatherOffset, uGroundCover;
+uniform float uRoadSnow; // the most snow that may lie on pavement, as a share of full cover
 vec2 cloudSample(vec2 world)
 {
 	vec2 uv = (world-uWeatherOffset)/16384.;

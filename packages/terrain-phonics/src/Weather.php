@@ -13,6 +13,8 @@ final class Weather
 		, 'heading' => 90
 		, 'kind' => 'none'
 		, 'intensity' => 0
+		, 'roadSnow' => 100
+		, 'hold' => 0
 	];
 	public const PRESETS = [
 		'clear' => ['coverage' => 0,'kind' => 'none','intensity' => 0]
@@ -27,7 +29,11 @@ final class Weather
 		, 'wind' => [0,150]
 		, 'heading' => [0,360]
 		, 'intensity' => [0,100]
+		, 'roadSnow' => [0,100]
+		, 'hold' => [0,1]
 	];
+	/** Controls a saved state may leave out, having been saved before they existed. */
+	private const LATER = ['roadSnow' => true,'hold' => true];
 	private array $controls = self::DEFAULTS;
 	private float $start = 0., $wet = 0., $snow = 0., $x = 0., $z = 0.;
 
@@ -67,6 +73,9 @@ final class Weather
 	 */
 	public function ground(float $time): array
 	{
+		// A held ground keeps its wetness and snow whatever the weather.
+		if($this->controls['hold'] >= 1) return [$this->wet,$this->snow];
+
 		$t = max(0., $time - $this->start);
 		$rate = $this->controls['intensity'] * .01;
 
@@ -122,7 +131,9 @@ final class Weather
 	 */
 	public static function valid(mixed $s): bool
 	{
-		if(!is_array($s) || !is_array($s['controls'] ?? null) || array_diff_key(self::DEFAULTS, $s['controls']))
+		if(!is_array($s) || !is_array($s['controls'] ?? null)
+			|| array_diff_key(self::DEFAULTS, $s['controls'], self::LATER)
+		)
 		return false;
 
 		try { self::checked($s['controls']); } catch(\InvalidArgumentException) { return false; }
@@ -150,7 +161,7 @@ final class Weather
 	{
 		if(!self::valid($s)) throw new \InvalidArgumentException('Invalid saved weather.');
 
-		$this->controls = $s['controls'];
+		$this->controls = $s['controls'] + self::DEFAULTS;
 		$this->start = $time ?? $s['time'];
 		[$this->wet,$this->snow] = $s['ground'];
 		[$this->x,$this->z] = $s['offset'];
@@ -187,6 +198,23 @@ final class Weather
 		$this->controls = $next;
 
 		if($resetGround) $this->wet = $this->snow = 0.;
+	}
+
+	/**
+	 * Set how much snow lies on the ground, as if it had already fallen.
+	 *
+	 * The weather goes on from there: snowfall adds to the cover, and rain or clear weather melts it.
+	 *
+	 * @param float $snow Snow cover from 0 to 1.
+	 * @param float $time Simulation time in seconds.
+	 * @return void No value.
+	 */
+	public function cover(float $snow, float $time): void
+	{
+		if(!is_finite($snow) || $snow < 0 || $snow > 1) throw new \InvalidArgumentException('Invalid snow cover.');
+
+		$this->anchor($time);
+		$this->snow = $snow;
 	}
 
 	/**
