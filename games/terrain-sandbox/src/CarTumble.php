@@ -15,6 +15,8 @@ final class CarTumble
 	];
 	// Inverse moments per unit mass about the transverse and longitudinal axes, in m⁻².
 	private const INV_PITCH = .64, INV_ROLL = 2.7;
+	// Radians/s² of roll acceleration at full stick while the chassis is clear of the ground.
+	private const STICK_ROLL_ACCELERATION = .18;
 	private float $sinYaw, $cosYaw;
 	private float $x, $y, $z, $ahead, $up;
 	private float $quiet = 0;
@@ -97,15 +99,16 @@ final class CarTumble
 		$this->settled = $this->onWheels = false;
 	}
 
-	public function advance(float $dt, Landscape $land, float $water): void
+	public function advance(float $dt, Landscape $land, float $water, float $rollInput = 0.): void
 	{
 		$this->onWheels = false;
 		$steps = max(1, (int)ceil($dt*120));
+		$rollInput = max(-1., min(1., $rollInput));
 		for($i = 0; $i < $steps && !$this->settled; $i++)
-			$this->integrate($dt/$steps, $land, $water);
+			$this->integrate($dt/$steps, $land, $water, $rollInput);
 	}
 
-	private function integrate(float $dt, Landscape $land, float $water): void
+	private function integrate(float $dt, Landscape $land, float $water, float $rollInput): void
 	{
 		$this->up -= Session::DRIVING_GRAVITY*$dt;
 		$vx = $this->cosYaw*$this->side + $this->sinYaw*$this->ahead;
@@ -149,7 +152,11 @@ final class CarTumble
 				min(3.0, max(0.0, $depth*$ny-.004)*.22/$dt)];
 			if($index < 4) $wheels++;
 		}
-		if(!$contacts) Car::dampAirborneSpin($this->pitchRate,$this->rollRate,$dt);
+		if(!$contacts)
+		{
+			$this->rollRate += self::STICK_ROLL_ACCELERATION*$rollInput*$dt;
+			Car::dampAirborneSpin($this->pitchRate,$this->rollRate,$dt);
+		}
 		// Reuse the sampled contacts for both passes so simultaneous roof/tire contacts share the load.
 		for($i = 0; $i < 2; $i++)
 		{

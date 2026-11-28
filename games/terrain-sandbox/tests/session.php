@@ -877,6 +877,27 @@ foreach([[0,3,0,true],[0,-3,0,true],[2,0,0,true],[-2,0,0,true],[0,12,0,false],[0
 }
 $landingSurface->close();
 
+// Replay the same free tumble through the live gamepad input at different stick positions.
+$stickRoll = static function(float $stick, int $hz = 60, bool $otherControls = false) use ($flat): float {
+	$game = new Session($flat);
+	enterCar($game);
+	$pose = array_replace($game->car->state(), ['x'=>0., 'y'=>40., 'z'=>0., 'pitch'=>.12, 'roll'=>.3]);
+	$motion = [...$game->car->motion(), 8., 2., .25, 3., 0., 0.];
+	$game->car->resume($pose,$motion,$game->landscape,$game->water->level());
+	input($game,['pad'=>[$stick,0.,(int)$otherControls,0.,0.,0.,0],'keys'=>['KeyD'=>$otherControls]]);
+	for($i=0;$i<$hz;$i++) $game->step(1/$hz);
+	$after=$game->car->state();
+	expect($after['motion']==='tumbling','The stick test stays airborne for one second.');
+	$game->close();
+	return $after['roll'];
+};
+$neutral=$stickRoll(0.); $nudge=$stickRoll(1.)-$neutral;
+expect($nudge>deg2rad(4.) && $nudge<deg2rad(5.),'A full second of stick only adds a few degrees to the natural roll.');
+expect(abs($stickRoll(-1.)-$neutral+$nudge)<1e-9 && abs($stickRoll(.5)-$neutral-.5*$nudge)<1e-9,
+	'Left and right stick nudge the roll in proportion to deflection.');
+expect(abs($stickRoll(1.,30)-$stickRoll(1.,120))<1e-9 && abs($stickRoll(0.,60,true)-$neutral)<1e-9,
+	'Tumble steering is independent of frame rate and uses only the left stick.');
+
 // A narrow ramp overturns the car. Hitting the wider ramp off center also sends it sliding sideways.
 foreach([[0,45,16,30,true],[0,55,32,34,false],[12,55,32,34,false],[-8,55,32,34,false]] as [$x,$z,$radius,$amount,$landsOnRoof])
 {

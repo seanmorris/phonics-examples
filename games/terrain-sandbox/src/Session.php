@@ -815,7 +815,7 @@ final class Session
 				(bool)($this->held('ShiftLeft') || $this->held('ShiftRight') || ($this->pad['buttons'] & self::PAD_LB))
 			];
 			$drivable = $this->car->step($seconds,$pedal,$steer,$this->landscape,$this->water->level(),
-				$handbrake,$this->course->posts(),$boost);
+				$handbrake,$this->course->posts(),$boost,($this->driver || $this->journeyDriver) ? 0. : $this->pad['x']);
 			$flooded = !$drivable && $this->car->engineFlooded($this->water->level());
 			if(!$drivable && !($flooded && $this->recoverCar(true)))
 			{
@@ -1216,8 +1216,10 @@ final class Session
 		if(!$trial->running || $trial->dnf !== null || $trial->race->state === 'finished') return;
 		$before = $this->car->state();
 		$buttons = $this->pad['buttons'];
+		// The trial tape carries one steering axis. During a tumble it records the driver's roll input.
+		$steer = $before['motion'] === 'tumbling' ? $this->pad['x'] : $this->blend('KeyA','KeyD',$this->pad['x']);
 		$trial->step(CircuitTrial::controls($this->blend('KeyS','KeyW',$this->pad['rt']-$this->pad['lt']),
-			$this->blend('KeyA','KeyD',$this->pad['x']), (bool)($this->held('Space') || ($buttons & self::PAD_A)),
+			$steer, (bool)($this->held('Space') || ($buttons & self::PAD_A)),
 			(bool)($this->held('ShiftLeft') || $this->held('ShiftRight') || ($buttons & self::PAD_LB)),$this->trialRecover));
 		$this->trialRecover = false;
 		$after = $this->car->state();

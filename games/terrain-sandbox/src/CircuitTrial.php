@@ -111,7 +111,7 @@ final class CircuitTrial
 		$before = $this->car->state();
 		$dt = 1/self::HZ;
 		$drivable = $this->car->step($dt,$gas/127,$steer/127,$this->land,$this->water,(bool)($flags&1),
-			$this->course->posts(),(bool)($flags&2));
+			$this->course->posts(),(bool)($flags&2),$before['motion'] === 'tumbling' ? $steer/127 : 0.);
 		if(!$drivable && !($this->car->engineFlooded($this->water) && $this->recover(true))) $this->dnf = 'No safe recovery.';
 		$after = $this->car->state();
 		if($drivable && $before['recoveries'] === $after['recoveries']) {

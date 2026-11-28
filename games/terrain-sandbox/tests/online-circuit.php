@@ -47,5 +47,18 @@ $bad=$run;$bad['ticks']--; $bad['inputs']=substr($bad['inputs'],0,-4);rejected(f
 $bad=$run;$bad['ticks']++; $bad['inputs'].='AAAA';rejected(fn()=>$verify($bad));
 $bad=$run;$bad['inputs']=str_repeat('A',$bad['ticks']*4);rejected(fn()=>$verify($bad));
 if(getenv('TERRAIN_RACE_FIXTURE')) file_put_contents(getenv('TERRAIN_RACE_FIXTURE'),json_encode(compact('spec','run'),JSON_THROW_ON_ERROR));
+// The live trial and ghost verifier must roll the same way from the recorded three-byte input.
+$local->driveTrial($spec); $local->trial->running=true;
+$replay=$remote->prepareTrial($spec);
+$pose=array_replace($replay->car->state(),['y'=>40.,'roll'=>.3]);
+$motion=[...$replay->car->motion(),8.,2.,.25,3.,0.,0.];
+$local->car->resume($pose,$motion,$local->landscape,$local->water->level());
+$replay->car->resume($pose,$motion,$remote->landscape,$remote->water->level());
+$local->input(['keys'=>['KeyA'=>true],'pad'=>[.5,0.,0.,0.,0.,0.,0]],1/60,16/9);
+for($tick=0;$tick<60;$tick++) $local->step(1/60);
+$inputs=base64_decode($local->trial->inputsSince(0),true);
+check($inputs===str_repeat(CircuitTrial::controls(0.,.5,false,false,false),60),'A trial records analog roll while tumbling.');
+foreach(str_split($inputs,3) as $input) $replay->step($input);
+check($local->car->state()===$replay->car->state(),'A ghost reproduces the same tumble from the recorded stick.');
 $local->close();$remote->close();
 echo "Circuit race creation, finite laps, fixed-step finish, ghost poses and invalid tapes passed.\n";

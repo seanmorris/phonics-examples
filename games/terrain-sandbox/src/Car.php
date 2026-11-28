@@ -241,13 +241,14 @@ final class Car
 	 * @param bool $handbrake Lock the rear wheels.
 	 * @param array $posts Solid posts as Course::posts() lists them. The body cannot pass through one.
 	 * @param bool $nitrousHeld Hold to boost while driving forward.
+	 * @param float $tumbleRoll Horizontal left stick for airborne tumble control, from -1 to 1.
 	 * @return bool False when the engine floods or the ground no longer supports the car.
 	 */
 	public function step(float $dt, float $throttle, float $turn, Landscape $land, float $waterLevel,
-		bool $handbrake = false, array $posts = [], bool $nitrousHeld = false): bool
+		bool $handbrake = false, array $posts = [], bool $nitrousHeld = false, float $tumbleRoll = 0.): bool
 	{
 		if($this->engineFlooded($waterLevel)) return false;
-		$supported = $this->drive($dt, $throttle, $turn, $land, $waterLevel, $handbrake, $posts, $nitrousHeld);
+		$supported = $this->drive($dt, $throttle, $turn, $land, $waterLevel, $handbrake, $posts, $nitrousHeld, $tumbleRoll);
 		if($this->engineFlooded($waterLevel)) return false;
 		if($this->tumble !== null)
 		{
@@ -267,7 +268,7 @@ final class Car
 
 	/** Move the car one fixed step for step(), which documents the parameters. */
 	private function drive(float $dt, float $throttle, float $turn, Landscape $land, float $waterLevel,
-		bool $handbrake, array $posts, bool $nitrousHeld): bool
+		bool $handbrake, array $posts, bool $nitrousHeld, float $tumbleRoll): bool
 	{
 		if($dt <= 0) return true;
 		$this->squeal = 0.;
@@ -290,7 +291,7 @@ final class Car
 			if($this->roadHold < 1e-8) $this->roadHold = 0.;
 			return true;
 		}
-		if($this->tumble !== null) return $this->stepTumble($dt,$land,$waterLevel,$posts);
+		if($this->tumble !== null) return $this->stepTumble($dt,$land,$waterLevel,$posts,$tumbleRoll);
 		$boost = 0.;
 		if($nitrousHeld && !$this->nitrousDepleted && $throttle >= 0. && $this->speed >= 0.
 			&& $this->suspension->clearance < CarSuspension::BOOST_REACH)
@@ -461,7 +462,7 @@ final class Car
 				$horizontal*cos($slip),$springs->verticalSpeed,$pitchRate,$rollRate,$horizontal*sin($slip));
 			$this->gearbox = new CarGearbox;
 			$this->drift = 0;
-			return $this->stepTumble($dt,$land,$waterLevel,$posts);
+			return $this->stepTumble($dt,$land,$waterLevel,$posts,$tumbleRoll);
 		}
 		if(!$nitrousHeld && $gripFraction > 0. && $distance > 0. && $this->nitrous < 1.)
 		{
@@ -554,7 +555,7 @@ final class Car
 		$this->tumble->kickFrom($point);
 	}
 
-	private function stepTumble(float $dt, Landscape $land, float $water, array $posts = []): bool
+	private function stepTumble(float $dt, Landscape $land, float $water, array $posts, float $tumbleRoll): bool
 	{
 		$body = $this->tumble;
 		if($this->recoveryTime > 0)
@@ -565,7 +566,7 @@ final class Car
 		}
 
 		$before = [$this->x, $this->z];
-		$body->advance($dt,$land,$water);
+		$body->advance($dt,$land,$water,$tumbleRoll);
 		[$this->x,$this->y,$this->z,$this->pitch,$this->roll,$this->speed,$side] = $body->pose();
 		if($posts)
 		{
