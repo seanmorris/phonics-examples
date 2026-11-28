@@ -370,6 +370,7 @@ final class AirPatrol
 		$hit=$this->seeker?->step($dt,$car,$plane,$phase,$land,$water,$beforeCar,$eye,$aspect);
 		$this->stepSmoke($dt,$before,$this->seeker?->state(),$car,$beforeCar,$this->previous,$plane,$phase==='glide' ? $this->elapsed : null);
 		if(($hit['kind'] ?? null)==='plane') {
+			$this->jet->applyBurstImpulse($before['pose']);
 			$this->jet->cutEngine();
 			$this->previous['power']=0.;
 			$this->repelled=true; $this->phase='glide'; $this->elapsed=0.;

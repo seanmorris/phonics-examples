@@ -341,6 +341,7 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 	for($tick=0;$tick<360;$tick++) {
 		if($tick===0 || $tick===24) $game->input(['keys'=>$tick===0 ? ['KeyW'=>1,$steer=>1,'Space'=>1] : ['KeyW'=>1]],0.,16/9);
 		$beforeShot=$game->airPatrol->seeker();
+		$beforePlane=$game->airPatrol->pose();
 		$beforeGlance=$game->airPatrol->snapshot()['glance'] ?? [0.,0.];
 		$beforeCar=$game->car->state();
 		$game->step(1/60); $game->demo->capture($game);
@@ -405,6 +406,20 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 			expect($game->airPatrol->pose(.25)['power']===0.,'The afterburner goes dark on the first interpolated crash frame.');
 			expect($shot['impact']===[$patrol['pose']['x'],$patrol['pose']['y'],$patrol['pose']['z']] &&
 				$patrol['phase']==='glide' && $patrol['pose']['power']===0. && $game->airPatrol->carImpact===null,'The return bursts on the F5 and cuts its engines.');
+			// The jet has already flown this tick. Compare its new velocity with the displacement up to contact.
+			$p=$patrol['pose'];
+			$approach=$kick=[];
+			foreach(['x','y','z'] as $axis) {
+				$approach[]=$p[$axis]-$beforeShot['pose'][$axis];
+				$kick[]=$p['v'.$axis]-60.*($p[$axis]-$beforePlane[$axis]);
+			}
+			$delta=hypot(hypot($kick[0],$kick[2]),$kick[1]);
+			$distance=hypot(hypot($approach[0],$approach[2]),$approach[1]);
+			$along=$kick[0]*$approach[0]+$kick[1]*$approach[1]+$kick[2]*$approach[2];
+			expect($delta>=12. && $delta<=24. && $along>.999*$delta*$distance,
+				'The burst gives the gliding jet a bounded velocity kick along the incoming path.');
+			expect(abs($p['speed']-hypot(hypot($p['vx'],$p['vz']),$p['vy']))<1.e-8,
+				'The hit frame records the speed the pilot carries into the glide.');
 		}
 		if($wonAt!==null && $game->demo->duration()-$lockedAt>=.95)
 			expect(!isset($patrol['glance']), 'The complete camera cue is over within a second of the lock.');
@@ -441,6 +456,11 @@ foreach([[.02,'KeyD',false,false],[.53,'KeyD',false,false],[1.55,'KeyA',true,fal
 			$watch->position=[$fast['x'],$prev['y']+2.,$fast['z']]; $watch->yaw=M_PI;
 			$away->step(1/60,$fast,fn()=>$watch,16/9,$land,-10.);
 			$state=$away->snapshot(); $p=$state['pose'];
+			if($tick===0) {
+				$error=hypot(60.*($p['x']-$prev['x'])-$prev['vx'],60.*($p['z']-$prev['z'])-$prev['vz']);
+				expect($error<.2 && abs(60.*($p['y']-$prev['y'])-$prev['vy'])<2.,
+					'The first glide step moves the airframe with its post-impact momentum.');
+			}
 			if($tick===36 || ($touch===null && $state['phase']==='slide')) {
 				$recorded=DemoEvents::import([[0,json_encode(['airPatrol'=>$state])]],1)->at(0,0.,'car')['airPatrol'];
 				$branch=new AirPatrol; $branch->resume($recorded);

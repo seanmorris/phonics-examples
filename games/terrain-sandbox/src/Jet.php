@@ -31,6 +31,8 @@ final class Jet
 	private const CHASE_TURN = 4.0;
 	/** Steeper than about 35 degrees, the wreck pushes against the hillside instead of riding up it. */
 	private const LANDING_GRADE = .7;
+	/** Velocity added along the incoming projectile's path on a direct hit, in meters per second. */
+	private const BURST_KICK = 18.;
 	public const EXHAUST_PUFF_INTERVAL = .46;
 	/** Underside contact points in model space: belly, tail, nose and both wingtips. */
 	private const SKIDS = [[0.,-.83,-2.30],[0.,-.49,-6.27],[0.,-.20,8.],[-4.17,-.48,-2.16],[4.17,-.48,-2.16]];
@@ -186,6 +188,26 @@ final class Jet
 
 	public function cutEngine(): void { $this->pose['power']=0.; }
 
+	/** The burst happens at the airframe's center. Its last approach segment supplies the push direction. */
+	public function applyBurstImpulse(array $incomingPose): void
+	{
+		$p = &$this->pose;
+		$x = $p['x'] - $incomingPose['x'];
+		$y = $p['y'] - $incomingPose['y'];
+		$z = $p['z'] - $incomingPose['z'];
+		$length = hypot(hypot($x, $z), $y);
+		if($length < .001) {
+			// A coincident final sample still has the projectile's forward axis.
+			[$x, $y, $z] = array_slice(VehicleModel::basis($incomingPose), 6);
+			$length = 1.;
+		}
+		$scale = self::BURST_KICK / $length;
+		$p['vx'] += $x * $scale;
+		$p['vy'] += $y * $scale;
+		$p['vz'] += $z * $scale;
+		$this->updateFlightDirection();
+	}
+
 	/** Carry the hit aircraft's velocity through a wings-level glide, flare and gear-up rollout. */
 	public function landUnpowered(float $dt,Landscape $land,float $water,bool $sliding,float $glideAge=0.): bool
 	{
@@ -256,9 +278,15 @@ final class Jet
 		$p['y']=$sliding ? $floor : $height;
 		if($sliding && $dt>0.) $p['vy']=min(hypot($p['vx'],$p['vz'])*self::LANDING_GRADE,($p['y']-$oldY)/$dt);
 		if($sliding && hypot($p['vx'],$p['vz'])<.001) $p['vx']=$p['vy']=$p['vz']=0.;
-		$p['speed']=hypot(hypot($p['vx'],$p['vz']),$p['vy']);
-		if($p['speed']>.001) $this->flightDirection=[$p['vx']/$p['speed'],$p['vy']/$p['speed'],$p['vz']/$p['speed']];
+		$this->updateFlightDirection();
 		return $sliding;
+	}
+
+	private function updateFlightDirection(): void
+	{
+		$p = &$this->pose;
+		$p['speed'] = hypot(hypot($p['vx'], $p['vz']), $p['vy']);
+		if($p['speed'] > .001) $this->flightDirection = [$p['vx']/$p['speed'], $p['vy']/$p['speed'], $p['vz']/$p['speed']];
 	}
 
 	/** Ground or water supports the belly vertically. A steep face removes horizontal motion into the wall. */
