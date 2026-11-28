@@ -11,8 +11,35 @@ function ink(SkidMarks $marks,float $x,float $z): int
 	$i=(int)floor($x/SkidTile::METERS); $j=(int)floor($z/SkidTile::METERS);
 	$tile=$marks->tiles["$i,$j"] ?? null;
 	if(!$tile) return 0;
-	$u=(int)floor(($x-$tile->x)*SkidTile::SCALE); $v=(int)floor(($z-$tile->z)*SkidTile::SCALE);
+	$u=SkidTile::BORDER+(int)floor(($x-$tile->x)*SkidTile::SCALE); $v=SkidTile::BORDER+(int)floor(($z-$tile->z)*SkidTile::SCALE);
 	return ord($tile->pixels([$u,$v,$u+1,$v+1]));
+}
+/** Sample as the renderer does when a tire is close enough to magnify. */
+function filteredInk(SkidMarks $marks,float $x,float $z): float
+{
+	$tile=$marks->tiles[floor($x/SkidTile::METERS).','.floor($z/SkidTile::METERS)];
+	$u=($x-$tile->x)*SkidTile::SCALE+SkidTile::BORDER-.5;
+	$v=($z-$tile->z)*SkidTile::SCALE+SkidTile::BORDER-.5;
+	$i=(int)floor($u); $j=(int)floor($v);
+	$bytes=$tile->pixels([$i,$j,$i+2,$j+2]);
+	$u-=$i; $v-=$j;
+	return (1-$v)*((1-$u)*ord($bytes[0])+$u*ord($bytes[1]))
+		+$v*((1-$u)*ord($bytes[2])+$u*ord($bytes[3]));
+}
+
+foreach([.27,-.75,1.] as $slope) {
+	$marks=new SkidMarks;
+	foreach([-2.,2.] as $x) $marks->step([[0,$x,0.,4.+$slope*$x,.65]],$x,4.);
+	$norm=hypot(1.,$slope);
+	for($i=-100;$i<=100;$i++) foreach([-.145,.145] as $edge) {
+		$x=$i/80.; $z=4.+$slope*$x;
+		$coverage=filteredInk($marks,$x-$slope*$edge/$norm,$z+$edge/$norm);
+		checkSkid(abs($coverage/(.65*255)-.5)<.022,'Both tread edges hold half coverage across diagonal angles and texel phases.');
+	}
+	$left=$marks->tiles['-1,0']; $right=$marks->tiles['0,0'];
+	$border=2*SkidTile::BORDER; $end=SkidTile::SIZE;
+	checkSkid($left->pixels([$end-$border,0,$end,$end])===$right->pixels([0,0,$border,$end]),
+		'Neighboring tiles filter the same samples on either side of a boundary.');
 }
 $m=new SkidMarks;
 $stamp=static fn(float $x,float $z,float $strength=1.)=>$m->step([[2,$x,.08*$x,$z,$strength]],$x,$z);

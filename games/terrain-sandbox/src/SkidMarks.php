@@ -33,9 +33,9 @@ final class SkidMarks
 			if(hypot($bx-$ax,$bz-$az)>8.) { $ax=$bx; $az=$bz; }
 			$next[$wheel]=[$bx,$bz,$strength];
 			if(isset($this->previous[$wheel]) && $ax===$bx && $az===$bz && $this->previous[$wheel][2]>=$strength) continue;
-			$size=SkidTile::METERS;
-			$l=(int)floor((min($ax,$bx)-.22)/$size); $r=(int)floor((max($ax,$bx)+.22)/$size);
-			$t=(int)floor((min($az,$bz)-.22)/$size); $b=(int)floor((max($az,$bz)+.22)/$size);
+			$size=SkidTile::METERS; $margin=SkidTile::PAINT_MARGIN;
+			$l=(int)floor((min($ax,$bx)-$margin)/$size); $r=(int)floor((max($ax,$bx)+$margin)/$size);
+			$t=(int)floor((min($az,$bz)-$margin)/$size); $b=(int)floor((max($az,$bz)+$margin)/$size);
 			for($j=$t;$j<=$b;$j++) for($i=$l;$i<=$r;$i++) {
 				$key="$i,$j"; $ox=$i*$size; $oz=$j*$size;
 				$tile=$this->tiles[$key] ??= new SkidTile($ox,$oz);
@@ -57,11 +57,12 @@ final class SkidMarks
 		// New tiles are always at the car. Even a newly painted tile is safe over this distance.
 		$this->margin=self::RADIUS/3;
 		$half=SkidTile::METERS/2;
+		$extent=$half+SkidTile::BORDER/SkidTile::SCALE;
 		foreach($this->tiles as $key=>$tile) {
 			$dx=abs($x-$tile->x-$half); $dz=abs($z-$tile->z-$half);
-			$inside=self::RADIUS-hypot($dx+$half,$dz+$half);
+			$inside=self::RADIUS-hypot($dx+$extent,$dz+$extent);
 			if($inside<0.) {
-				if(hypot(max(0.,$dx-$half),max(0.,$dz-$half))>self::RADIUS) { unset($this->tiles[$key]); continue; }
+				if(hypot(max(0.,$dx-$extent),max(0.,$dz-$extent))>self::RADIUS) { unset($this->tiles[$key]); continue; }
 				$tile->trim(($x-$tile->x)*SkidTile::SCALE,($z-$tile->z)*SkidTile::SCALE,self::RADIUS*SkidTile::SCALE);
 				if($tile->empty()) { unset($this->tiles[$key]); continue; }
 			}

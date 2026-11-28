@@ -16,6 +16,7 @@ final class SkidRenderer
 		in float vSplinePaint;
 		uniform vec3 uTile; // X, Z, inverse width
 		uniform sampler2D uRubber;
+		uniform float uBorder;
 		out vec4 color;
 		void main() {
 			vec2 uv=(vWorld.xz-uTile.xy)*uTile.z;
@@ -23,7 +24,7 @@ final class SkidRenderer
 			float aa=max(fwidth(outline),.0001);
 			float outside=smoothstep(1.-aa,1.+aa,outline);
 			float pavement=clamp(vPaint1.y-vSplinePaint*outside,0.,1.);
-			float rubber=texture(uRubber,uv).r*pavement;
+			float rubber=texture(uRubber,uv*(1.-2.*uBorder)+uBorder).r*pavement;
 			if(any(lessThan(uv,vec2(0.))) || any(greaterThanEqual(uv,vec2(1.)))) discard;
 			color=vec4(vec3(1.-.40*rubber),1.);
 		}
@@ -53,6 +54,7 @@ final class SkidRenderer
 				glUniformMatrix4fv($p->location('uViewProjection'),1,false,$camera->viewProjection($width,$height));
 				glUniform3f($p->location('uEye'),...$camera->position);
 				glUniform1i($p->location('uRubber'),0);
+				glUniform1f($p->location('uBorder'),SkidTile::BORDER/SkidTile::SIZE);
 				glDepthMask(false); glDepthFunc(GL_LEQUAL);
 				glEnable(GL_BLEND); glBlendFuncSeparate(GL_ZERO,GL_SRC_COLOR,GL_ZERO,GL_ONE);
 				$bound=true;
