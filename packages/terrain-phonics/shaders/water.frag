@@ -116,8 +116,9 @@ void main()
 	float alpha = foam + reflectionWeight + tintWeight;
 	float sunlit=illumination;
 	#ifdef TERRAIN_WEATHER
-	if(uDeck.x>0. && uDeck.z>0. && uSunDirection.y>.015)
-		sunlit*=1.-uDeck.z*cloudsOnRay(vWorld,uSunDirection).x;
+	// Cloud between the water and the sun stops the beam, and a share of what the deck stops comes back as even light.
+	if(uDeck.x>0. && uSunDirection.y>.015)
+		sunlit*=1.-deckBlock()*cloudsOnRay(vWorld,uSunDirection).x+deckGlow();
 	#endif
 	vec3 surfaceLight = vec3(sunlit) + uNightAmbient;
 	// Lamps, in the units of illumination, where 20 is full sunlight.

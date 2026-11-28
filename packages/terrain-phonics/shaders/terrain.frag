@@ -295,8 +295,8 @@ void main()
 	}
 	#endif
 	#ifdef TERRAIN_WEATHER
-	if(uDeck.x>0. && uDeck.z>0. && uSunDirection.y>.015 && vWorld.y<uDeck.y)
-		shadow*=1.-uDeck.z*cloudsOnRay(vWorld,uSunDirection).x;
+	bool underDeck=uDeck.x>0. && uSunDirection.y>.015 && vWorld.y<uDeck.y;
+	if(underDeck) shadow*=1.-deckBlock()*cloudsOnRay(vWorld,uSunDirection).x;
 	float wet=uCraft<.5 && vWorld.y>uWaterLevel ? uGroundCover.x : 0.;
 	if((wet>0. || uGroundCover.y>0.) && uCraft<.5 && vWorld.y>uWaterLevel) {
 		// Pavement holds no more than its limit. The limit eases in across the road's edge with the paint.
@@ -309,6 +309,15 @@ void main()
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
 	vec3 ambient = uSkyAmbient * (0.35 + 0.65 * max(0.0,n.y));
 	ambient += bounce * illumination * (1.0-max(0.,n.y));
+	#ifdef TERRAIN_WEATHER
+	if(underDeck) {
+		// The sunlight the deck stops comes down again as even light from the whole sky: a little whiter than the
+		// beam, and stronger on level ground than on a wall. The open sky's own fill is halved where cloud hides it.
+		vec3 level=direct*uSunDirection.y;
+		ambient*=1.-.5*uDeck.x*deckBlock();
+		ambient+=mix(level,vec3(dot(level,vec3(1./3.))),.5)*deckGlow()*(.4+.6*max(0.,n.y));
+	}
+	#endif
 	vec3 lit = albedo * (ambient + direct * facing * shadow) + markingGlow;
 	#ifdef TERRAIN_WEATHER
 	if(wet>0.) {
@@ -318,6 +327,9 @@ void main()
 	#endif
 	lit += terrainNightMaterial(albedo, mix(lightingNormal,n,painted), uNightAmbient);
 	lit += albedo / 3.14159265 * terrainSpotLight(vWorld, mix(lightingNormal,n,painted), uWaterLevel, uWaterOptics.z);
+	#ifdef TERRAIN_WEATHER
+	lit += albedo * boltLight(vWorld, mix(lightingNormal,n,painted));
+	#endif
 	#ifdef MATERIAL_REFLECTION
 	lit=dielectricReflection(lit,lightingNormal,finish,painted,direct,shadow);
 	#endif

@@ -9,33 +9,71 @@ final class Weather
 		'coverage' => 0
 		, 'altitude' => 3500
 		, 'shadow' => 45
+		, 'cloudLight' => 50
 		, 'wind' => 12
 		, 'heading' => 90
 		, 'kind' => 'none'
 		, 'intensity' => 0
 		, 'roadSnow' => 100
 		, 'hold' => 0
+		, 'lightning' => 0
+		, 'boltSeconds' => .8
+		, 'flashDark' => 70
+		, 'flashGlow' => 100
+		, 'flashLight' => 0
+		, 'boltWidth' => 100
+		, 'boltZigzag' => 100
+		, 'boltForks' => 100
+		, 'boltReach' => 800
+		, 'boltColor' => '#80a3ff'
 	];
 	public const PRESETS = [
-		'clear' => ['coverage' => 0,'kind' => 'none','intensity' => 0]
-		, 'cloudy' => ['coverage' => 55,'kind' => 'none','intensity' => 0]
-		, 'rain' => ['coverage' => 88,'kind' => 'rain','intensity' => 100]
-		, 'snow' => ['coverage' => 78,'kind' => 'snow','intensity' => 100]
+		'clear' => ['coverage' => 0,'kind' => 'none','intensity' => 0,'lightning' => 0]
+		, 'cloudy' => ['coverage' => 55,'kind' => 'none','intensity' => 0,'lightning' => 0]
+		, 'rain' => ['coverage' => 88,'kind' => 'rain','intensity' => 100,'lightning' => 0]
+		, 'snow' => ['coverage' => 78,'kind' => 'snow','intensity' => 100,'lightning' => 0]
+		, 'storm' => ['coverage' => 96,'kind' => 'rain','intensity' => 100,'lightning' => 60]
 	];
 	private const LIMITS = [
 		'coverage' => [0,100]
 		, 'altitude' => [100,30000]
 		, 'shadow' => [0,100]
+		, 'cloudLight' => [0,100]
 		, 'wind' => [0,150]
 		, 'heading' => [0,360]
 		, 'intensity' => [0,100]
 		, 'roadSnow' => [0,100]
 		, 'hold' => [0,1]
+		, 'lightning' => [0,100]
+		, 'boltSeconds' => [.3,2]
+		, 'flashDark' => [0,100]
+		, 'flashGlow' => [0,200]
+		, 'flashLight' => [0,100]
+		, 'boltWidth' => [25,400]
+		, 'boltZigzag' => [0,200]
+		, 'boltForks' => [0,100]
+		, 'boltReach' => [0,1500]
 	];
 	/** Controls a saved state may leave out, having been saved before they existed. */
-	private const LATER = ['roadSnow' => true,'hold' => true];
+	private const LATER = [
+		'roadSnow' => true
+		, 'hold' => true
+		, 'cloudLight' => true
+		, 'lightning' => true
+		, 'boltSeconds' => true
+		, 'flashDark' => true
+		, 'flashGlow' => true
+		, 'flashLight' => true
+		, 'boltWidth' => true
+		, 'boltZigzag' => true
+		, 'boltForks' => true
+		, 'boltReach' => true
+		, 'boltColor' => true
+	];
 	private array $controls = self::DEFAULTS;
 	private float $start = 0., $wet = 0., $snow = 0., $x = 0., $z = 0.;
+	/** One strike of lightning called down by hand: the X and Z it leaves the cloud at, its start and its seed. */
+	private array $called = [];
 
 	/**
 	 * Validate and normalize editable weather controls.
@@ -48,6 +86,8 @@ final class Weather
 		foreach($controls as $key => $value)
 		{
 			if($key === 'kind' && in_array($value, ['none','rain','snow'], true)) continue;
+
+			if($key === 'boltColor' && is_string($value) && preg_match('/^#[0-9a-f]{6}$/i', $value)) continue;
 
 			if(!isset(self::LIMITS[$key]) || (!is_int($value) && !is_float($value)) || !is_finite($value)
 				|| $value < self::LIMITS[$key][0] || $value > self::LIMITS[$key][1]
@@ -115,12 +155,17 @@ final class Weather
 	 */
 	public function snapshot(?float $time = null): array
 	{
+		// A called strike is kept only while it is still lit, so a state saved later does not carry a spent one.
+		$strike = $this->called && ($time ?? $this->start) - $this->called[2] < $this->controls['boltSeconds']
+			? ['strike' => $this->called]
+			: [];
+
 		return [
 			'controls' => $this->controls
 			, 'time' => $time ?? $this->start
 			, 'ground' => $time === null ? [$this->wet,$this->snow] : $this->ground($time)
 			, 'offset' => $time === null ? [$this->x,$this->z] : $this->offset($time)
-		];
+		] + $strike;
 	}
 
 	/**
@@ -147,6 +192,15 @@ final class Weather
 			foreach($v as $n) if((!is_int($n) && !is_float($n)) || !is_finite($n) || $n < $lo || $n > $hi) return false;
 		}
 
+		if(isset($s['strike']))
+		{
+			if(!is_array($s['strike']) || !array_is_list($s['strike']) || count($s['strike']) !== 4) return false;
+
+			foreach($s['strike'] as $n)
+			if((!is_int($n) && !is_float($n)) || !is_finite($n) || abs($n) > 1e12)
+			return false;
+		}
+
 		return true;
 	}
 
@@ -165,6 +219,14 @@ final class Weather
 		$this->start = $time ?? $s['time'];
 		[$this->wet,$this->snow] = $s['ground'];
 		[$this->x,$this->z] = $s['offset'];
+		$this->called = [];
+
+		// A strike saved in flight keeps its age on the new clock.
+		if(isset($s['strike']))
+		{
+			[$x, $z, $began, $seed] = $s['strike'];
+			$this->called = [(float)$x, (float)$z, $began + $this->start - $s['time'], (int)$seed];
+		}
 	}
 
 	/**
@@ -218,6 +280,49 @@ final class Weather
 	}
 
 	/**
+	 * Set how wet the ground is, as if the rain had already fallen.
+	 *
+	 * The weather goes on from there: rain and melting snow add to the wetness, and clear weather dries it.
+	 *
+	 * @param float $wet Wetness from 0 to 1.
+	 * @param float $time Simulation time in seconds.
+	 * @return void No value.
+	 */
+	public function soak(float $wet, float $time): void
+	{
+		if(!is_finite($wet) || $wet < 0 || $wet > 1) throw new \InvalidArgumentException('Invalid wetness.');
+
+		$this->anchor($time);
+		$this->wet = $wet;
+	}
+
+	/**
+	 * Call one strike of lightning down, whatever the lightning rate.
+	 *
+	 * It leaves the cloud over the given place and lands on the highest ground nearby, as the storm's own do. The
+	 * scene draws it only under cloud.
+	 *
+	 * @param float $x World X the strike leaves the cloud over, in meters.
+	 * @param float $z World Z the strike leaves the cloud over, in meters.
+	 * @param float $time Simulation time in seconds.
+	 * @return void No value.
+	 */
+	public function strike(float $x, float $z, float $time): void
+	{
+		if(!is_finite($x) || !is_finite($z) || !is_finite($time) || max(abs($x), abs($z), abs($time)) > 1e12)
+		throw new \InvalidArgumentException('Invalid lightning strike.');
+
+		$this->called = [$x, $z, $time, crc32(pack('e3', $x, $z, $time)) & 0xFFFFFF];
+	}
+
+	/**
+	 * Read the strike called down by hand.
+	 *
+	 * @return array Its X, Z, start in seconds and seed, or an empty array when none was called.
+	 */
+	public function called(): array { return $this->called; }
+
+	/**
 	 * Adjust the weather origin when moving between landscape coordinate frames.
 	 *
 	 * @param float $x Horizontal offset between landscape origins along X.
@@ -230,6 +335,8 @@ final class Weather
 		$this->anchor($time);
 		$this->x = fmod($this->x + $x, 65536.);
 		$this->z = fmod($this->z + $z, 65536.);
+
+		if($this->called) [$this->called[0], $this->called[1]] = [$this->called[0] + $x, $this->called[1] + $z];
 	}
 
 	/**
@@ -237,7 +344,7 @@ final class Weather
 	 *
 	 * @param float $time Simulation time in seconds.
 	 * @param float $previous Simulation time of the previous frame in seconds.
-	 * @return bool Whether wind, precipitation or ground accumulation can change the image.
+	 * @return bool Whether wind, precipitation, lightning or ground accumulation can change the image.
 	 */
 	public function moving(float $time, float $previous): bool
 	{
@@ -245,6 +352,10 @@ final class Weather
 
 		return ($this->controls['coverage'] > 0 && $this->controls['wind'] > 0)
 			|| ($this->controls['kind'] !== 'none' && $this->controls['intensity'] > 0)
+			|| ($this->controls['coverage'] > 0 && $this->controls['lightning'] > 0)
+			|| ($this->called && $previous >= $this->called[2] - 1.
+				&& $previous - $this->called[2] < $this->controls['boltSeconds']
+			)
 			|| (($this->wet > 0. || $this->snow > 0.) && $this->ground($time) !== $this->ground($previous));
 	}
 }

@@ -1345,6 +1345,37 @@ final class Clipmap
 	public function overview(): array {return $this->overview['textures'] ?? [0,0];}
 
 	/**
+	 * Describe the finest grid near the eye that is at least a given width across, for a pass that reads its heights.
+	 *
+	 * @param float $width Least width of ground the grid must cover, in meters.
+	 * @return ?array The grid's height texture, the meters between its heights, and the lowest X and Z and highest
+	 * X and Z, in meters, that heights can be read between with their neighbors; or null while no such grid is ready.
+	 */
+	public function fine(float $width): ?array
+	{
+		foreach($this->levels as $level)
+		{
+			if(!isset($level['origin'], $level['step'], $level['cells']) || $level['cells'] * $level['step'] < $width)
+			continue;
+
+			[$x, $z] = $level['origin'];
+			$step = $level['step'];
+			$rows = $level['rows'] ?? $level['cells'];
+
+			return [
+				$level['textures'][0]
+				, $step
+				, ($x + 2) * $step
+				, ($z + 2) * $step
+				, ($x + $level['cells'] - 3) * $step
+				, ($z + $rows - 3) * $step
+			];
+		}
+
+		return null;
+	}
+
+	/**
 	 * Use the finest resident caster grid spanning at least 1.2 km, including terrain behind the camera.
 	 *
 	 * @param array $eye World-space camera position.
